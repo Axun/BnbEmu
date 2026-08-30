@@ -121,12 +121,15 @@
   资料块变换：**每 dword 以 BE 读取、XOR 0x96CA5395、按 LE 写回**（即 Encode4 的字节序交换形式）
 - 块头规律（op1/op2/op11/op12/op13 五块吻合）：`[0x18][(块长-5)&0xFF][u32 0][条目数]`
   （条目数 op11/12/13 为 u16 LE，op1 为 u8）
-- **op11 = 频道列表，已结构化**：`packet/ChannelsExtraInfo.kt` 的 `ChannelEntry` + `ssdEncode`
-  （条目逐字节结构、续读标记、各字段值等细节见该文件顶部注释；重编码与抓包逐字节一致，
-  replay_test login 用例断言）。5 频道 PopTag-Forever / Ranked / Baby-Channel / Town / SquareCompat，
-  Town/SquareCompat 为大地图频道、并非被关闭
+- **op11 = 频道列表、op13 = 各频道开关/状态，均已结构化**：频道表 `EN_CHANNELS` 定义在
+  `packet/ChannelsExtraInfo.kt`（`ChannelEntry`，op13 用其 `state`/`enabled` 栏，
+  生成逻辑在 `ChannelsState.kt`；条目逐字节结构、续读标记等细节见两文件顶部注释；
+  重编码与抓包逐字节一致，replay_test login 用例断言）。5 频道
+  PopTag-Forever / Ranked / Baby-Channel / Town / SquareCompat，Town/SquareCompat 为
+  大地图频道、并非被关闭；改频道清单两包同步生效
 - op1 = multisvr.ssd 缓存体（解码布局见 MultiServerInit.kt 注释）；op51 = filterstr.ssd；
-  op2 = 字串表；op13 = 各频道状态；op12 几乎全 0
+  op2 = 字串表；**op12 = 空块**（条目数 0 + 12B 全零 + E1(0) 尾，全部抓包仅 login sq=52 一个样本，
+  细节见 Unk12.kt 注释）
 - 已改写为 127.0.0.1 的 IP 位置：`packet/MultiServerInit.kt` EN_MULTISVR_BLOB（op1）、
   `packet/ChannelsExtraInfo.kt` ChannelEntry.ip（op11）——**改服务器地址需同步**
   `tools/patch_ip.py`（客户端二进制侧，含 nmconew.dll/nmcogame.dll 的 UTF-16LE 表各 8 槽）

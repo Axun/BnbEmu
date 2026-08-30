@@ -80,12 +80,13 @@ fun ChannelsExtraInfo() = PKT {
     }
 }
 
-// 抓包頻道 (login.pcap sq=46, 5 頻道) — 重編碼須與原塊逐位元組一致 (replay_test login 用例斷言 op 11)
+// 抓包頻道 (login.pcap sq=46, 5 頻道) — 重編碼須與原塊逐位元組一致 (replay_test login 用例斷言 op 11/op 13)
 // Town / SquareCompat 為特殊大地圖頻道 (bigMap=true), 與普通頻道欄位值不同
-private val EN_CHANNELS = listOf(
-    ChannelEntry("PopTag-Forever", maxCount = 150),
-    ChannelEntry("Ranked", maxCount = 150, curCount = 50, subMapNo = 0x0A),
-    ChannelEntry("Baby-Channel", maxCount = 150),
+// op13 ChannelsState 的條目與本表一一對應 (state/enabled 欄位), 改頻道清單兩包同步生效
+internal val EN_CHANNELS = listOf(
+    ChannelEntry("PopTag-Forever", maxCount = 150, state = 88),
+    ChannelEntry("Ranked", maxCount = 150, curCount = 50, subMapNo = 0x0A, state = 7),
+    ChannelEntry("Baby-Channel", maxCount = 150, state = 7),
     ChannelEntry("Town", maxCount = 200, curCount = 1, mapNo = 0x78, bigMap = true),
     ChannelEntry("SquareCompat", maxCount = 200, curCount = 1, mapNo = 0x50, bigMap = true),
 )
@@ -98,6 +99,9 @@ private val EN_CHANNELS = listOf(
 //   ip        頻道伺服器 IPv4 (u32 BE) — 改動須與 tools/patch_ip.py 同步
 //   subMapNo  u8 (僅 Ranked = 0x0A, 其餘 0; 語義未知)
 //   bigMap    大地圖標記 (Town/Square = 1, 普通頻道 0)
+//   state     op13 ChannelsState 條目的 u16 欄 (語義未釘死; 抓包: PopTag-Forever 88 /
+//             Ranked 7 / Baby-Channel 7 / Town 0 / SquareCompat 0)
+//   enabled   op13 條目的開關旗標 (抓包五頻道皆 1, 推測 1=開啟/顯示)
 class ChannelEntry(
     val name: String,
     val maxCount: Int,
@@ -106,6 +110,8 @@ class ChannelEntry(
     val ip: String = "127.0.0.1",
     val subMapNo: Int = 0,
     val bigMap: Boolean = false,
+    val state: Int = 0,
+    val enabled: Boolean = true,
 ) {
     fun Encode(out: ByteArrayOutputStream, isLast: Boolean) {
         out.ss(name)
@@ -152,8 +158,8 @@ private fun channelsExtraBlock(entries: List<ChannelEntry>): ByteArray {
 }
 
 // SSD 資料塊變換: 每 dword 以 LE 讀明文、^0x96CA5395、按 BE 寫回; 尾部不足 4B 原樣
-// (= tools/extract_first_push.py 的 ssd_encode, 客戶端 ssd_decode 為其逆變換)
-private fun ssdEncode(plain: ByteArray): ByteArray {
+// (= tools/extract_first_push.py 的 ssd_encode, 客戶端 ssd_decode 為其逆變換; op13 共用)
+internal fun ssdEncode(plain: ByteArray): ByteArray {
     val out = ByteArray(plain.size)
     var i = 0
     while (i + 4 <= plain.size) {
@@ -175,15 +181,15 @@ private fun ssdEncode(plain: ByteArray): ByteArray {
     return out
 }
 
-// ---- 塊拼裝小工具 (塊內欄位皆為明文, 勿用會 XOR 的 Encode1/2/4 DSL) ----
+// ---- 塊拼裝小工具 (塊內欄位皆為明文, 勿用會 XOR 的 Encode1/2/4 DSL; op13 共用) ----
 
-private fun ByteArrayOutputStream.u8(v: Int) = write(v and 0xFF)
+internal fun ByteArrayOutputStream.u8(v: Int) = write(v and 0xFF)
 
-private fun ByteArrayOutputStream.u16le(v: Int) {
+internal fun ByteArrayOutputStream.u16le(v: Int) {
     u8(v); u8(v shr 8)
 }
 
-private fun ByteArrayOutputStream.u32le(v: Int) {
+internal fun ByteArrayOutputStream.u32le(v: Int) {
     u8(v); u8(v shr 8); u8(v shr 16); u8(v shr 24)
 }
 
