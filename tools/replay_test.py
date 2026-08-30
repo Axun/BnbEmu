@@ -84,7 +84,11 @@ if __name__ == "__main__":
     # start.pcap stream0: op0 首連開啟 → 應觸發啟動推送 193 | 2 | 67 | 1 | 51
     replay("first", open(os.path.join(base, "tools/replay_first_cs.bin"), "rb").read(), {193, 2, 67, 1, 51})
     # login.pcap stream2: op2 AskFirstInfo → 應回 op4; op55 → [11,13,12]; op11 → [11,13]
-    replay("login", open(os.path.join(base, "tools/replay_login_cs.bin"), "rb").read(), {4, 11, 13, 12})
+    # op 11 ChannelsExtraInfo / op 13 ChannelsState 已結構化, 載荷須與抓包逐位元組一致
+    # (op11 基準為 IP 改寫版: 抓包原始 66.135.19.7 → 127.0.0.1, 與模擬器下發一致)
+    replay("login", open(os.path.join(base, "tools/replay_login_cs.bin"), "rb").read(), {4, 11, 13, 12},
+           {11: open(os.path.join(base, "cap/login_s2c_op11_ip127.bin"), "rb").read().hex(),
+            13: open(os.path.join(base, "cap/login_s2c_op13.bin"), "rb").read().hex()})
     # enter-channel.pcap stream1: op7 OnConnEstablished → EN 應回 [48,13,14,97,122,87,423]
     #   (87 RoomList 房間列表); 其後批次 297/302/310/64/293/78 → Unk_78 觸發整套回應
     #   [310,302,254,72 用戶列表,293,78,4×2,227,60,310,302]; 尾部 15 輪詢 → 13

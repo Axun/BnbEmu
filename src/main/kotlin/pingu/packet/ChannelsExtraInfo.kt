@@ -1,21 +1,33 @@
 package pingu.packet
 
+import pingu.ACP
 import pingu.isCN
 import pingu.isEN
 import pingu.isJP
 import pingu.isTW
 import pingu.netty.PKT
-import pingu.netty.toBA
+import java.io.ByteArrayOutputStream
 
 // server = CCenterProcess::MakeChannelsExtraInfoPacket
 fun ChannelsExtraInfo() = PKT {
     if (isEN) {
-        // login.pcap sq=46 (211B SSD 資料塊, 解碼 = 5 頻道:
-        //   PopTag-Forever / Ranked / Baby-Channel / Town / SquareCompat, 各帶一個 IPv4)
-        // 塊內 IP 原抓包為 66.135.19.7, 已改寫 127.0.0.1 (生成工具 tools/extract_login_flow.py)
+        // EN op11 = 頻道(伺服器)列表 (Unk_55 / EnterChannelReq 均回本包, 客戶端據此顯示頻道列表)
+        // 塊結構 2026-08-30 由 login.pcap sq=46 (211B) 逐字節逆向, 重編碼與抓包逐位元組一致
+        // (replay_test login 用例斷言, IP 改寫位基準 cap/login_s2c_op11_ip127.bin):
+        //   整包 = Encode1Bool(true) + Encode4(塊長) + SSD 資料塊
+        //   塊明文 = [0x18][(塊長-5)&0xFF][u32 0][u16 頻道數 LE] + N × 頻道條目, 經 ssdEncode 變換下發
+        //   塊頭規律在 op1/op2/op11/op12/op13 五個抓包塊全部吻合 (0x18 恆定, 第2字節=塊長-5,
+        //   op2 1854B → 0x39 可驗); op1 條目數為 u8, op11/12/13 為 u16 LE
+        //   條目 = u32 名長 + 名 + u32 人數上限 + u8 當前人數 + u8 mapNo + u32 IPv4(BE)
+        //          + 14B 恆定欄位 + 3B 續讀標記 (欄位語義見 ChannelEntry)
+        //   續讀標記: 末條 = Encode2(0)+Encode1(0) 原樣 a5 69 5a (客戶端解碼 0 = 列表結束),
+        //             非末條 = 00 00 00 (解碼 ≠ 0 繼續讀) — 此前誤判為「塊尾 3B 對齊尾巴」
+        //   Town / SquareCompat 為特殊大地圖頻道 (bigMap=1), 與普通頻道欄位值不同, 並非被關閉
+        // 改頻道名單/上限改 EN_CHANNELS 即可; 改 IP 須與 tools/patch_ip.py 同步
+        val blob = ssdEncode(channelsExtraBlock(EN_CHANNELS))
         Encode1Bool(true)
-        Encode4(211)
-        EncodeBuffer(EN_CHANNELS_EXTRA_BLOB)
+        Encode4(blob.size)
+        EncodeBuffer(blob)
     } else {
         EncodeStr("http://bnb.digicell.com.tw/webpage/BnB/EVENT/20040618/index.htm")
         Encode2(600)
@@ -68,15 +80,117 @@ fun ChannelsExtraInfo() = PKT {
     }
 }
 
-// 211B SSD 資料塊 (每 dword BE 讀取 ^ 0x96CA5395 後 LE 寫回, 尾部 3B 為 Encode2(0)+Encode1(0) 原樣)
-private val EN_CHANNELS_EXTRA_BLOB = """
-    96ca9d8d 96cf5395 96ca539b c2ba3cc5 d0e734f4 e0af21fa
-    965c21f0 9cca5395 97ca53ea 96ca5394 51ca5295 97ca5394
-    96ca5395 96ca5595 f8ab0195 00ae36fe a4ca5395 96ca2c9f
-    9cca5294 96cb5395 96ca5252 96ca5394 96c65395 f7885395
-    d5e72af7 f8a432fd 965c3ff0 9cca5395 97ca53ea 96ca5394
-    51ca5295 97ca5394 96ca5395 96ca5795 e1a50795 96ca9bfb
-    e9b25295 97cb5395 96ca5395 970d5394 96cb5295 96ca5395
-    96ca5399 f7bf22c6 f98936e7 e2ab23f8 96ca535d 96b50394
-    96cb5295 97ca5395 96cb9495 96ca5294 a5695a
-""".toBA()
+// 抓包頻道 (login.pcap sq=46, 5 頻道) — 重編碼須與原塊逐位元組一致 (replay_test login 用例斷言 op 11)
+// Town / SquareCompat 為特殊大地圖頻道 (bigMap=true), 與普通頻道欄位值不同
+private val EN_CHANNELS = listOf(
+    ChannelEntry("PopTag-Forever", maxCount = 150),
+    ChannelEntry("Ranked", maxCount = 150, curCount = 50, subMapNo = 0x0A),
+    ChannelEntry("Baby-Channel", maxCount = 150),
+    ChannelEntry("Town", maxCount = 200, curCount = 1, mapNo = 0x78, bigMap = true),
+    ChannelEntry("SquareCompat", maxCount = 200, curCount = 1, mapNo = 0x50, bigMap = true),
+)
+
+// 頻道條目 — 欄位由 op11 211B 塊逐位元組解出, 每條目 = 4 + 名長 + 27B, 重編碼與抓包逐位元組一致:
+//   name      頻道名 (大廳 UI 顯示, u32 名長 + 名字)
+//   maxCount  u32 人數上限 (抓包: 普通頻道 150, 大地圖 200)
+//   curCount  u8 當前人數 (抓包: Ranked 50, Town/Square 1, 其餘 0)
+//   mapNo     u8 (普通 0x0A / Town 0x78 / Square 0x50; 推測地圖號或房間數, 語義未釘死)
+//   ip        頻道伺服器 IPv4 (u32 BE) — 改動須與 tools/patch_ip.py 同步
+//   subMapNo  u8 (僅 Ranked = 0x0A, 其餘 0; 語義未知)
+//   bigMap    大地圖標記 (Town/Square = 1, 普通頻道 0)
+class ChannelEntry(
+    val name: String,
+    val maxCount: Int,
+    val curCount: Int = 0,
+    val mapNo: Int = 0x0A,
+    val ip: String = "127.0.0.1",
+    val subMapNo: Int = 0,
+    val bigMap: Boolean = false,
+) {
+    fun Encode(out: ByteArrayOutputStream, isLast: Boolean) {
+        out.ss(name)
+        out.u32le(maxCount)
+        out.u8(curCount)
+        out.u8(mapNo)
+        out.ipv4(ip)
+        // 14B 恆定欄位 (抓包原樣, 語義未釘死; bigMap 位於其中第 10 位元組)
+        out.u8(0x01)
+        out.u8(0x00)
+        out.u8(subMapNo)
+        out.u8(0x00)
+        out.u8(0x00)
+        out.u8(0x01)
+        out.u8(0x00)
+        out.u8(0xC7)
+        out.u8(0x01)
+        out.u8(0x00)
+        out.u8(if (bigMap) 1 else 0)
+        out.u8(0x01)
+        out.u8(0x00)
+        out.u8(0x00)
+        // 條目尾續讀標記: 末條 = Encode2(0)+Encode1(0) 原樣 a5 69 5a (客戶端解碼為 0 → 列表結束),
+        // 非末條 = 00 00 00 (解碼 0xA569/0x5A ≠ 0 → 繼續讀下一條)
+        if (isLast) {
+            out.u8(0xA5); out.u8(0x69); out.u8(0x5A)
+        } else {
+            out.u8(0x00); out.u8(0x00); out.u8(0x00)
+        }
+    }
+}
+
+// 塊明文: [0x18][(塊長-5)&0xFF][u32 0][u16 頻道數 LE] + N × 頻道條目 (塊頭規律見頂部註釋)
+private fun channelsExtraBlock(entries: List<ChannelEntry>): ByteArray {
+    val out = ByteArrayOutputStream()
+    out.u8(0x18)
+    out.u8(0) // (塊長-5)&0xFF, 組裝完回填
+    out.u32le(0)
+    out.u16le(entries.size)
+    entries.forEachIndexed { i, e -> e.Encode(out, isLast = i == entries.lastIndex) }
+    val ba = out.toByteArray()
+    ba[1] = ((ba.size - 5) and 0xFF).toByte()
+    return ba
+}
+
+// SSD 資料塊變換: 每 dword 以 LE 讀明文、^0x96CA5395、按 BE 寫回; 尾部不足 4B 原樣
+// (= tools/extract_first_push.py 的 ssd_encode, 客戶端 ssd_decode 為其逆變換)
+private fun ssdEncode(plain: ByteArray): ByteArray {
+    val out = ByteArray(plain.size)
+    var i = 0
+    while (i + 4 <= plain.size) {
+        val le = (plain[i].toInt() and 0xFF) or
+                ((plain[i + 1].toInt() and 0xFF) shl 8) or
+                ((plain[i + 2].toInt() and 0xFF) shl 16) or
+                ((plain[i + 3].toInt() and 0xFF) shl 24)
+        val enc = le xor 0x96CA5395.toInt()
+        out[i] = (enc ushr 24).toByte()
+        out[i + 1] = (enc ushr 16).toByte()
+        out[i + 2] = (enc ushr 8).toByte()
+        out[i + 3] = enc.toByte()
+        i += 4
+    }
+    while (i < plain.size) {
+        out[i] = plain[i]
+        i += 1
+    }
+    return out
+}
+
+// ---- 塊拼裝小工具 (塊內欄位皆為明文, 勿用會 XOR 的 Encode1/2/4 DSL) ----
+
+private fun ByteArrayOutputStream.u8(v: Int) = write(v and 0xFF)
+
+private fun ByteArrayOutputStream.u16le(v: Int) {
+    u8(v); u8(v shr 8)
+}
+
+private fun ByteArrayOutputStream.u32le(v: Int) {
+    u8(v); u8(v shr 8); u8(v shr 16); u8(v shr 24)
+}
+
+private fun ByteArrayOutputStream.ipv4(ip: String) = ip.split('.').forEach { u8(it.toInt()) } // BE
+
+private fun ByteArrayOutputStream.ss(s: String) {
+    val a = s.toByteArray(ACP)
+    u32le(a.size)
+    write(a)
+}

@@ -117,19 +117,19 @@
   C 发 2 后服务器回 **op 4**（旧表把 FirstInfoInit 当 2 的回应；实际 1861B 的 op 2 是服务器主动推送）
 
 ## SSD 资料块编码（op1/op2/op51/op11/op13/op12 内嵌子块，2026-08-30 逆向）
-- 结构：`Encode1Bool(true) + Encode4(len) + len 字节资料块`（op13/op12 无开头的 Encode1Bool；
-  尾部不足 4 字节的部分为 Encode2(0)/Encode1(0) 原样）
-- 资料块变换：**每 dword 以 BE 读取、XOR 0x96CA5395、按 LE 写回**（即 Encode4 的字节序交换形式）
-- op1（46B）解码 = multisvr.ssd 缓存体：`18290000 | 00 00 01 06 00 00 00 "PopTag" |
-  0b 00 00 00 "Main Server" | 00 00 00 00 | 01 00 | IPv4(BE) | port(u16 LE)`；
-  op51（32B）解码 = filterstr.ssd（"Channel 1"/"Normal"）；op2（1854B）为字串表
-- **op11（211B）解码 = 频道列表**：5 频道 "PopTag-Forever" / "Ranked" / "Baby-Channel" /
-  "Town" / "SquareCompat"，每频道带人数上限 u32、当前人数 u8 与一个 IPv4(BE)；
-  op13（38B）= 各频道开关/状态；op12（21B）几乎全 0
-- 已改写为 127.0.0.1 的 IP 位置：`packet/MultiServerInit.kt` EN_MULTISVR_BLOB（op1, 1 处）、
-  `packet/ChannelsExtraInfo.kt` EN_CHANNELS_EXTRA_BLOB（op11, 5 处）——**改服务器地址需同步**
-  `tools/patch_ip.py`（客户端二进制侧，2026-08-30 起含 nmconew.dll/nmcogame.dll 的 UTF-16LE 表各 8 槽）
-  与这两处（模拟器下发侧）
+- 结构：`Encode1Bool(true) + Encode4(len) + len 字节资料块`（op13/op12 无开头的 Encode1Bool）；
+  资料块变换：**每 dword 以 BE 读取、XOR 0x96CA5395、按 LE 写回**（即 Encode4 的字节序交换形式）
+- 块头规律（op1/op2/op11/op12/op13 五块吻合）：`[0x18][(块长-5)&0xFF][u32 0][条目数]`
+  （条目数 op11/12/13 为 u16 LE，op1 为 u8）
+- **op11 = 频道列表，已结构化**：`packet/ChannelsExtraInfo.kt` 的 `ChannelEntry` + `ssdEncode`
+  （条目逐字节结构、续读标记、各字段值等细节见该文件顶部注释；重编码与抓包逐字节一致，
+  replay_test login 用例断言）。5 频道 PopTag-Forever / Ranked / Baby-Channel / Town / SquareCompat，
+  Town/SquareCompat 为大地图频道、并非被关闭
+- op1 = multisvr.ssd 缓存体（解码布局见 MultiServerInit.kt 注释）；op51 = filterstr.ssd；
+  op2 = 字串表；op13 = 各频道状态；op12 几乎全 0
+- 已改写为 127.0.0.1 的 IP 位置：`packet/MultiServerInit.kt` EN_MULTISVR_BLOB（op1）、
+  `packet/ChannelsExtraInfo.kt` ChannelEntry.ip（op11）——**改服务器地址需同步**
+  `tools/patch_ip.py`（客户端二进制侧，含 nmconew.dll/nmcogame.dll 的 UTF-16LE 表各 8 槽）
 - 客户端行为：op1 到达后写 multisvr.ssd 并取得 login 服务器地址；**缺失即报"无法连接登录服务器"**
 
 ## 真实流程（按抓包时序，逐字节细节查 decoded_dump.txt）
@@ -160,7 +160,8 @@
   `replay_connect_cs.bin`：
   把真实客户端原始字节流回放给模拟器的回归测试（banner 逐字节比对 + C→S 全接受 + S→C CRC8 全过；
   first 用例断言推送 ops=[193,2,67,1,51]，login 用例断言 [4,11,13,12,11,13,13,13]
-  （尾部 13×2 = op 15 轮询回应），enter 用例断言含 [48,13,14,97,122,87,423] 与整套批次回应
+  （尾部 13×2 = op 15 轮询回应）及逐字节 op 11（基准 login_s2c_op11_ip127.bin = 抓包 IP 改写版）/ op 13，
+  enter 用例断言含 [48,13,14,97,122,87,423] 与整套批次回应
   [310,302,254,72,293,78,4×2,227,60,310,302]（与真实线序逐包一致）；
   connect 用例断言 [7]——op 6 ReqConnectToSvr 必须回 **op 7**，回 6 客户端会忽略、频道点击无反应；
   该 bin 为真实 op 6 载荷（E1(10)+E4(2)，原帧 seq=70/uid=198）以 ssc_enc 重封装至 seq=40 的单帧）
@@ -168,6 +169,7 @@
   改写 op1 内 IP 并生成 Kotlin hex 常量与 replay_first_cs.bin
 - `tools/extract_login_flow.py`：从 login.pcap 提取登录连接的 op4/11/13/12 明文
   （cap/login_s2c_op*.bin）、改写 op11 内 5 处 IP 并生成 Kotlin hex 常量
+  （op11 已结构化，该基准现仅作 replay_test 的 IP 改写版断言源 login_s2c_op11_ip127.bin）
 - `tools/extract_channel_flow.py`：从 enter-channel.pcap stream1 按 TCP 线序提取进频道整套 S→C 回应
   （cap/chan_s2c_op*.bin），Unk423/Unk254/Unk227/Unk60/SessionInfoResult 的
   Kotlin blob 常量源（blob = 载荷去 2B opcode 前缀，已验证重编码逐字节一致）；
