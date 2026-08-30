@@ -3,9 +3,13 @@ MultiServerInit: 1
 FirstInfoInit: 2
 LoginResult: 3
 AskFirstInfoResult: 4
+# 同為 op 4 的兩個變體: SessionInfoResult = 頻道連線 65B 全零版, UserSimpleInfoResult = 13B 版
+SessionInfoResult: 4
+UserSimpleInfoResult: 4
 NewUserResult: 5
-ResConnectToSvr: 6
-UpdateNotice: 7
+# EN 真實抓包: op 6 ReqConnectToSvr 的回應是 S→C op 7 (半截流暴力對齊 seq 解出),
+# 客戶端收到後才會關登入連線、新開連線到回應內 IP:port; TW 客戶端仍預期 op 6 (見 TW_5_send.yaml)
+ResConnectToSvr: 7
 ChannelsInfo: 10
 ChannelsExtraInfo: 11
 ChannelsState: 13
@@ -54,29 +58,29 @@ DigiQAuthorizationResult: 209
 EnableShop: 210
 PackageMapInit: 213
 CartList: 214
-# 真實伺服器在用、但尚未有對應 Packet 類別的 opcode (cap/*.pcap 逆向)
-# 實作對應 Packet 後把 Unk_N 改成類別名即可註冊
+# 真實伺服器在用、已從抓包原樣重放的 opcode (cap/chan_s2c_op*.bin, 生成工具見 AGENTS.md)
+# 語義已確認的用功能名 (RoomList=房間列表; SessionList 實為頻道在線用戶列表, 名字待改), 其餘維持 UnkNNN
 Unk12: 12
-Unk_48: 48
-Unk_60: 60
+Unk48: 48
+Unk60: 60
 Unk_65: 65
 Unk_66: 66
-Unk_72: 72
-Unk_78: 78
+SessionList: 72
+Unk78Result: 78
 Unk_86: 86
-Unk_87: 87
-Unk_97: 97
-Unk_122: 122
+RoomList: 87
+Unk97: 97
+Unk122: 122
 Unk_198: 198
 Unk_204: 204
 Unk_212: 212
-Unk_227: 227
+Unk227: 227
 Unk_247: 247
-Unk_254: 254
+Unk254: 254
 Unk_261: 261
 Unk_274: 274
-Unk_293: 293
-Unk_302: 302
-Unk_310: 310
+Unk293: 293
+Unk302: 302
+Unk310: 310
 Unk_413: 413
-Unk_423: 423
+Unk423: 423

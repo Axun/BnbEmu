@@ -38,7 +38,7 @@ def collect(s: socket.socket, seconds: float = 1.5):
     return data, saw_eof
 
 
-def replay(name: str, blob: bytes, expect_ops: set):
+def replay(name: str, blob: bytes, expect_ops: set, expect_payloads: dict = None):
     s = socket.create_connection(("127.0.0.1", PORT), timeout=5)
 
     # 1) banner: [0x00][len:2 BE 明文][payload 明文], 內容須與真實伺服器逐位元組一致
@@ -66,6 +66,13 @@ def replay(name: str, blob: bytes, expect_ops: set):
         print(f"[{name}] S→C ✓ {len(pkts)} 包全部 CRC8 通過, ops={ops}")
         missing = expect_ops - set(ops)
         assert not missing, f"[{name}] 缺少預期回應 opcode: {missing}"
+        for op, hx in (expect_payloads or {}).items():
+            got = [p["p"] for p in good
+                   if len(p["p"]) >= 2 and struct.unpack(">H", p["p"][:2])[0] ^ 0xA569 == op]
+            assert got, f"[{name}] 沒收到 op {op} 回應"
+            assert got[0].hex() == hx, \
+                f"[{name}] op {op} 載荷與抓包不一致:\n  got {got[0].hex(' ')}\n  exp {hx}"
+            print(f"[{name}] op {op} 載荷逐位元組與抓包一致 ✓ ({len(got[0])}B)")
     else:
         assert not expect_ops, f"[{name}] 沒收到任何 S→C 加密包 (缺少 {expect_ops})"
         print(f"[{name}] C→S ✓ 整段 {len(blob)}B 全部接受, 連線保持 (該流程模擬器尚無對應回應)")
@@ -78,6 +85,15 @@ if __name__ == "__main__":
     replay("first", open(os.path.join(base, "tools/replay_first_cs.bin"), "rb").read(), {193, 2, 67, 1, 51})
     # login.pcap stream2: op2 AskFirstInfo → 應回 op4; op55 → [11,13,12]; op11 → [11,13]
     replay("login", open(os.path.join(base, "tools/replay_login_cs.bin"), "rb").read(), {4, 11, 13, 12})
-    # enter-channel.pcap stream1: op7 OnConnEstablished (含 DecodeStr 字串解析) 等 13 包
-    replay("enter", open(os.path.join(base, "tools/replay_enter_cs.bin"), "rb").read(), set())
+    # enter-channel.pcap stream1: op7 OnConnEstablished → EN 應回 [48,13,14,97,122,87,423]
+    #   (87 RoomList 房間列表); 其後批次 297/302/310/64/293/78 → Unk_78 觸發整套回應
+    #   [310,302,254,72 用戶列表,293,78,4×2,227,60,310,302]; 尾部 15 輪詢 → 13
+    # op 72 SessionList / op 87 RoomList 已結構化, 載荷須與抓包逐位元組一致
+    replay("enter", open(os.path.join(base, "tools/replay_enter_cs.bin"), "rb").read(),
+           {48, 13, 14, 97, 122, 87, 423, 310, 302, 254, 72, 293, 78, 4, 227, 60},
+           {72: open(os.path.join(base, "cap/chan_s2c_op72_396B_0.bin"), "rb").read().hex(),
+            87: open(os.path.join(base, "cap/chan_s2c_op87_41B_0.bin"), "rb").read().hex()})
+    # op 6 流程: 真實請求載荷 (E1(10)+E4(2), seq70/uid198 原幀以 ssc_enc 重封裝至 seq=40)
+    # → EN 必須回 **op 7** ResConnectToSvr (客戶端等 7 才會開進頻道連線; 回 6 客戶端會忽略)
+    replay("connect", open(os.path.join(base, "tools/replay_connect_cs.bin"), "rb").read(), {7})
     print("ALL PASS")

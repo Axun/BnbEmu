@@ -44,7 +44,14 @@ class ClientSocket : SimpleChannelInboundHandler<ByteBuf>() {
                 buf.handle(this@ClientSocket)
             }
         } catch (e: Throwable) {
-            error("業務邏輯錯誤 [${OpcodeManager.recvOps[opcode]}] | ${e.message}")
+            // 必須保留原始例外 (cause): 只轉發 e.message 會丟掉型別與堆疊 ——
+            // 例如 NoSuchMethodError (JDK 9+ 訊息形如 '傳回型別 包.類別.函式()') 只看訊息
+            // 完全定位不到出錯的呼叫點; 帶上 cause 後 exceptionCaught 的 printStackTrace
+            // 會印出完整 Caused by 鏈
+            throw IllegalStateException(
+                "業務邏輯錯誤 [${OpcodeManager.recvOps[opcode]}] | ${e::class.simpleName}: ${e.message}",
+                e
+            )
         }
     }
 

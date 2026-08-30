@@ -113,6 +113,62 @@ def dec_c2s(data, start_seq=40):
         seq = (seq + 3) & 0xFFFFFFFF
     return pkts
 
+def ssc_enc(key, data):
+    """simpleStreamEncrypt3 —— ssc_dec 的精确逆变换 (重封裝 replay 用, 如 replay_connect_cs.bin)"""
+    buf = bytearray(data)
+    size = len(buf); bc = size >> 2; rem = size & 3
+    mk = (key ^ 0x53351D9C) & 0xFFFFFFFF
+    if bc > 0:
+        p0 = struct.unpack_from("<I", buf, 0)[0]
+        struct.pack_into("<I", buf, 0, mk ^ p0)
+        past = p0
+        for i in range(bc - 1):
+            mk = (mk - 0x63CAACE3) & 0xFFFFFFFF
+            idx = (i + 1) * 4
+            cur = struct.unpack_from("<I", buf, idx)[0]
+            struct.pack_into("<I", buf, idx, mk ^ cur ^ past)
+            past = cur
+        mk = past
+    if rem:
+        st = bc * 4
+        for i in range(rem):
+            buf[st + i] ^= (mk >> (i * 8)) & 0xFF
+    return bytes(buf)
+
+def brute_s2c(raw, max_seq=2000):
+    """半截流单帧暴力对齐 seq (跨 pcap 的连接尾巴/抓包中断处, dump() 解不出时用)。
+    返回 [(seq, payload)], 仅列 CRC8 通过者。
+    注意: ssc 进完整 seq, CRC8 key 取 seq&0xFF —— seq>255 时两者不同, 传错解不出。"""
+    hits = []
+    if len(raw) < 7:
+        return hits
+    for seq in range(40, max_seq):
+        if (231 ^ (102 + seq)) & 0xFF != raw[0]:
+            continue
+        ln = struct.unpack_from(">I", raw, 2)[0] ^ 0x96CA5395
+        if ln <= 0 or 6 + ln + 1 != len(raw):
+            continue
+        pay = ssc_dec(seq, raw[6:6+ln])
+        if crc8_pingu(seq & 0xFF, pay) == raw[6+ln]:
+            hits.append((seq, pay))
+    return hits
+
+def brute_c2s(raw, max_seq=2000):
+    """同 brute_s2c, C->S 方向"""
+    hits = []
+    if len(raw) < 6:
+        return hits
+    for seq in range(40, max_seq):
+        if (231 ^ (192 + seq)) & 0xFF != raw[0]:
+            continue
+        ln = raw[3] ^ 0x69
+        if ln <= 0 or 4 + ln + 1 != len(raw):
+            continue
+        pay = ssc_dec(seq, raw[4:4+ln])
+        if crc8_pingu(seq & 0xFF, pay) == raw[4+ln]:
+            hits.append((seq, pay))
+    return hits
+
 def hx(b, w=48):
     h = b[:w].hex(' ')
     asc = ''.join(chr(x) if 32 <= x < 127 else '.' for x in b[:w])

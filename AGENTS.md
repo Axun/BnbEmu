@@ -13,7 +13,9 @@
 # 协议逆向结论（2026-08，Locale=EN）
 
 > 依据 cap/*.pcap 三个抓包（start / login / enter-channel，抓包对象即 66.135.19.7），
-> 188 个加密包按下列格式全部通过 CRC8 校验（CRC8 当 oracle 逆向）。
+> 188 个加密包按下列格式全部通过 CRC8 校验（CRC8 当 oracle 逆向）；另有 enter-channel.pcap
+> 登录连线收尾 5 帧半截流（跨 pcap 截断，2026-08-30 经 brute_c2s/brute_s2c 暴力对齐 seq 补解，
+> 内含 op 6→op 7 关键交互，见"关键观察"）。
 > 权威参照：`tools/decode_final.py`（解码器 + 协议注释）、`cap/decoded_dump.txt`（逐包明文）。
 > 加密原语与项目实现完全一致，当年对不上的只有帧封装和 opcode 表，均已修正并落地到代码。
 
@@ -39,20 +41,58 @@
 
 ## opcode（已补全进 EN_0_recv/send.yaml）
 - 可信命名（抓包时序验证）：C→S 2 AskFirstInfo、7 OnConnEstablished、15 ChannelsStateReq、
-  64 UserSimpleInfoReq、81 JoinSessionReq；S→C 1 MultiServerInit、2 FirstInfoInit、11 ChannelsExtraInfo、
-  13 ChannelsState、14 ChannelsGameState、20 ResEstimateRTT、81 JoinSessionResult、200 FxStockInit、210 EnableShop
+  64 UserSimpleInfoReq、81 JoinSessionReq；S→C 1 MultiServerInit、2 FirstInfoInit、7 ResConnectToSvr、
+  11 ChannelsExtraInfo、13 ChannelsState、14 ChannelsGameState、20 ResEstimateRTT、
+  81 JoinSessionResult、200 FxStockInit、210 EnableShop
 - 已实现绑定（原名 Unk_* 占位）：C→S 0 AskFirstSession（首连打开）、55 Unk_55（登录后自动跟发，
-  回频道列表）、11 EnterChannelReq（进频道）；S→C 193 FirstSessionNotify、67 FirstInfoTail、
-  51 MultiServerTail、4 AskFirstInfoResult、12 Unk12（名字为推测者见 packet/ 注释）
+  回频道列表）、11 EnterChannelReq（进频道）、15 ChannelsStateReq（频道状态轮询，回 op 13）、
+  64 UserSimpleInfoReq（空消费，回应在 Unk_78 链内）、297/39/302/310/293（空消费/部分消费，
+  整套回应由 Unk_78 触发）、78 Unk_78（批次收齐触发点，回整套进频道回应链）；
+  S→C 193 FirstSessionNotify、67 FirstInfoTail、51 MultiServerTail、4 AskFirstInfoResult（登录连线 65B）
+  / SessionInfoResult（频道连线 65B 全零变体）/ UserSimpleInfoResult（13B 变体，三种同类名映射同 op 4）、
+  12 Unk12、48 Unk48（op 7 后的空体回应）、97 Unk97（E2(11)，与 op 14 内 ChannelID 同值，推测频道标识）、
+  7 ResConnectToSvr（op 6 ReqConnectToSvr 的回应，见下方关键观察）、
+  122/423（op 7 回应后的推送，原样重放）、87 RoomList（**房间列表**，已结构化可动态生成，见关键观察）、
+  310/302（进频道批次回应，E2(1)+E4(0)×2+E2(0)+E4(0)+E2(0)，
+  各发两次）、254/227（含 4B 会话串的块，原样重放）、72 SessionList（**频道在线用户列表**，已结构化可动态
+  生成，见关键观察）、
+  293/78（E1(0)/E4(0) 小回应）、60（46KB 资源块，原样重放）
 - 尚无 handler/packet（yaml 里 Unk_* 占位）：
-  C→S 39、78、274、276、281、293、297、302、310；
-  S→C 48、60、65、66、72、78、86、87、97、122、198、204、212、227、247、254、261、274、293、302、310、413、423
+  C→S 274、276、281（进房后批次）；
+  S→C 65、66、86、198、204、212、247、261、274、413（进房后推送/周期包）
 - 注意：**带下划线的 Kotlin 函数名无法注册发送包**（OpcodeManager 的 filteredName 会
   substringBefore('_') 截断），新 Packet 类名不能含下划线；handler 顶层 val 名可含下划线（精确匹配字段名）
-- 关键观察：op 87 服务器周期推送（66 次，44~56B）；op 86（12 次）；
-  op 122 体为 `[Encode1(0)][Encode4(5000)]` 疑似 5 秒定时器；op 4 是 AskFirstInfo 的回应（65B / 13B 两种，
-  13B 变体出现在频道内查询应答中，尚未实现；65B 体内含 4B 会话串，与 op 297/254 同串）；
-  op 48 是 op 7 后的空体回应；op 210 EnableShop 实为 24KB 商城目录、op 65 ≈50KB、op 60 ≈46KB（疑似地图/资源数据）
+- 关键观察：**op 87 = 房间列表（真，2026-08-30 确认，非普通周期推送）**：34 个实例、11 种长度
+  （40~59B，随房名长短变化；出现于登录期与大厅期）；结构
+  `E2(1) + E4(f1) + E4(f2) + E4(f3) + E4(f4) + E4(名长) + 房名(NUL 补齐到 dword) + E4×3 + E1/E2(0)`；
+  **房名加密与 op 72 令牌同款变换**，已解出 13 个真实房名：rd / Everyone welcome! /
+  Taylor Swift is here / gogo battle / 01234567899 / vietnam / come together! / /np / all no /
+  K8-k-3 / K8XNaVYLFQ / tw / 1 —— enter-channel.pcap 的 41B 实例就是 **"rd" 房**（模拟器 RoomList
+  重放包，客户端 UI 显示的正是它）。f1/f2/f3/f4/tail 与 房间编号/上限/当前人数 的对应尚未钉死
+  （rd 实例：f1=33, f2=7192[低16位恒 0x18], f3=61<<16, f4=119, t1=0x08000000, t2=0x04100077, t3=0）；
+  下一步：在真实服务器房间界面（rd #12 1/1）抓 1 分钟 op 87，按 12/1/1 值匹配钉死字段；
+  op 86（12 次，23~25B）；
+  op 122 体为 `[Encode1(0)][Encode4(5000)]` 疑似 5 秒定时器；op 4 有三个变体（登录连线 65B /
+  频道连线 65B 全零 / 13B 查询应答，均含或邻接 4B 会话串）；
+  op 210 EnableShop 实为 24KB 商城目录、op 65 ≈50KB、op 60 ≈46KB（资源块，已原样重放）；
+  **op 72 SessionList = 频道在线用户列表**（⚠️ 2026-08-30 与游戏界面比对，非房间列表；已结构化：`packet/SessionList.kt` 的 SessionEntry）：
+  `E2(0) + E1(条目数) + N 条目`，条目 = `E2(len)+角色名令牌(4~6B) + 42B 固定栏位`；
+  已解出栏位语义：number=E2 玩家**等级**（样本 326→1 递减 = 326..1 级玩家，非房间号）、
+  maxCount=E4 恒 50（频道人数上限）、curCount=E4（样本 16/17/0，频道当前在线数）、
+  state=E1 与 state2=E2（样本仅一玩家同为 1，是否同一标志待观察），其余恒 0；
+  **令牌 = 玩家角色名的加密形式**（2026-08-30 由末条 = 抓包账号 kcworms1 的角色名 ffdf 对出：
+  按 4B 一块 LE 读 ^ 0x96CA5395 按 BE 写回（SSD/Encode4 逆变换），尾部 2B **LE 读 ^0xA569 按 BE 写回**、
+  尾部 1B ^0x5A，**尾部 3B = 2B 尾 + 1B 尾**（2026-08-30 由 tst.pcap 角色名 kcworm1 [7B] 对出：
+  令牌 f9bd30fec81b6b = kcwo 4B块 + rm 2B尾 + 1 1B尾；初解漏 2B 尾字节序交换导致 6B 名末两字对调），
+  令牌长恒等于角色名长、任意长度成立；8 条 enter-channel 样本经游戏界面人名核为
+  Kuso/Lotso/Jacko/suan/Hello/Mirage/Static/ffdf 且回编码逐字节一致）；
+  令牌即进房定位符（JoinSessionResult 回显 e2ab27c6c600 = 列表第 7 条 Static），末条为用户
+  自己的角色名令牌 —— replay_test 对 op 72 做逐字节断言；
+  **op 6 ReqConnectToSvr 是 EN 进频道的真实步骤**（2026-08-30 更正：此前误判"TW 专用、EN 抓包从未出现"，
+  实际藏在 enter-channel.pcap 登录连线收尾的半截流里，decoded_dump 对其记 0 包）：C 发 op 6
+  （E1(10)+E4(2)，E4 含义不明、真实抓包为 2 / live 客户端为 0）→ S 回 **op 7**
+  （E1(1)+E1(10)+E4(回显)+E4(IP)+E2(3838)，已逐字节解出）→ 客户端关登录连线、新开连线到 IP:port。
+  ResConnectToSvr 已注册为 S→C op 7（EN_0_send.yaml；TW 客户端仍预期 op 6，TW_5_send.yaml 未动）
 - 与旧 TW_5 表冲突处：进频道请求真实是 **op 11**（旧表 EnterChannelStageReq=9）；
   C 发 2 后服务器回 **op 4**（旧表把 FirstInfoInit 当 2 的回应；实际 1861B 的 op 2 是服务器主动推送）
 
@@ -76,22 +116,45 @@
 2. 连 3838 → 收 banner → 客户端会话的首个连接发 op 0（22B）→ S 推送启动序列 **[193, 2 FirstInfoInit 1861B, 67, 1 MultiServerInit 54B, 51]**（seq 43/46/49/52/55）
 3. 登录连接：C 发 op 2（2B opcode + 40B 票据数据）→ S 回 **op 4**（65B）；
    紧跟 C 自动发 op 55 → S 推 **[11 ChannelsExtraInfo 218B, 13 ChannelsState 44B, 12 27B]**（频道列表）；
-   用户选频道后 C 发 op 11（4B 频道 hash）+ 297 + 39 → S 推 **[11, 13]**，随后进入大厅期
-4. C 发 op 7 OnConnEstablished（含加密角色名、hash）→ S 回 op 48 + 13 + 14（+97）
-5. 进频道：C 发 op 11（4B 频道 hash）→ S 回 [11 ChannelsExtraInfo 218B, 13 44B, 12 27B, 11, 13]
-6. 大厅期 S 周期推 op 87 / 86 / 122；进房 81 JoinSessionReq → 81 JoinSessionResult（131B / 101B 两种）
+   用户选频道后 C 发 op 11（4B 频道 hash）+ 297 + 39 → S 推 **[11, 13]**
+4. 客户端取进频道连线地址：C 发 **op 6 ReqConnectToSvr**（E1(10)+E4(2)）→ S 回 **op 7 ResConnectToSvr**
+   （E1(1)+E1(10)+E4(2)+E4(IP)+E2(3838)；期间夹有 3 个 op 86 周期推送）→ 客户端关闭登录连接（FIN），
+   新开连线到 IP:3838（60246 → 60248）
+5. （新连线上）C 发 op 7 OnConnEstablished（EN 36B：E1(1) + [E2(4)+会话串] + E4(639) + E4(0) + 8B 原样 +
+   频道hash×2 + E1(1)；前段与 TW 共用 userCount/name/userId 解析）→ S 回
+   **[48 空体, 13, 14, 97, 122, 87, 423]**（线序 seq=43~61）；
+   随后 C 跟发 297 / 302 / 310 / 64 / 293 / 78 批次 → 批次收齐（78 最后）后 S 按线序回
+   **[310, 302, 254, 72 用户列表, 293, 78, 4(13B), 4(65B), 227, 60 46KB, 310, 302]**（seq=64~97，
+   用户列表据此显示）→ 进入大厅期
+   ⚠️ 线序 = seq 顺序；dump_flow.py 按时间戳排序会因 TCP 合包失真（如 122 实际紧跟 97，却显示在 60 之后）
+6. 进频道：C 发 op 11（4B 频道 hash）→ S 回 [11 ChannelsExtraInfo 218B, 13 44B, 12 27B, 11, 13]
+7. 大厅期 S 周期推 op 87 / 86 / 122；进房 81 JoinSessionReq → 81 JoinSessionResult（131B / 101B 两种），
+   进房后 S 还推 [413, 198, 200 FxStockInit, 274×2, 212, 210 EnableShop, 87, 65, 204, 66, 14, 20,
+   261, 247, 423] 与 81/72 交替（回应尚未实现，为下一缺口）
 - 版本线索：banner 内两个 Encode2(18)（`00 12 00 12`），若为版本字段则 EN 客户端可能是 **v18**（未验证；EN_VER 现为 0 占位）
 
 ## 测试资产（改协议层后必跑）
-- `tools/replay_test.py` + `replay_first_cs.bin` / `replay_login_cs.bin` / `replay_enter_cs.bin`：
+- `tools/replay_test.py` + `replay_first_cs.bin` / `replay_login_cs.bin` / `replay_enter_cs.bin` /
+  `replay_connect_cs.bin`：
   把真实客户端原始字节流回放给模拟器的回归测试（banner 逐字节比对 + C→S 全接受 + S→C CRC8 全过；
-  first 用例断言推送 ops=[193,2,67,1,51]，login 用例断言 [4,11,13,12,11,13]）
+  first 用例断言推送 ops=[193,2,67,1,51]，login 用例断言 [4,11,13,12,11,13,13,13]
+  （尾部 13×2 = op 15 轮询回应），enter 用例断言含 [48,13,14,97,122,87,423] 与整套批次回应
+  [310,302,254,72,293,78,4×2,227,60,310,302]（与真实线序逐包一致）；
+  connect 用例断言 [7]——op 6 ReqConnectToSvr 必须回 **op 7**，回 6 客户端会忽略、频道点击无反应；
+  该 bin 为真实 op 6 载荷（E1(10)+E4(2)，原帧 seq=70/uid=198）以 ssc_enc 重封装至 seq=40 的单帧）
 - `tools/extract_first_push.py`：从 start.pcap 提取首连推送明文（cap/firstconn_s2c_op*.bin）、
   改写 op1 内 IP 并生成 Kotlin hex 常量与 replay_first_cs.bin
 - `tools/extract_login_flow.py`：从 login.pcap 提取登录连接的 op4/11/13/12 明文
   （cap/login_s2c_op*.bin）、改写 op11 内 5 处 IP 并生成 Kotlin hex 常量
+- `tools/extract_channel_flow.py`：从 enter-channel.pcap stream1 按 TCP 线序提取进频道整套 S→C 回应
+  （cap/chan_s2c_op*.bin），Unk423/Unk254/Unk227/Unk60/SessionInfoResult 的
+  Kotlin blob 常量源（blob = 载荷去 2B opcode 前缀，已验证重编码逐字节一致）；
+  op 87/op 72 载荷现为 RoomList/SessionList 结构化编码的逐字节断言基准
 - `tools/dump_flow.py <pcap> <stream>`：按时间戳交错输出指定 TCP 流的 C→S/S→C 解码包（对齐请求→回应）
-- `tools/decode_final.py`：pcap 全量解码器；`cap/decoded_dump.txt`：逐包明文（opcode 标签已对齐 EN_0 表）
+- `tools/decode_final.py`：pcap 全量解码器；`cap/decoded_dump.txt`：逐包明文（opcode 标签已对齐 EN_0 表）。
+  注意：跨 pcap 的连接尾巴是半截流，dump 会记 0 包——用 `brute_s2c`/`brute_c2s` 单帧暴力对齐 seq 解
+  （**ssc 进完整 seq、CRC8 key 取 seq&0xFF，seq>255 时两者不同**）；`ssc_enc` 为 ssc_dec 的逆变换，
+  可把真实载荷重封装到任意 seq 生成 replay 帧
 
 ## 构建 / 运行约定
 - JDK 21
