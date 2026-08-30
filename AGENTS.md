@@ -184,11 +184,8 @@
 
 ## 构建 / 运行约定
 - JDK 21
-- Maven 无 wrapper：`~/.m2/wrapper/dists/apache-maven-3.9.9-bin/4nf9hui3q3djbarqar9g711ggc/apache-maven-3.9.9/bin/mvn`，
-  `JAVA_HOME=/c/Program Files/Java/jdk21.0.12_9`
-- **必须在项目根目录启动**（Config.yaml / EN_0_*.yaml 按 CWD 加载）：
-  `java -cp "target/classes;<classpath>" pingu.MainKt`，classpath 用
-  `mvn dependency:build-classpath -Dmdep.outputFile=cp.txt` 生成
+- 启动命令：`mvn compile exec:java`  **必须在项目根目录启动**（Config.yaml / EN_0_*.yaml 按 CWD 加载）。
+- JAVA_HOME: `C:\Program Files\Java\jdk21.0.12_9`
 - Locale=EN：EN_0_*.yaml = 破解适配的真实协议；TW_5_*.yaml = 原作者原始实现（帧格式互不兼容，切回 TW 即回到旧协议）
 - 原作者的 isTW 业务分支（LoginResult / ChannelsExtraInfo / NettyServer UDP / OnConnEstablished）仍在，
   EN 下不触发；实现 EN 业务逻辑时用 isEN 另写，勿改回 isTW
