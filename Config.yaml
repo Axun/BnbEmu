@@ -1,0 +1,18 @@
+Locale: EN
+
+# EN 版本號未知, 0 為佔位; 確定後改此處, 並把 EN_0_recv/send.yaml 一併改名
+EN_VER:
+  0
+
+TW_VER:
+  5
+JP_VER:
+  17
+CN_VER:
+  12
+TH_VER:
+  12
+NA_VER:
+  12
+VN_VER:
+  2
