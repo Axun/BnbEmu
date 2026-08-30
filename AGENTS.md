@@ -67,9 +67,12 @@
 - 已实现绑定（原名 Unk_* 占位）：C→S 0 AskFirstSession（首连打开）、55 Unk_55（登录后自动跟发，
   回频道列表）、11 EnterChannelReq（进频道）、15 ChannelsStateReq（频道状态轮询，回 op 13）、
   64 UserSimpleInfoReq（空消费，回应在 Unk_78 链内）、297/39/302/310/293（空消费/部分消费，
-  整套回应由 Unk_78 触发）、78 Unk_78（批次收齐触发点，回整套进频道回应链）；
+  整套回应由 Unk_78 触发）、78 Unk_78（批次收齐触发点，回整套进频道回应链）、
+  81 JoinSessionReq（进频道自动空包，空消费不回包，⚠️ 非"进房"，见 JoinSessionReq.kt 注释）；
   S→C 193 FirstSessionNotify、67 FirstInfoTail、51 MultiServerTail、4 AskFirstInfoResult（登录连线 65B）
-  / SessionInfoResult（频道连线 65B 全零变体）/ UserSimpleInfoResult（13B 变体，三种同类名映射同 op 4）、
+  / SessionInfoResult（频道连线 65B 全零变体）/ UserSimpleInfoResult（13B 变体，三种同类名映射同 op 4；
+  前两者已结构化为 `packet/AskFirstInfoResult.kt` 的 `UserInfo` 类，userId=7215/会话串
+  f0ae35f3 等账号值暂用抓包常量 CAPTURE_USER_ID/SESSION_STRING）、
   12 Unk12、48 Unk48（op 7 后的空体回应）、97 Unk97（E2(11)，与 op 14 内 ChannelID 同值，推测频道标识）、
   7 ResConnectToSvr（op 6 ReqConnectToSvr 的回应，见下方关键观察）、
   122/423（op 7 回应后的推送，原样重放）、87 RoomList（**房间列表**，已结构化可动态生成，见关键观察）、
@@ -78,8 +81,8 @@
   生成，见关键观察）、
   293/78（E1(0)/E4(0) 小回应）、60（46KB 资源块，原样重放）
 - 尚无 handler/packet（yaml 里 Unk_* 占位）：
-  C→S 274、276、281（进房后批次）；
-  S→C 65、66、86、198、204、212、247、261、274、413（进房后推送/周期包）
+  C→S 274、276、281（进频道自动批次续包，与 op 81 同批，⚠️ 非"进房"）；
+  S→C 65、66、86、198、204、212、247、261、274、413（大厅期周期推送，⚠️ 非"进房后"）
 - 注意：**带下划线的 Kotlin 函数名无法注册发送包**（OpcodeManager 的 filteredName 会
   substringBefore('_') 截断），新 Packet 类名不能含下划线；handler 顶层 val 名可含下划线（精确匹配字段名）
 - 关键观察：**op 87 = 房间列表（真，2026-08-30 确认，非普通周期推送）**：34 个实例、11 种长度
@@ -106,8 +109,8 @@
   令牌 f9bd30fec81b6b = kcwo 4B块 + rm 2B尾 + 1 1B尾；初解漏 2B 尾字节序交换导致 6B 名末两字对调），
   令牌长恒等于角色名长、任意长度成立；8 条 enter-channel 样本经游戏界面人名核为
   Kuso/Lotso/Jacko/suan/Hello/Mirage/Static/ffdf 且回编码逐字节一致）；
-  令牌即进房定位符（JoinSessionResult 回显 e2ab27c6c600 = 列表第 7 条 Static），末条为用户
-  自己的角色名令牌 —— replay_test 对 op 72 做逐字节断言；
+  S→C op 81 名册回显同一批玩家令牌（细节见 JoinSessionReq.kt 注释）
+  —— replay_test 对 op 72 做逐字节断言；
   **op 6 ReqConnectToSvr 是 EN 进频道的真实步骤**（2026-08-30 更正：此前误判"TW 专用、EN 抓包从未出现"，
   实际藏在 enter-channel.pcap 登录连线收尾的半截流里，decoded_dump 对其记 0 包）：C 发 op 6
   （E1(10)+E4(2)，E4 含义不明、真实抓包为 2 / live 客户端为 0）→ S 回 **op 7**
@@ -153,9 +156,11 @@
    用户列表据此显示）→ 进入大厅期
    ⚠️ 线序 = seq 顺序；dump_flow.py 按时间戳排序会因 TCP 合包失真（如 122 实际紧跟 97，却显示在 60 之后）
 6. 进频道：C 发 op 11（4B 频道 hash）→ S 回 [11 ChannelsExtraInfo 218B, 13 44B, 12 27B, 11, 13]
-7. 大厅期 S 周期推 op 87 / 86 / 122；进房 81 JoinSessionReq → 81 JoinSessionResult（131B / 101B 两种），
-   进房后 S 还推 [413, 198, 200 FxStockInit, 274×2, 212, 210 EnableShop, 87, 65, 204, 66, 14, 20,
-   261, 247, 423] 与 81/72 交替（回应尚未实现，为下一缺口）
+7. 进频道后 C 自动跟发批次 [274, 81 空包, 281, 276]（无用户操作也会发，⚠️ 非进房）；大厅期
+   S 周期推 op 87 / 86 / 122、op 81 名册（⚠️ 非 81 请求的回应）及 [413, 198, 200 FxStockInit,
+   274×2, 212, 210 EnableShop, 87, 65, 204, 66, 14, 20, 261, 247, 423]（S→C 81 名册与 413 等
+   回应尚未实现，为下一缺口）
+- S→C op 81 JoinSessionResult 名册（结构与样本已解出，细节见 JoinSessionReq.kt 注释；尚未实现）
 - 版本线索：banner 内两个 Encode2(18)（`00 12 00 12`），若为版本字段则 EN 客户端可能是 **v18**（未验证；EN_VER 现为 0 占位）
 
 ## 测试资产（改协议层后必跑）
@@ -163,9 +168,10 @@
   `replay_connect_cs.bin`：
   把真实客户端原始字节流回放给模拟器的回归测试（banner 逐字节比对 + C→S 全接受 + S→C CRC8 全过；
   first 用例断言推送 ops=[193,2,67,1,51]，login 用例断言 [4,11,13,12,11,13,13,13]
-  （尾部 13×2 = op 15 轮询回应）及逐字节 op 11（基准 login_s2c_op11_ip127.bin = 抓包 IP 改写版）/ op 13，
+  （尾部 13×2 = op 15 轮询回应）及逐字节 op 4/op 11（基准 login_s2c_op11_ip127.bin = 抓包 IP 改写版）/ op 13，
   enter 用例断言含 [48,13,14,97,122,87,423] 与整套批次回应
-  [310,302,254,72,293,78,4×2,227,60,310,302]（与真实线序逐包一致）；
+  [310,302,254,72,293,78,4×2,227,60,310,302]（与真实线序逐包一致），expect_all 按
+  出现顺序逐字节断言全部 op 4（13B + 65B 两变体）；
   connect 用例断言 [7]——op 6 ReqConnectToSvr 必须回 **op 7**，回 6 客户端会忽略、频道点击无反应；
   该 bin 为真实 op 6 载荷（E1(10)+E4(2)，原帧 seq=70/uid=198）以 ssc_enc 重封装至 seq=40 的单帧）
 - `tools/extract_first_push.py`：从 start.pcap 提取首连推送明文（cap/firstconn_s2c_op*.bin）、
