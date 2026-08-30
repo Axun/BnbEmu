@@ -8,6 +8,10 @@
   - CA.exe        内置默认服务器表，ASCII 槽位 x6
   - NMCOSrv.exe   invite 回退 + LoadServerConfig From-Source 表，ASCII 槽位 x2
   - nmconew.dll   passport(47611) 会话服务器默认地址，ASCII 槽位 x1
+                  + NMCO 服务器地址表，UTF-16LE 槽位 x8（2026-08-30 补：
+                    passport 实际消费的是这张 UTF-16 表；此前只补 ASCII 导致
+                    打过补丁后 47611 仍连远端、账号在远端校验）
+  - nmcogame.dll  NMCO 服务器地址表另一份拷贝，UTF-16LE 槽位 x8（同日补）
   - multisvr.ssd  服务器列表缓存，偏移 0x2E 的 4 字节网络序 IP（端口 3838 不动）
   - NMDATA\\Server.cfg  纯文本（实际不生效，仅一致性）
 
@@ -41,6 +45,15 @@ ASCII_TARGETS = [
     (r"NMDATA\Server.cfg", 1, "纯文本配置（实际不生效，仅一致性）"),
 ]
 
+# (相对路径, 预期 UTF-16LE 出现次数, 说明)
+# 2026-08-30 补: 全目录扫描发现旧 IP 以 UTF-16LE 形式存于两张 NMCO 服务器地址表
+# （nmconew.dll @1328332 起、nmcogame.dll @241988 起，各 8 槽、槽宽 32 字节、NUL 结尾），
+# passport(47611) 实际消费 nmconew.dll 这张表 —— 详见 docs/client-server-address.md
+UTF16_TARGETS = [
+    ("nmconew.dll", 8, "passport(47611) NMCO UTF-16 服务器地址表"),
+    ("nmcogame.dll", 8, "NMCO UTF-16 服务器地址表（另一份拷贝）"),
+]
+
 # multisvr.ssd 中 4 字节网络序 IP 的偏移（0x32 起是端口 3838，不动）
 SSD_TARGET = ("multisvr.ssd", 0x2E)
 
@@ -60,6 +73,19 @@ def new_ascii_token(new_ip: str) -> bytes:
     old = old_ascii_token()
     raw = new_ip.encode("ascii")
     assert len(raw) <= len(old) - 1, "调用方已校验"
+    return raw + b"\x00" * (len(old) - len(raw))
+
+
+def old_utf16_token() -> bytes:
+    """UTF-16LE 槽位的字节模式（不含槽位尾部填充，替换后由填充零继续充当终结符）。"""
+    return OLD_IP.encode("utf-16-le")
+
+
+def new_utf16_token(new_ip: str) -> bytes:
+    """等长替换：新 IP UTF-16LE + 零填充到旧 token 长度。"""
+    old = old_utf16_token()
+    raw = new_ip.encode("utf-16-le")
+    assert len(raw) <= len(old), "调用方已校验"
     return raw + b"\x00" * (len(old) - len(raw))
 
 
@@ -103,6 +129,23 @@ def patch_ascii(path: Path, new_ip: str, dry: bool) -> int:
         make_backup(path)
         path.write_bytes(data.replace(old, new))
     print(f"  替换 {count} 处 ASCII 槽位")
+    return count
+
+
+def patch_utf16(path: Path, new_ip: str, dry: bool) -> int:
+    data = path.read_bytes()
+    old, new = old_utf16_token(), new_utf16_token(new_ip)
+    count = data.count(old)
+    if count == 0:
+        if new_ip.encode("utf-16-le") in data:
+            print(f"  [跳过] UTF-16 表已是 {new_ip}，无需修改")
+            return 0
+        print(f"  [警告] 未找到 {OLD_IP!r} 的 UTF-16LE 形式——文件可能与本文档描述不符")
+        return 0
+    if not dry:
+        make_backup(path)
+        path.write_bytes(data.replace(old, new))
+    print(f"  替换 {count} 处 UTF-16LE 槽位")
     return count
 
 
@@ -151,6 +194,14 @@ def apply(game_dir: Path, new_ip: str, dry: bool) -> None:
         n = patch_ascii(p, new_ip, dry) if p.suffix != ".cfg" else patch_text(p, new_ip, dry)
         if 0 < n != expect:
             print(f"  [警告] 实际 {n} 处 != 预期 {expect} 处（全文扫描未见其他消费者，通常无害）")
+    for rel, expect, desc in UTF16_TARGETS:
+        p = game_dir / rel
+        print(f"[{rel}] {desc}（预期 {expect} 处）")
+        if not p.exists():
+            fail(f"找不到 {p}")
+        n = patch_utf16(p, new_ip, dry)
+        if 0 < n != expect:
+            print(f"  [警告] 实际 {n} 处 != 预期 {expect} 处（全文扫描未见其他消费者，通常无害）")
     rel, _ = SSD_TARGET
     p = game_dir / rel
     print(f"[{rel}] 服务器列表缓存")
@@ -174,9 +225,10 @@ def apply(game_dir: Path, new_ip: str, dry: bool) -> None:
 
 
 def scan(game_dir: Path, quiet: bool = False) -> list[Path]:
-    """全目录扫描旧 IP 残留（ASCII 或 multisvr.ssd 的网络序字节），跳过备份。"""
+    """全目录扫描旧 IP 残留（ASCII / UTF-16LE / multisvr.ssd 的网络序字节），跳过备份。"""
     hits: list[Path] = []
     old_ascii = OLD_IP.encode("ascii")
+    old_utf16 = OLD_IP.encode("utf-16-le")
     old_bin = socket.inet_aton(OLD_IP)
     for p in sorted(game_dir.rglob("*")):
         if not p.is_file() or p.name.endswith(BAK_SUFFIX):
@@ -185,12 +237,14 @@ def scan(game_dir: Path, quiet: bool = False) -> list[Path]:
             data = p.read_bytes()
         except OSError:
             continue
-        if old_ascii in data or old_bin in data:
+        if old_ascii in data or old_utf16 in data or old_bin in data:
             hits.append(p)
             if not quiet:
                 marks = []
                 if old_ascii in data:
                     marks.append(f"ASCII x{data.count(old_ascii)}")
+                if old_utf16 in data:
+                    marks.append(f"UTF-16LE x{data.count(old_utf16)}")
                 if old_bin in data:
                     marks.append(f"网络序 x{data.count(old_bin)}")
                 print(f"  {p.relative_to(game_dir)}  ({', '.join(marks)})")

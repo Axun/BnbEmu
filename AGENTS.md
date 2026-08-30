@@ -36,8 +36,28 @@
 
 ## 端口拓扑（tshark SYN 实测）
 - 游戏 TCP **3838**：登录、频道、房间全部业务都在这一个端口；项目原 3838/4848/4849 多端口分服布局与真实不符
-- TCP **47611**：Nexon passport 登录协议（UTF-16 字符串，抓包中出现 `nmco_session`），
-  客户端先在此换取票据再连 3838；模拟器完全未实现，**是当前最大缺口**
+- TCP **47611**：Nexon passport 登录协议（nmco_session，UTF-16），客户端先在此验证账号密码换取票据再连 3838。
+  **2026-08-30 已实现桩**（`netty/PassportServer.kt`，isEN 时随 NettyServer.start() 绑定）：
+  逐字节回放 login.pcap 的真实成功回应，任何账号密码都能过认证。请求 blob 为 NMCO 私有加密
+  （非游戏协议的 Encode/ssc 家族，固定密钥流、暴力尝试未破），桩不解密，因此**所有账号在游戏内
+  都会得到角色名 ffdf**（抓包账号 kcworms1 的角色）；真实服务器的 0x0C/0x2E 两步 4B 会话值本就
+  互不关联，桩回放无交叉校验风险。"NGP"+账号 身份串是否被客户端严格校验未考证——用抓包账号
+  kcworms1 测试与真实服务器逐字节等价，换其他账号若登录卡住优先怀疑此处（需逆向 nmconew.dll 解密）
+  ⚠️ 客户端二进制侧的 47611 地址在 nmconew.dll/nmcogame.dll 的 **UTF-16LE 表**（各 8 槽），
+  patch_ip.py 已补齐该编码的替换（此前只补 ASCII 导致打过补丁仍连远端 passport）
+
+## passport (47611) 协议（2026-08-30 逆向，工具 extract_passport.py）
+- 每命令独立一条 TCP 连接，一问一答即由客户端 FIN；帧 = `[len:u16 BE][cmd:u16 BE][payload: len 字节]`，
+  total = len + 4
+- C→S **0x000B 登录**（加密凭据 blob，长度随账号 UTF-16 长度变化：kcworm1=72B / kcworms1=74B）
+  → S→C **0x000C**：成功 = 4B会话值 + UTF-16LE "nmco_session" + UTF-16LE "NGP"+账号（86B/84B）；
+  失败 = 40B 短帧（tst s0 即一次密码打错的现场）
+- C→S **0x002D 会话查询**（加密 blob，42B/44B）→ S→C **0x002E**：4B会话值 + u32(账号数值 7215/7307, LE)
+  + UTF-16LE 角色名(u16 前缀) + `01 01 00 00` + u32(5000, LE)（135B/141B）
+- 加密 blob（帧内 `[tot-20][4B 头][密文][4B trailer]`）：4B 头 = pcap 级常数 u16（59f4/5b32，疑似日期，
+  同 pcap 内所有帧共享）+ 逐请求变化 u16；密文段同账号跨 pcap 仍共享字节（e2b0b435 恒在段首），
+  同账号不同密码的两次尝试仅在部分 2 字节单元相异 —— 固定密钥流、无 nonce；不是 ssc/XOR 家族
+- 3838 的 op 2 票据（36B）与 passport 回应 4B 会话值的关系未考证——模拟器不验证票据，无影响
 
 ## opcode（已补全进 EN_0_recv/send.yaml）
 - 可信命名（抓包时序验证）：C→S 2 AskFirstInfo、7 OnConnEstablished、15 ChannelsStateReq、
@@ -108,11 +128,13 @@
   op13（38B）= 各频道开关/状态；op12（21B）几乎全 0
 - 已改写为 127.0.0.1 的 IP 位置：`packet/MultiServerInit.kt` EN_MULTISVR_BLOB（op1, 1 处）、
   `packet/ChannelsExtraInfo.kt` EN_CHANNELS_EXTRA_BLOB（op11, 5 处）——**改服务器地址需同步**
-  `tools/patch_ip.py`（客户端二进制侧）与这两处（模拟器下发侧）
+  `tools/patch_ip.py`（客户端二进制侧，2026-08-30 起含 nmconew.dll/nmcogame.dll 的 UTF-16LE 表各 8 槽）
+  与这两处（模拟器下发侧）
 - 客户端行为：op1 到达后写 multisvr.ssd 并取得 login 服务器地址；**缺失即报"无法连接登录服务器"**
 
 ## 真实流程（按抓包时序，逐字节细节查 decoded_dump.txt）
-1. 连 47611 passport 换票据（协议未逆向）
+1. 连 47611 passport：**0x000B 登录换会话 → 换线 0x002D 查询角色**（协议见上"passport (47611) 协议"节，
+   桩已实现）；随后带 36B 票据连 3838
 2. 连 3838 → 收 banner → 客户端会话的首个连接发 op 0（22B）→ S 推送启动序列 **[193, 2 FirstInfoInit 1861B, 67, 1 MultiServerInit 54B, 51]**（seq 43/46/49/52/55）
 3. 登录连接：C 发 op 2（2B opcode + 40B 票据数据）→ S 回 **op 4**（65B）；
    紧跟 C 自动发 op 55 → S 推 **[11 ChannelsExtraInfo 218B, 13 ChannelsState 44B, 12 27B]**（频道列表）；
@@ -151,10 +173,14 @@
   Kotlin blob 常量源（blob = 载荷去 2B opcode 前缀，已验证重编码逐字节一致）；
   op 87/op 72 载荷现为 RoomList/SessionList 结构化编码的逐字节断言基准
 - `tools/dump_flow.py <pcap> <stream>`：按时间戳交错输出指定 TCP 流的 C→S/S→C 解码包（对齐请求→回应）
+- `tools/extract_passport.py <pcap>...`：按 TCP 流提取 47611 passport 原始帧到 cap/passport_*.bin
+  （带 hex/UTF-16 预览；tshark conv 表的"字节数"含以太网头，每条流实际就是一帧请求+一帧回应）
 - `tools/decode_final.py`：pcap 全量解码器；`cap/decoded_dump.txt`：逐包明文（opcode 标签已对齐 EN_0 表）。
   注意：跨 pcap 的连接尾巴是半截流，dump 会记 0 包——用 `brute_s2c`/`brute_c2s` 单帧暴力对齐 seq 解
   （**ssc 进完整 seq、CRC8 key 取 seq&0xFF，seq>255 时两者不同**）；`ssc_enc` 为 ssc_dec 的逆变换，
   可把真实载荷重封装到任意 seq 生成 replay 帧
+- `tools/replay_passport.py`：passport 桩回归测试（启动模拟器后跑；回放 login.pcap 真实 C→S 帧，
+  断言回应与真实成功帧逐字节一致，另覆盖另一账号/tst 失败现场/半截流恢复）
 
 ## 构建 / 运行约定
 - JDK 21

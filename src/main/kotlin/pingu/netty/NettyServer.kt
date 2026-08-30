@@ -39,6 +39,8 @@ object NettyServer {
         UDP_PORTS.forEach { port ->
             startUdpServer(port, HandlerRouterUDP)
         }
+        // EN 破解客戶端的登入前置: passport(nmco_session) 換票據, 之後才連 3838
+        PassportServer.start()
     }
 
     private fun startTcpServers() {

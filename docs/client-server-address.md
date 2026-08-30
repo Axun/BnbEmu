@@ -13,8 +13,17 @@
 | 连接 | 地址来源 | 定义位置 |
 |---|---|---|
 | 游戏 3838（登录/频道/房间） | CA.exe 内置默认服务器表 + multisvr.ssd 缓存 | CA.exe .rdata 补丁 6 处；multisvr.ssd 偏移 0x2E |
-| passport / NMCO 47611 | nmconew.dll 硬编码 | nmconew.dll 补丁 1 处（file 1378624） |
+| passport / NMCO 47611 | nmconew.dll 硬编码（ASCII 默认槽 + UTF-16LE 地址表，实际消费 UTF-16 表） | nmconew.dll 补丁 1 处 ASCII（file 1378624）+ 8 处 UTF-16LE；nmcogame.dll 8 处 UTF-16LE |
 | NMCO 会话 33567 | NMCOSrv.exe 内置表（Server.cfg 优先但格式不符即回退） | NMCOSrv.exe 补丁 2 处 |
+
+> **2026-08-30 补遗（UTF-16LE 服务器地址表，此前漏补的原因）**：全目录字节扫描发现
+> `66.135.19.7` 还以 **UTF-16LE** 形式存在于两张 NMCO 服务器地址表——nmconew.dll @1328332 起
+> 8 槽、nmcogame.dll @241988 起 8 槽（槽宽 32 字节、NUL 结尾），混在 Nexon 各国 passport
+> 地址（KR 218.145.45.x / JP 203.141.248.x / TH 202.80.111.x / 国服一片 / NexonTH 61.91.69.x /
+> NA 208.85.111.x / RU 91.202.203.x）之间，破解者各改了 8 槽。首版 patch_ip.py 只扫 ASCII，
+> 导致打过补丁后 47611 仍连远端、账号在远端校验（只能用私服注册账号登录）。两张表已加入
+> `tools/patch_ip.py` 的 UTF16_TARGETS；nmcogame.dll 里另有破解者自带的 7 处 UTF-16 `127.0.0.1`
+> 本地测试槽，佐证该表正是破解流水线改地址之处。
 
 注册表（HKLM/HKCU 的 Nexon 键）没有任何 PopTag/CA 相关配置，地址不走注册表。
 
