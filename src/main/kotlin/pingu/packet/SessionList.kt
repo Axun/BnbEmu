@@ -14,7 +14,8 @@ fun SessionList(entries: List<SessionEntry> = EN_SAMPLE_ENTRIES) = PKT {
 
 // 角色名令牌编码: 4B 一块 LE 读 ^0x96CA5395 按 BE 写; 尾部 2B LE 读 ^0xA569 按 BE 写, 1B ^0x5A;
 // 3B 尾 = 2B 尾 + 1B 尾 (2026-08-30 由 kcworm1 7B 名对出, 与 4/5/6B 名样本回编码逐字节一致)
-private fun encodeName(name: String): ByteArray {
+// (op 81 JoinSessionResult 的名冊令牌同款, internal 供共用)
+internal fun encodeName(name: String): ByteArray {
     val src = name.toByteArray(ACP)
     val dst = ByteArray(src.size)
     var i = 0

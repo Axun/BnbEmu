@@ -17,6 +17,8 @@ ChannelsGameState: 14
 EnterLobbyStage: 15
 EnterShopStage: 18
 ResEstimateRTT: 20
+# op 20 大廳推送版 (44B, 與 ResEstimateRTT 同 op 異構, 見 packet/Unk20.kt)
+Unk20: 20
 Whisper: 27
 SystemMsg: 30
 MultiServerTail: 51
@@ -60,27 +62,28 @@ PackageMapInit: 213
 CartList: 214
 # 真實伺服器在用、已從抓包原樣重放的 opcode (cap/chan_s2c_op*.bin, 生成工具見 AGENTS.md)
 # 語義已確認的用功能名 (RoomList=房間列表; SessionList 實為頻道在線用戶列表, 名字待改), 其餘維持 UnkNNN
+# (⚠️ 發送包函數名不可含下劃線 — OpcodeManager 的 filteredName 會截斷, yaml 鍵須與函數名全等)
 Unk12: 12
 Unk48: 48
 Unk60: 60
-Unk_65: 65
-Unk_66: 66
+Unk65: 65
+Unk66: 66
 SessionList: 72
 Unk78Result: 78
 Unk_86: 86
 RoomList: 87
 Unk97: 97
 Unk122: 122
-Unk_198: 198
-Unk_204: 204
-Unk_212: 212
+Unk198: 198
+Unk204: 204
+Unk212: 212
 Unk227: 227
-Unk_247: 247
+Unk247: 247
 Unk254: 254
-Unk_261: 261
-Unk_274: 274
+Unk261: 261
+Unk274: 274
 Unk293: 293
 Unk302: 302
 Unk310: 310
-Unk_413: 413
+Unk413: 413
 Unk423: 423

@@ -100,14 +100,31 @@ if __name__ == "__main__":
             13: open(os.path.join(base, "cap/login_s2c_op13.bin"), "rb").read().hex()})
     # enter-channel.pcap stream1: op7 OnConnEstablished → EN 應回 [48,13,14,97,122,87,423]
     #   (87 RoomList 房間列表); 其後批次 297/302/310/64/293/78 → Unk_78 觸發整套回應
-    #   [310,302,254,72 用戶列表,293,78,4×2,227,60,310,302]; 尾部 15 輪詢 → 13
-    # op 72 SessionList / op 87 RoomList 已結構化, 載荷須與抓包逐位元組一致
+    #   [310,302,254,72 用戶列表,293,78,4×2,227,60,310,302]; C 的 81 空包 → 進頻道握手推送
+    #   [413,198,200,274×2,122,212,210,87,65,204,66,14(9B),20,261,247,423,81 名冊,72]
+    # op 72 SessionList / op 87 RoomList / op 81 JoinSessionResult 已結構化, 載荷須與抓包逐位元組一致
     replay("enter", open(os.path.join(base, "tools/replay_enter_cs.bin"), "rb").read(),
-           {48, 13, 14, 97, 122, 87, 423, 310, 302, 254, 72, 293, 78, 4, 227, 60},
+           {48, 13, 14, 97, 122, 87, 423, 310, 302, 254, 72, 293, 78, 4, 227, 60,
+            413, 198, 200, 274, 212, 210, 65, 204, 66, 20, 261, 247, 81},
            {72: open(os.path.join(base, "cap/chan_s2c_op72_396B_0.bin"), "rb").read().hex(),
-            87: open(os.path.join(base, "cap/chan_s2c_op87_41B_0.bin"), "rb").read().hex()},
+            87: open(os.path.join(base, "cap/chan_s2c_op87_41B_0.bin"), "rb").read().hex(),
+            413: open(os.path.join(base, "cap/chan_s2c_op413_616B_0.bin"), "rb").read().hex(),
+            198: open(os.path.join(base, "cap/chan_s2c_op198_137B_0.bin"), "rb").read().hex(),
+            200: open(os.path.join(base, "cap/chan_s2c_op200_105B_0.bin"), "rb").read().hex(),
+            212: open(os.path.join(base, "cap/chan_s2c_op212_22B_0.bin"), "rb").read().hex(),
+            65: open(os.path.join(base, "cap/chan_s2c_op65_50550B_0.bin"), "rb").read().hex(),
+            204: open(os.path.join(base, "cap/chan_s2c_op204_14B_0.bin"), "rb").read().hex(),
+            66: open(os.path.join(base, "cap/chan_s2c_op66_14B_0.bin"), "rb").read().hex(),
+            20: open(os.path.join(base, "cap/chan_s2c_op20_46B_0.bin"), "rb").read().hex(),
+            261: open(os.path.join(base, "cap/chan_s2c_op261_7B_0.bin"), "rb").read().hex(),
+            247: open(os.path.join(base, "cap/chan_s2c_op247_6B_0.bin"), "rb").read().hex(),
+            81: open(os.path.join(base, "cap/chan_s2c_op81_101B_0.bin"), "rb").read().hex()},
            {4: [open(os.path.join(base, "cap/chan_s2c_op4_13B_0.bin"), "rb").read().hex(),
-                open(os.path.join(base, "cap/chan_s2c_op4_65B_0.bin"), "rb").read().hex()]})
+                open(os.path.join(base, "cap/chan_s2c_op4_65B_0.bin"), "rb").read().hex()],
+            274: [open(os.path.join(base, "cap/chan_s2c_op274_17B_0.bin"), "rb").read().hex(),
+                  open(os.path.join(base, "cap/chan_s2c_op274_17B_1.bin"), "rb").read().hex()],
+            14: [open(os.path.join(base, "cap/chan_s2c_op14_10B_0.bin"), "rb").read().hex(),
+                 open(os.path.join(base, "cap/chan_s2c_op14_9B_0.bin"), "rb").read().hex()]})
     # op 6 流程: 真實請求載荷 (E1(10)+E4(2), seq70/uid198 原幀以 ssc_enc 重封裝至 seq=40)
     # → EN 必須回 **op 7** ResConnectToSvr (客戶端等 7 才會開進頻道連線; 回 6 客戶端會忽略)
     replay("connect", open(os.path.join(base, "tools/replay_connect_cs.bin"), "rb").read(), {7})
