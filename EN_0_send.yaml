@@ -63,7 +63,7 @@ CartList: 214
 # 真實伺服器在用、已從抓包原樣重放的 opcode (cap/chan_s2c_op*.bin, 生成工具見 AGENTS.md)
 # 語義已確認的用功能名 (RoomList=房間列表; SessionList 實為頻道在線用戶列表, 名字待改), 其餘維持 UnkNNN
 # (⚠️ 發送包函數名不可含下劃線 — OpcodeManager 的 filteredName 會截斷, yaml 鍵須與函數名全等)
-Unk12: 12
+ChannelsNotice: 12
 Unk48: 48
 Unk60: 60
 Unk65: 65

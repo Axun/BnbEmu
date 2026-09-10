@@ -72,6 +72,7 @@ CSlotStage (0x8A13C4)
 ### 4.2 S→C 服务端响应
 | Opcode | 名称 | 载荷结构 | 功能与作用 |
 | :--- | :--- | :--- | :--- |
+| **12 (0x0C)** | `ChannelsNotice` (选区公告与PPL广告) | `E4(len) + SSD[noticeTitle, p1..p3, pplType/urls, msgCount/msgs, tailStatus]` | 选区/频道列表界面的公告横幅 (`CFxApp`)、赞助商/广告横幅 (`CPPLManager`) 与滚动系统公告 (`CFxMessage`)，并刷新 `CSelectServerDlg` UI |
 | **103 (0x67)** | `PracticeSlot103` | `E2(slotIdx) + E1Bool(isAI) + E2(level) + E2(flags)` | 设置 AI 敌人对象并解锁策略锁；`isAI=false` 时移除 AI 敌人 |
 | **104 (0x68)** | `PracticeSlot104` | `E1((slotIdx << 4) \| flag)` | 槽位属性/队伍标志 |
 | **105 (0x69)** | `PracticeSetPlayer` | `E1(slotIdx) + E1(bomber)` | 槽位外观角色 (5=宝宝) |

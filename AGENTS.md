@@ -76,7 +76,7 @@
   / SessionInfoResult（频道连线 65B 全零变体）/ UserSimpleInfoResult（13B 变体，三种同类名映射同 op 4；
   前两者已结构化为 `packet/AskFirstInfoResult.kt` 的 `UserInfo` 类，userId=7215/会话串
   f0ae35f3 等账号值暂用抓包常量 CAPTURE_USER_ID/SESSION_STRING）、
-  12 Unk12、48 Unk48（op 7 后的空体回应）、97 Unk97（E2(11)，与 op 14 内 ChannelID 同值，推测频道标识）、
+  12 ChannelsNotice（**公告与PPL广告信息**，已结构化可动态生成）、48 Unk48（op 7 后的空体回应）、97 Unk97（E2(11)，与 op 14 内 ChannelID 同值，推测频道标识）、
   7 ResConnectToSvr（op 6 ReqConnectToSvr 的回应，见下方关键观察）、
   122/423（op 7 回应后的推送，原样重放）、87 RoomList（**房间列表**，已结构化可动态生成，见关键观察）、
   310/302（进频道批次回应，E2(1)+E4(0)×2+E2(0)+E4(0)+E2(0)，
@@ -153,20 +153,18 @@
 - 与旧 TW_5 表冲突处：进频道请求真实是 **op 11**（旧表 EnterChannelStageReq=9）；
   C 发 2 后服务器回 **op 4**（旧表把 FirstInfoInit 当 2 的回应；实际 1861B 的 op 2 是服务器主动推送）
 
-## SSD 资料块编码（op1/op2/op51/op11/op13/op12 内嵌子块，2026-08-30 逆向）
+## SSD 资料块编码（op1/op2/op51/op11/op13/op12 内嵌子块，2026-08-30/2026-09-10 逆向）
 - 结构：`Encode1Bool(true) + Encode4(len) + len 字节资料块`（op13/op12 无开头的 Encode1Bool）；
   资料块变换：**每 dword 以 BE 读取、XOR 0x96CA5395、按 LE 写回**（即 Encode4 的字节序交换形式）
-- 块头规律（op1/op2/op11/op12/op13 五块吻合）：`[0x18][(块长-5)&0xFF][u32 0][条目数]`
-  （条目数 op11/12/13 为 u16 LE，op1 为 u8）
-- **op11 = 频道列表、op13 = 各频道开关/状态，均已结构化**：频道表 `EN_CHANNELS` 定义在
+- 块头规律（op1/op2/op11/op12/op13 五块吻合）：`[0x18][(块长-5)&0xFF][u32 0]`
+- **op11 = 频道列表、op13 = 各频道开关/状态、op12 = 公告与PPL广告信息，均已结构化**：频道表 `EN_CHANNELS` 定义在
   `packet/ChannelsExtraInfo.kt`（`ChannelEntry`，op13 用其 `state`/`enabled` 栏，
   生成逻辑在 `ChannelsState.kt`；条目逐字节结构、续读标记等细节见两文件顶部注释；
   重编码与抓包逐字节一致，replay_test login 用例断言）。5 频道
   PopTag-Forever / Ranked / Baby-Channel / Town / SquareCompat，Town/SquareCompat 为
   大地图频道、并非被关闭；改频道清单两包同步生效
 - op1 = multisvr.ssd 缓存体（解码布局见 MultiServerInit.kt 注释）；op51 = filterstr.ssd；
-  op2 = 字串表；**op12 = 空块**（条目数 0 + 12B 全零 + E1(0) 尾，全部抓包仅 login sq=52 一个样本，
-  细节见 Unk12.kt 注释）
+  op2 = 字串表；**op12 = ChannelsNotice 公告与广告块 已结构化在 `packet/ChannelsNotice.kt`
 - 已改写为 127.0.0.1 的 IP 位置：`packet/MultiServerInit.kt` EN_MULTISVR_BLOB（op1）、
   `packet/ChannelsExtraInfo.kt` ChannelEntry.ip（op11）——**改服务器地址需同步**
   `tools/patch_ip.py`（客户端二进制侧，含 nmconew.dll/nmcogame.dll 的 UTF-16LE 表各 8 槽）
