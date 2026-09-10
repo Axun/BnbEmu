@@ -1,83 +1,28 @@
 package pingu.packet
 
 import pingu.ACP
-import pingu.isCN
-import pingu.isEN
-import pingu.isJP
-import pingu.isTW
 import pingu.netty.PKT
 import java.io.ByteArrayOutputStream
 
 // server = CCenterProcess::MakeChannelsExtraInfoPacket
 fun ChannelsExtraInfo() = PKT {
-    if (isEN) {
-        // EN op11 = 頻道(伺服器)列表 (Unk_55 / EnterChannelReq 均回本包, 客戶端據此顯示頻道列表)
-        // 塊結構 2026-08-30 由 login.pcap sq=46 (211B) 逐字節逆向, 重編碼與抓包逐位元組一致
-        // (replay_test login 用例斷言, IP 改寫位基準 cap/login_s2c_op11_ip127.bin):
-        //   整包 = Encode1Bool(true) + Encode4(塊長) + SSD 資料塊
-        //   塊明文 = [0x18][(塊長-5)&0xFF][u32 0][u16 頻道數 LE] + N × 頻道條目, 經 ssdEncode 變換下發
-        //   塊頭規律在 op1/op2/op11/op12/op13 五個抓包塊全部吻合 (0x18 恆定, 第2字節=塊長-5,
-        //   op2 1854B → 0x39 可驗); op1 條目數為 u8, op11/12/13 為 u16 LE
-        //   條目 = u32 名長 + 名 + u32 人數上限 + u8 當前人數 + u8 mapNo + u32 IPv4(BE)
-        //          + 14B 恆定欄位 + 3B 續讀標記 (欄位語義見 ChannelEntry)
-        //   續讀標記: 末條 = Encode2(0)+Encode1(0) 原樣 a5 69 5a (客戶端解碼 0 = 列表結束),
-        //             非末條 = 00 00 00 (解碼 ≠ 0 繼續讀) — 此前誤判為「塊尾 3B 對齊尾巴」
-        //   Town / SquareCompat 為特殊大地圖頻道 (bigMap=1), 與普通頻道欄位值不同, 並非被關閉
-        // 改頻道名單/上限改 EN_CHANNELS 即可; 改 IP 須與 tools/patch_ip.py 同步
-        val blob = ssdEncode(channelsExtraBlock(EN_CHANNELS))
-        Encode1Bool(true)
-        Encode4(blob.size)
-        EncodeBuffer(blob)
-    } else {
-        EncodeStr("http://bnb.digicell.com.tw/webpage/BnB/EVENT/20040618/index.htm")
-        Encode2(600)
-        Encode2(525)
-        Encode2(60)
-
-        if (isTW || isCN) {
-            Encode1(1) //size
-            Encode4(0x7F000001)
-            Encode2(9898)
-
-            // NDA
-            Encode1(1) //size
-            Encode4(0x7F000001)
-
-            // Relay
-            Encode1(1) //size
-            Encode4(0x7F000001)
-
-            val size = 0
-            Encode2(size)
-            repeat(size) {
-                Encode1()
-                Encode1()
-                EncodeStr()
-            }
-
-            Encode2(15)
-
-            // JUM Server
-            if (isTW) {
-                Encode1(1)
-                Encode4(0x7F000001)
-                Encode2(7360)
-            }
-        } else if (isJP) {
-            Encode1(1)
-            Encode4(0x7F000001)
-
-            val size = 0
-            Encode1(size)
-            repeat(size) {
-                Encode1()
-                Encode1()
-                EncodeStr()
-            }
-
-            Encode2(15)
-        }
-    }
+    // EN op11 = 頻道(伺服器)列表 (StringTableRevisionReq / EnterChannelReq 均回本包, 客戶端據此顯示頻道列表)
+    // 塊結構 2026-08-30 由 login.pcap sq=46 (211B) 逐字節逆向, 重編碼與抓包逐位元組一致
+    // (replay_test login 用例斷言, IP 改寫位基準 cap/login_s2c_op11_ip127.bin):
+    //   整包 = Encode1Bool(true) + Encode4(塊長) + SSD 資料塊
+    //   塊明文 = [0x18][(塊長-5)&0xFF][u32 0][u16 頻道數 LE] + N × 頻道條目, 經 ssdEncode 變換下發
+    //   塊頭規律在 op1/op2/op11/op12/op13 五個抓包塊全部吻合 (0x18 恆定, 第2字節=塊長-5,
+    //   op2 1854B → 0x39 可驗); op1 條目數為 u8, op11/12/13 為 u16 LE
+    //   條目 = u32 名長 + 名 + u32 人數上限 + u8 當前人數 + u8 mapNo + u32 IPv4(BE)
+    //          + 14B 恆定欄位 + 3B 續讀標記 (欄位語義見 ChannelEntry)
+    //   續讀標記: 末條 = Encode2(0)+Encode1(0) 原樣 a5 69 5a (客戶端解碼 0 = 列表結束),
+    //             非末條 = 00 00 00 (解碼 ≠ 0 繼續讀) — 此前誤判為「塊尾 3B 對齊尾巴」
+    //   Town / SquareCompat 為特殊大地圖頻道 (bigMap=1), 與普通頻道欄位值不同, 並非被關閉
+    // 改頻道名單/上限改 EN_CHANNELS 即可; 改 IP 須與 tools/patch_ip.py 同步
+    val blob = ssdEncode(channelsExtraBlock(EN_CHANNELS))
+    Encode1Bool(true)
+    Encode4(blob.size)
+    EncodeBuffer(blob)
 }
 
 // 抓包頻道 (login.pcap sq=46, 5 頻道) — 重編碼須與原塊逐位元組一致 (replay_test login 用例斷言 op 11/op 13)
@@ -101,7 +46,7 @@ internal val EN_CHANNELS = listOf(
 //   bigMap    大地圖標記 (Town/Square = 1, 普通頻道 0)
 //   state     op13 ChannelsState 條目的 u16 欄 (語義未釘死; 抓包: PopTag-Forever 88 /
 //             Ranked 7 / Baby-Channel 7 / Town 0 / SquareCompat 0)
-//   enabled   op13 條目的開關旗標 (抓包五頻道皆 1, 推測 1=開啟/顯示)
+//   enabled   op13 條目的開關旗標
 class ChannelEntry(
     val name: String,
     val maxCount: Int,

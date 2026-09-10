@@ -76,7 +76,7 @@ DigiQAuthorizationReq: 224
 AskFirstSession: 0
 EnterChannelReq: 11
 Unk_39: 39
-Unk_55: 55
+StringTableRevisionReq: 55
 Unk_78: 78
 Unk_92: 92
 Unk_172: 172

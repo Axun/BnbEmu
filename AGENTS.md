@@ -64,8 +64,9 @@
   64 UserSimpleInfoReq、81 JoinSessionReq；S→C 1 MultiServerInit、2 FirstInfoInit、7 ResConnectToSvr、
   11 ChannelsExtraInfo、13 ChannelsState、14 ChannelsGameState、20 ResEstimateRTT、
   81 JoinSessionResult、200 FxStockInit、210 EnableShop
-- 已实现绑定（原名 Unk_* 占位）：C→S 0 AskFirstSession（首连打开）、55 Unk_55（登录后自动跟发，
-  回频道列表）、11 EnterChannelReq（进频道）、15 ChannelsStateReq（频道状态轮询，回 op 13）、
+- 已实现绑定（原名 Unk_* 占位）：C→S 0 AskFirstSession（首连打开）、
+  55 StringTableRevisionReq（登录后上报本地 3 份 SSD 版本号 [StringTable, QuestString, CurseFilter]，触发回频道列表）、
+  11 EnterChannelReq（进频道）、15 ChannelsStateReq（频道状态轮询，回 op 13）、
   64 UserSimpleInfoReq（空消费，回应在 Unk_78 链内）、297/39/302/310/293（空消费/部分消费，
   整套回应由 Unk_78 触发）、78 Unk_78（批次收齐触发点，回整套进频道回应链）、
   81 JoinSessionReq（进频道自动空包，⚠️ 非"进房"；2026-08-31 起回应=整条**进频道握手推送**，
@@ -176,7 +177,7 @@
    桩已实现）；随后带 36B 票据连 3838
 2. 连 3838 → 收 banner → 客户端会话的首个连接发 op 0（22B）→ S 推送启动序列 **[193, 2 FirstInfoInit 1861B, 67, 1 MultiServerInit 54B, 51]**（seq 43/46/49/52/55）
 3. 登录连接：C 发 op 2（2B opcode + 40B 票据数据）→ S 回 **op 4**（65B）；
-   紧跟 C 自动发 op 55 → S 推 **[11 ChannelsExtraInfo 218B, 13 ChannelsState 44B, 12 27B]**（频道列表）；
+   紧跟 C 自动发 op 55 StringTableRevisionReq → S 推 **[11 ChannelsExtraInfo 218B, 13 ChannelsState 44B, 12 27B]**（频道列表）；
    用户选频道后 C 发 op 11（4B 频道 hash）+ 297 + 39 → S 推 **[11, 13]**
 4. 客户端取进频道连线地址：C 发 **op 6 ReqConnectToSvr**（E1(10)+E4(2)）→ S 回 **op 7 ResConnectToSvr**
    （E1(1)+E1(10)+E4(2)+E4(IP)+E2(3838)；期间夹有 3 个 op 86 周期推送）→ 客户端关闭登录连接（FIN），
