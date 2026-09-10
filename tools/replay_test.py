@@ -131,16 +131,16 @@ if __name__ == "__main__":
     # 進練習房流程 (tst.pcap stream4): op 7 OnConnEstablished (seq=40) + op 75 練習房請求 (重封裝至 seq=43)
     #   + op 92 開始遊戲 (重封裝至 seq=46)。
     # → EN 回整套房間設置 (87, 83, 4×2, 113, 100, 108, 106×8, 每槽 114/104/105/103, 198, 423);
-    #   op 92 觸發遊戲開始 [111, 112, 100(77B), 136], 之後 AI 自動行動週期廣播 op 172 / op 139
-    #   各 blob 包 (83/113/100/108/112/136/139/198/423) 載荷逐位元組與抓包一致
+    #   op 92 觸發遊戲開始 [111, 112, 100(77B), 136], 之後對局中每 ~400ms 廣播 op 172 (實體時間同步)
+    #   各 blob 包 (83/113/100/108/112/136/198/423) 載荷逐位元組與抓包一致
+    #   (op 139 只在收到 C→S op 106 後回顯, 見 tools/test_ai_sync.py)
     replay("practice", open(os.path.join(base, "tools/replay_practice_cs.bin"), "rb").read(),
-           {87, 83, 4, 113, 100, 108, 106, 114, 104, 105, 103, 198, 423, 111, 112, 136, 172, 139},
+           {87, 83, 4, 113, 100, 108, 106, 114, 104, 105, 103, 198, 423, 111, 112, 136, 172},
            {83: open(os.path.join(base, "cap/practice_s2c_op83_8B_0.bin"), "rb").read().hex(),
             113: open(os.path.join(base, "cap/practice_s2c_op113_4B_0.bin"), "rb").read().hex(),
             108: open(os.path.join(base, "cap/practice_s2c_op108_10B_0.bin"), "rb").read().hex(),
             112: open(os.path.join(base, "cap/practice_s2c_op112_167B_0.bin"), "rb").read().hex(),
             136: open(os.path.join(base, "cap/practice_s2c_op136_180B_0.bin"), "rb").read().hex(),
-            139: open(os.path.join(base, "cap/practice_s2c_op139_26B_0.bin"), "rb").read().hex(),
             198: open(os.path.join(base, "cap/practice_s2c_op198_137B_0.bin"), "rb").read().hex(),
             423: open(os.path.join(base, "cap/practice_s2c_op423_26B_0.bin"), "rb").read().hex()})
     print("ALL PASS")

@@ -1,6 +1,5 @@
 package pingu.netty
 
-import com.sun.tools.javac.resources.ct
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.ByteBufUtil
 import io.netty.channel.Channel

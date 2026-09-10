@@ -51,10 +51,7 @@ fun PracticeBoard() = PKT {
     EncodeBuffer(EN_OP136)
 }
 
-// ---- op 139 (24B) — 游戏内 AI/回合推进包, 原样重放 (6 样本逐字节相同) ----
-fun PracticeAiAck() = PKT {
-    EncodeBuffer(EN_OP139)
-}
+// ---- op 139 已改为按 C→S op 106 字段动态生成 (见 packet/room/SetBomberEvent.kt) ----
 
 // ---- 练习房专用 198 / 423 变体 (与进频道握手推送的 198/423 略异) ----
 fun PracticeUnk198() = PKT {

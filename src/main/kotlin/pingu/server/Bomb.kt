@@ -8,6 +8,8 @@ class Bomb(
     var isSpecial: Boolean,
     var isMoving: Boolean = false,
     var state: Int = -1,
+    var gridX: Int = 0,
+    var gridY: Int = 0,
     var expireAt: Long = System.currentTimeMillis() + 2500
 ) {
     fun updateState(now: Long): Boolean {

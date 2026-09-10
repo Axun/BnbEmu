@@ -110,60 +110,68 @@ fun ChannelGroup.BC(packet: PKT, exclude: Channel? = null) {
 }
 
 @ChannelHandler.Sharable
-private object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
+object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
     val crcLenUDP = when {
-        isTW || isCN -> 1
         isJP -> 4
-        else -> 0
+        else -> 1
     }
 
     override fun channelRead0(ctx: ChannelHandlerContext, packet: DatagramPacket) {
         val sender = packet.sender()
         val buf = packet.content()
 
+        if (buf.readableBytes() < 1) return
         val Len = buf.readUnsignedByte().toInt()
 
         if (buf.readableBytes() < Len) return
 
-        if (isJP)
+        if (isJP) {
+            if (buf.readableBytes() < 4) return
             buf.readInt()
+        }
 
+        if (buf.readableBytes() < 1) return
         val opcode = buf.readUnsignedByte().toInt()
 
         if (debugMode) {
             val hexOp = "0x${opcode.toString(16).uppercase()}"
-            println("$opcode | $hexOp | UDP Recv")
-            println(ByteBufUtil.hexDump(buf, buf.readerIndex(), buf.readableBytes() - crcLenUDP).uppercase().chunked(2).joinToString(" "))
+            val payloadLen = buf.readableBytes() - crcLenUDP
+            val payloadHex = if (payloadLen > 0) {
+                ByteBufUtil.hexDump(buf, buf.readerIndex(), payloadLen).uppercase().chunked(2).joinToString(" ")
+            } else ""
+            println("$opcode | $hexOp | UDP Recv from $sender: $payloadHex")
         }
 
         // CUDPPacketDispatcher::OnUDPPacket
         when (opcode) {
-            //CWaitForLoginDlg::OnTimer
+            // CWaitForLoginDlg::OnTimer / UDP handshake probe
             0 -> {
-                val userId = buf.readInt()
+                val userId = if (buf.readableBytes() >= 4 + crcLenUDP) buf.readInt() else 0
                 // CWaitForLoginDlg::OnAckUDPCommunication
                 ctx.sendUDP(sender, 2) {}
             }
 
             1 -> {
-                val userId = buf.readInt()
+                val userId = if (buf.readableBytes() >= 4 + crcLenUDP) buf.readInt() else 0
             }
 
             11 -> {
-                val userId = buf.readInt()
+                val userId = if (buf.readableBytes() >= 4 + crcLenUDP) buf.readInt() else 0
             }
 
             else -> {}
         }
 
         // CRC
-        when {
-            isTW || isCN -> buf.readByte()
-            isJP -> buf.readInt()
+        if (buf.readableBytes() >= crcLenUDP) {
+            when {
+                isJP -> buf.readInt()
+                else -> buf.readByte()
+            }
         }
     }
 
-    private inline fun ChannelHandlerContext.sendUDP(
+    fun ChannelHandlerContext.sendUDP(
         target: InetSocketAddress,
         opcode: Int,
         block: ByteBuf.() -> Unit
@@ -183,13 +191,24 @@ private object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() 
             val packetSize = buf.readableBytes()
             buf.setByte(0, packetSize) // 回填長度
 
+            if (debugMode) {
+                val hexOp = "0x${opcode.toString(16).uppercase()}"
+                val payloadStart = if (isJP) 6 else 2
+                val payloadLen = packetSize - payloadStart
+                val payloadHex = if (payloadLen > 0) {
+                    ByteBufUtil.hexDump(buf, payloadStart, payloadLen).uppercase().chunked(2).joinToString(" ")
+                } else ""
+                println("$opcode | $hexOp | UDP Send to $target: $payloadHex")
+            }
+
             when {
-                isTW || isCN -> buf.writeByte(CRC8.UpdateCRC(dwCrcKey = 0, buf, Size = buf.readableBytes()))
                 isJP -> buf.writeInt(CRC32.UpdateCRC(dwCrcKey = 0, buf, Size = buf.readableBytes()))
+                else -> buf.writeByte(CRC8.UpdateCRC(dwCrcKey = 0, buf, Size = buf.readableBytes()))
             }
 
             writeAndFlush(DatagramPacket(buf, target))
         } catch (e: Exception) {
+            if (debugMode) println("[UDP] Send to $target error: ${e.message}")
             buf.release()
         }
     }

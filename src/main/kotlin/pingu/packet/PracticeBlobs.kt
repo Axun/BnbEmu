@@ -68,11 +68,6 @@ internal val EN_OP136 = """
     5a 5a
 """.toBA()
 
-internal val EN_OP139 = """
-    a5 69 5e 96 ca 53 91 96 ca 53 95 96 ca 53 95 5b
-    56 5a 5b a5 6d a5 69 5a
-""".toBA()
-
 internal val EN_OP172 = """
     a5 d9 a5 74 5b 96 ca 52 04 5b 5a a5 69 5a 5a
 """.toBA()

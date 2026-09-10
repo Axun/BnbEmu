@@ -36,7 +36,7 @@ SetGameTypeNormalReq: 102
 SetGameTypeModReq: 103
 HostAskBanPlayerReq: 104
 RespondToBanPlayerReq: 105
-StartGameReq: 106
+SetBomberEventReq: 106
 ChangeTitleReq: 107
 PlayEmotionReq: 108
 ReadyForImmediateStartReq: 109
@@ -48,7 +48,6 @@ SetBombTimerReq: 142
 MovableBoxMoveReq: 143
 EatItemReq: 144
 EatObstacleReq: 145
-SetBomberEventReq: 146
 SetEffectReq: 147
 DropObstacleReq: 148
 EventItemReq: 149
@@ -79,7 +78,7 @@ Unk_39: 39
 StringTableRevisionReq: 55
 Unk_78: 78
 Unk_92: 92
-Unk_172: 172
+BomberActionAckReq: 172
 Unk_274: 274
 Unk_276: 276
 Unk_281: 281

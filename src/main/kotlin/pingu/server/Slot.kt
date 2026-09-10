@@ -9,7 +9,9 @@ class Slot(
     var user: User? = null,
     val meta: ByteArray = ByteArray(3), // [0]:狀態, [1]:角色, [2]:顏色
     var isAI: Boolean = false,
-    var AILevel: Int = 1
+    var AILevel: Int = 1,
+    var gridX: Int = 0,
+    var gridY: Int = 0
 )
 
 var Slot.state: Number

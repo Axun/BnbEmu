@@ -95,13 +95,40 @@
   `[87 RoomList, 83 SessionSimpleInfo, 4(13B), 4(65B), 113, 100(78B), 108, 106×8,
   每槽(114,104,105,103 交错, 槽7 无 103), 198, 423]`；
   随后客户端自动跟发 297/302，再发 **op 92** 触发游戏开始 → S 回 `[111, 112 SelectMap(165B),
-  100(77B), 136(178B 棋盘块)]`（线序 seq=331~340）；之后服务器**周期性广播 op 172 ItemThrow +
-  op 139** = 电脑敌人自动行动（op 172 body = `E2(176) E2(29) E1(1) E4(位置) E1(1) E1(0) E2(0)
-  E1(0) E1(flag)`，位置/朝向逐次变化；Room.aiTick 每 500ms 广播一次）。逐槽位包公式
+  100(77B), 136(178B 棋盘块)]`（线序 seq=331~340）；之后服务器**周期性广播 op 172 ItemThrow**
+  （op 172 body = `E2(176) E2(29) E1(1) E4(elapsed_ms) E1(1) E1(0) E2(0) E1(0) E1(flag)`，
+  **E4 = 对局开始以来的毫秒数**，13 样本 401/801/1201/1601/2002... 与墙钟吻合，flag 疑似朝向；
+  `Room.aiTick` 每 400ms 广播一次）。⚠️ **ItemThrow 实测 opcode = 172**（tst.pcap stream4
+  sq=343~400 逐包 CRC8 验证），**不是**局内 +200 偏移的 374——EN_0_send.yaml 曾误配 374 导致
+  周期广播发到错误 opcode。逐槽位包公式
   （8 槽样本逐字节验证）：op106=E1((slot<<4)|2)、op104=E1(slot0?0:(slot<<4)|8)、
   op105=E1(slot)E1(5)、op114=E1(slot)E1(5)E1(5)E1(0)E2(0)、op103=E2(slot+1)E1(1)E2(slot+1)E2(1)。
-  实现见 `handler/CreatePracticeSessionReq.kt`（op 75，⚠️ 原误绑 op 86）、`handler/Unk_92.kt`（游戏开始）、
-  `handler/Unk_172.kt`（客户端游戏内空包 ack）、`packet/Practice*.kt` / `packet/room/ItemThrow.kt`；
+- **对局阶段启动与水泡引爆机制（2026-09-29 逆向 CA.exe 确认）**：
+  1. **练习房/单人模式（tst.pcap stream 4）**：
+     由 `Unk_92` (C→S op 92) 触发开始序列：`[111 AILevelChange, 112 SelectMap, 100 PracticeStartInfo, 136 PracticeBoard]`。
+     `PracticeBoard (op 136)` (`0x00556b1d` -> `0x00553aa0`) 会直接调用 `0x0053291c` 启动对局全局时钟 `CGameClock` 并初始化所有 Bomber 槽位（设置 `m_bActive = 1`）。
+     ⚠️ **练习房绝不能发送 op 170 / op 171**（op 171 的 `0x00558667` 会设置 `[esi + 0x311c] = 1` 开启多人倒计时 UI；若传入 0 秒时限会导致界面顶部倒计时初始即为 0 且超时卡死）。
+  2. **局内炸弹状态与引爆机制（S→C op 138 SetBombState / S→C op 141 DetonateBomb / S→C op 148 TileBombExplode）**：
+     - **S→C op 138 SetBombState**（`0x55A627` -> `0x5481BD`）：`Encode1(count) + N * [Encode2(bombId) + Encode1(state) + if (state == 0) Encode4(param)]`。`0x534B18` 收到 state=0 时调用 `0x565E9F` 引爆炸弹并生成火焰十字。
+     - **S→C op 141 DetonateBomb / BombIgnite**（`0x55A600` -> `0x54BD14`）：`Encode1((action << 4) | (slotId & 0x0F)) + Encode2(bombId) + Encode1(x) + Encode1(y) + Encode1(isSpecial) + Encode1(flags) + Encode1(power)`。action=0 为放置水泡，action=4 为引爆炸弹。
+     - **S→C op 148 TileBombExplode**（`0x55A69B` -> `0x54BA1A`）：`Encode1(((isSpecial?1:0)<<6) | (slotId&0x0F)) + Encode1(x) + Encode1(y) + Encode1(power)`。直接在 `(x, y)` 触发爆炸火焰、杀伤目标、炸毁箱子并掉落道具。
+  3. **客户端事件与状态同步上报机制（C→S op 149 EventItemReq，2026-09-30 逆向 CA.exe 确认）**：
+     - **开局就绪通知（Ready Ack）**：当客户端收到 `PracticeBoard (op 136)` 完成本地棋盘与槽位初始化后，于 `CA.exe 0x00553E5F` 自动发送 **C→S op 149**（`slotId = -1 (0xFF)`, `token = userId (7215)`, `action = 0`, `param = -1`，混淆字节 `A5 96 CA 4F BA 5A 69 35 AC 6A`）。此包为对局加载就绪同步包，**绝非放置炸弹**。服务端在 `EventItemReq.kt` 严禁在此无脑生成水泡或下发 `SetBombStateBatch`。
+     - **局内异常回退与状态上报**：客户端在 `0x0054A58A` (Action 1: 炸弹计数不一致)、`0x0054A678` (Action 2: 放置炸弹失败回退)、`0x0054BFF7` (Action 3: 碰撞校验不一致)、`0x0054A6E7` (Action 4: 引爆炸弹失败回退)、`0x00549DDF` (Action 10: 特殊道具/事件)、`0x0044BD9B` (Action 0: AI/HollowBomb 状态更新) 等处均通过 `0x00549C35` 发送 op 149，作为状态同步/异常回退通知。
+     - **局内操作包（C→S op 112）**：局内本地玩家移动、按空格放炸弹（Action 0xA0 | slotId, posX, posY）、使用道具（Action 0x20）与踢水泡（Action 0x40）均在 `0x0054C8B3` 统一构造并发送 **C→S op 112**。
+  4. **CPU 单核 100% 满载说明**：
+     - `CA.exe` 采用经典 DirectDraw/Direct3D 游戏消息循环（`PeekMessage`），在未开启垂直同步（VSync）或外部帧率限制器时会以最大帧率无限渲染，属于老游戏客户端的固有表现。
+- **局内 C→S op 106 / S→C op 139 一问一答（2026-09-11 修正，AI 僵死/水泡不爆的根因之一）**：
+  对局中客户端为每个 AI 槽位发出 C→S **op 106 SetBomberEventReq**（11B body =
+  `E2(0) E1(slot) E4(slot) E1(a) E1(b) E1(0) E1(1)`），真实服务器对每个 op 106 **回显一个
+  S→C op 139**（24B body = `E2(0) E1(slot) E4(slot) E4(0) E4(0) E1(a) E1(b) E1(0) E1(1) E2(slot)
+  E2(0) E1(0)`，前 7 栏与 op 106 相同、尾部 E2=slot；6 样本逐字节验证）。抓包线序显示两者
+  **严格一问一答**：客户端收到对应 slot 的 op 139 后才发下一个槽位的 op 106（seq 逐对验证）。
+  ⚠️ 缺这个回显会让客户端局内事件同步回圈停摆 → **AI 僵死、水泡倒计时不再推进**（此前服务端
+  收到 op 106 后不回包即此症状）。实现见 `handler/room/SetBomberEventReq.kt` +
+  `packet/room/SetBomberEvent.kt`；回归测试 `tools/test_ai_sync.py`。
+- 实现见 `handler/CreatePracticeSessionReq.kt`（op 75，⚠️ 原误绑 op 86）、`handler/Unk_92.kt`（游戏开始）、
+  `handler/room/BomberActionAckReq.kt`（C→S op 172 角色动作切换确认空包）、`packet/Practice*.kt` / `packet/room/ItemThrow.kt`；
   工具 `tools/extract_op75.py`（提取回放+blob）、`tools/gen_practice_kotlin.py`（生成 blob 常量）；
   基准 cap/practice_s2c_op*.bin。op 4 的 13B/65B 变体与进频道一致（body 已核对 = chan 基准）。
 - **设置电脑敌人等级（op 88 AILevelChangeReq，2026-09-10 逆向 CA.exe 确认）**：在房间/练习房界面调整
@@ -209,8 +236,12 @@
   connect 用例断言 [7]——op 6 ReqConnectToSvr 必须回 **op 7**，回 6 客户端会忽略、频道点击无反应；
   该 bin 为真实 op 6 载荷（E1(10)+E4(2)，原帧 seq=70/uid=198）以 ssc_enc 重封装至 seq=40 的单帧）；
   practice 用例（replay_practice_cs.bin = op7@40 + op75@43 + op92@46）断言整套练习房回应链
-  [87,83,4×2,113,100,108,106×8,每槽114/104/105/103,198,423] + 游戏开始 [111,112,100,136] + AI 自动行动
-  [172,139]，并逐字节断言 op 83/113/108/112/136/139/198/423（基准 cap/practice_s2c_op*.bin，含 2B opcode）
+  [87,83,4×2,113,100,108,106×8,每槽114/104/105/103,198,423] + 游戏开始 [111,112,100,136] + 对局期
+  op 172 周期广播，并逐字节断言 op 83/113/108/112/136/198/423（基准 cap/practice_s2c_op*.bin，含 2B opcode）
+- `tools/test_ai_sync.py`：局内 AI 事件同步回归（启动模拟器后跑）。断言对局中周期性 op 172 (ItemThrow)
+  与 C→S op 106 → S→C op 139 (SetBomberEvent) 一问一答，且 op 139 载荷与 tst.pcap stream4 抓包逐字节一致
+- `tools/test_bomb_explosion.py`：水泡状态机回归（启动模拟器后跑）。C→S op 140 放泡 → S→C op 352
+  (BombIgnite) → ~2.5s → S→C op 353 (SetBombState, state=0 爆炸消除)
 - `tools/extract_op75.py`：从 tst.pcap stream4 提取练习房流程的 C→S 完整流/裁剪回放
   （op7/op75/op92 帧，op75/op92 以 ssc_enc 重封装到连续 seq）+ S→C 各 op 完整 payload
   （cap/practice_s2c_op*.bin，含 2B opcode，replay_test 基准）；`tools/gen_practice_kotlin.py`：
@@ -238,6 +269,5 @@
 - JDK 21
 - 启动命令：`mvn compile exec:java`  **必须在项目根目录启动**（Config.yaml / EN_0_*.yaml 按 CWD 加载）。
 - JAVA_HOME: `C:\Program Files\Java\jdk21.0.12_9`
-- Locale=EN：EN_0_*.yaml = 破解适配的真实协议；TW_5_*.yaml = 原作者原始实现（帧格式互不兼容，切回 TW 即回到旧协议）
-- 原作者的 isTW 业务分支（LoginResult / ChannelsExtraInfo / NettyServer UDP / OnConnEstablished）仍在，
-  EN 下不触发；实现 EN 业务逻辑时用 isEN 另写，勿改回 isTW
+- Locale=EN：EN_0_*.yaml = 破解适配的真实协议；TW_5_*.yaml = 老版本其他区域客户端实现，仅供参考
+- 新加的逻辑一律按EN区域客户端处理，不用判断区域了。完全实现后会删除其他区域的逻辑

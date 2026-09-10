@@ -38,19 +38,24 @@ DoOpenCloseSlot: 110
 AILevelChange: 111
 SelectMap: 112
 StartGameResult: 115
-LaunchGameStage: 116
-DoStartGame: 150
-SetBombState: 152
-BombIgnite: 153
-BombKickThrow: 154
-MovableBoxMove: 155
-EatItemResult: 156
-EatObstacleResult: 157
-SetBomberEvent: 159
-SetEffect: 160
-Airplane: 171
+LaunchGameStage: 170
+DoStartGame: 171
+SetBombState: 138
+SetBombStateBatch: 138
+BombIgnite: 141
+DetonateBomb: 141
+TileBombExplode: 148
+BombKickThrow: 356
+MovableBoxMove: 357
+EatItemResult: 358
+EatObstacleResult: 359
+# SetBomberEvent 原名佔位 op 361 (局內 +200 偏移系列的推測), 無對應 Packet 類;
+# 真實用途為 C→S op 106 的回顯 op 139 (見檔案末尾), 故不再保留 361 鍵。
+SetEffect: 362
+Airplane: 376
+# ItemThrow 實測為 op 172 (tst.pcap stream4 sq=343~400 逐包 CRC8 驗證), 非 +200 偏移的 374
 ItemThrow: 172
-AirplaneItemProb: 173
+AirplaneItemProb: 375
 FirstSessionNotify: 193
 FxStockInit: 200
 UserInventory: 201
@@ -99,7 +104,8 @@ PracticeColor: 108
 PracticeAiLevel: 111
 PracticeSelectMap: 112
 PracticeBoard: 136
-PracticeAiAck: 139
+# 局内 AI/角色事件回显 (S→C op 139): 对每个 C→S op 106 回一个, 载荷由 op 106 字段生成
+SetBomberEvent: 139
 PracticeUnk198: 198
 PracticeUnk423: 423
 Unk113: 113
