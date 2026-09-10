@@ -1,6 +1,6 @@
 #
 
-尝试适配泡泡堂老版本服务端模拟器的项目。已有私服地址66.135.19.7
+尝试适配泡泡堂老版本服务端模拟器的项目。
 
 游戏路径：F:\Games\PopTag
 主程序：CA.exe
@@ -103,6 +103,19 @@
   `handler/Unk_172.kt`（客户端游戏内空包 ack）、`packet/Practice*.kt` / `packet/room/ItemThrow.kt`；
   工具 `tools/extract_op75.py`（提取回放+blob）、`tools/gen_practice_kotlin.py`（生成 blob 常量）；
   基准 cap/practice_s2c_op*.bin。op 4 的 13B/65B 变体与进频道一致（body 已核对 = chan 基准）。
+- **设置电脑敌人等级（op 88 AILevelChangeReq，2026-09-10 逆向 CA.exe 确认）**：在房间/练习房界面调整
+  AI 难度等级时由客户端发出 **op 88 (0x58)**（CA.exe 中 `CPrepareStrategyAIBattle::OnButtonClick`
+  触发，原 TW_5 为 op 110）。body = `E1(chief/f1) + E1(slotIdx) + E1(newLevel) + E1(flags/f4)`（4 字节）；
+  服务器更新 `Room.slots[slotIdx].AILevel = newLevel` 并下发 **op 103 PracticeSlot103**
+  （`E2(slotIdx) + E1Bool(isAI) + E2(newLevel) + E2(flags)`，7 字节），`CPrepareStrategyAIBattle::OnPacket`
+  (`0x52d188` -> Case 103 `0x52b39a`) 收到后调用 `0x52b048`/`0x52b0ad` 刷新槽位 UI 并执行
+  `and dword ptr [esi + 0x3250], 0` 清除等待锁。
+- **踢出电脑敌人 / 打开关闭槽位（op 89 OpenCloseSlotReq，2026-09-10 逆向 CA.exe 确认）**：在房间/练习房
+  界面踢出 AI 或切换槽位开关时由客户端发出 **op 89 (0x59)**（CA.exe 中 `0x4f6866` / `0x51c7ea` 触发，
+  原 TW_5 为 op 100）。body = `E1((slotIdx << 4) | (action & 0x0F))`（1 字节）；
+  服务器重置该槽位 AI 状态并下发 **op 106 PracticeSlotReady**（`E1((slotIdx << 4) | state)`，清除
+  `CSlotStage` 的 `[esi + 0x2f64]` 等待锁 2）与 **op 103 PracticeSlot103(isAI=false)**（`E2(slotIdx) + E1Bool(0) + E2(0) + E2(0)`，
+  触发 `CPrepareStrategyAIBattle` 的 `0x685ed9` 移除 AI 槽位并清除策略等待锁）。
 - 注意：**带下划线的 Kotlin 函数名无法注册发送包**（OpcodeManager 的 filteredName 会
   substringBefore('_') 截断），新 Packet 类名不能含下划线；handler 顶层 val 名可含下划线（精确匹配字段名）
 - 关键观察：**op 87 = 房间列表（真，2026-08-30 确认，非普通周期推送）**：34 个实例、11 种长度

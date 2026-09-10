@@ -31,7 +31,7 @@ SetPlayerReadyReq: 96
 SelectMapReq: 97
 SelectColorReq: 98
 SelectBomberReq: 99
-OpenCloseSlotReq: 100
+OpenCloseSlotReq: 89
 SetGameTypeNormalReq: 102
 SetGameTypeModReq: 103
 HostAskBanPlayerReq: 104
@@ -40,7 +40,7 @@ StartGameReq: 106
 ChangeTitleReq: 107
 PlayEmotionReq: 108
 ReadyForImmediateStartReq: 109
-AILevelChangeReq: 110
+AILevelChangeReq: 88
 TeamChat: 111
 BombIgniteReq: 140
 BombKickThrowReq: 141

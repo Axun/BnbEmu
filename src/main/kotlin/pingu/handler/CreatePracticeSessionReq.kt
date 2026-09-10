@@ -84,7 +84,7 @@ val CreatePracticeSessionReq = PKTHandler { c ->
             PracticeSlot104(slot),
             PracticeSetPlayer(slot),
         )
-        if (slot < 7) c.send(PracticeSlot103(slot))
+        if (slot < 7) c.send(PracticeSlot103(slot = slot + 1, isAI = true, aiLevel = slot + 1, flag = 1))
     }
     c.send(PracticeUnk198())
     c.send(PracticeUnk423())

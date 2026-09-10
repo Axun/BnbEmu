@@ -15,9 +15,9 @@ import pingu.netty.PKT
 //   op 103 (7B) = E2(slot+1) E1(1) E2(slot+1) E2(1)   槽 0..6 → 01,02,...07 (槽 7 无此包)
 // 这些公式是"服务器把 8 个 AI 槽位 + 玩家槽位填进房间"的结构化编码。
 
-// ---- op 106 单槽 1B: (slot<<4)|2 ----
-fun PracticeSlotReady(slot: Int) = PKT {
-    Encode1((slot shl 4) or 2)
+// ---- op 106 单槽 1B: (slot<<4)|state ----
+fun PracticeSlotReady(slot: Int, state: Int = 2) = PKT {
+    Encode1((slot shl 4) or (state and 0x0F))
 }
 
 // ---- op 104 单槽 1B: slot0→0, 其余 (slot<<4)|8 ----
@@ -40,10 +40,11 @@ fun PracticeSlot114(slot: Int) = PKT {
     Encode2(0)
 }
 
-// ---- op 103 单槽 7B (仅槽位 0..6) ----
-fun PracticeSlot103(slot: Int) = PKT {
-    Encode2(slot + 1)
-    Encode1(1)
-    Encode2(slot + 1)
-    Encode2(1)
+// ---- op 103 单槽 7B: E2(slot) + E1Bool(isAI) + E2(level) + E2(flag) ----
+fun PracticeSlot103(slot: Int, isAI: Boolean = true, aiLevel: Int = slot, flag: Int = 1) = PKT {
+    Encode2(slot)
+    Encode1Bool(isAI)
+    Encode2(aiLevel)
+    Encode2(flag)
 }
+
