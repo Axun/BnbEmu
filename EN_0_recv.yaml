@@ -27,7 +27,6 @@ JoinSessionReq: 81
 AJoinSessionReq: 82
 EnterLobbyStageReq: 83
 GuildMemberInfoReq: 85
-CreatePracticeSessionReq: 86
 SetPlayerReadyReq: 96
 SelectMapReq: 97
 SelectColorReq: 98
@@ -79,6 +78,8 @@ EnterChannelReq: 11
 Unk_39: 39
 Unk_55: 55
 Unk_78: 78
+Unk_92: 92
+Unk_172: 172
 Unk_274: 274
 Unk_276: 276
 Unk_281: 281
@@ -86,3 +87,4 @@ Unk_293: 293
 Unk_297: 297
 Unk_302: 302
 Unk_310: 310
+CreatePracticeSessionReq: 75

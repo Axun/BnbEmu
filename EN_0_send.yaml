@@ -87,3 +87,19 @@ Unk302: 302
 Unk310: 310
 Unk413: 413
 Unk423: 423
+# 进练习房 (op 75) 回应链的 send 包 (tst.pcap 逆向; 同 op 多包名可并存, OpcodeManager 按函数名查表)
+PracticeSlotReady: 106
+PracticeSlot104: 104
+PracticeSetPlayer: 105
+PracticeSlot114: 114
+PracticeSlot103: 103
+PracticeRoomInfo: 100
+PracticeStartInfo: 100
+PracticeColor: 108
+PracticeAiLevel: 111
+PracticeSelectMap: 112
+PracticeBoard: 136
+PracticeAiAck: 139
+PracticeUnk198: 198
+PracticeUnk423: 423
+Unk113: 113

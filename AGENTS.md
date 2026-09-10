@@ -88,6 +88,21 @@
   （进频道握手推送，原样重放，顺序与触发见 JoinSessionReq.kt）
 - 尚无 handler/packet（yaml 里 Unk_* 占位）：
   S→C 86（大厅期周期推送，⚠️ 非"进房后"）
+- **进练习房（op 75，2026-09-01 已实现，tst.pcap stream4 逆向）**：大厅界面点"练习"→ 客户端
+  在练习房界面点"开始"发出 **op 75**，body = `E2(0) E2(0) E1(0) E1(1) E1(5) E1(15) E4(66)`
+  （E1(5)=bomber，E4(66)=练习房地图 id，语义待钉死）。服务器连发整套房间设置回应（线序 seq=187~328）：
+  `[87 RoomList, 83 SessionSimpleInfo, 4(13B), 4(65B), 113, 100(78B), 108, 106×8,
+  每槽(114,104,105,103 交错, 槽7 无 103), 198, 423]`；
+  随后客户端自动跟发 297/302，再发 **op 92** 触发游戏开始 → S 回 `[111, 112 SelectMap(165B),
+  100(77B), 136(178B 棋盘块)]`（线序 seq=331~340）；之后服务器**周期性广播 op 172 ItemThrow +
+  op 139** = 电脑敌人自动行动（op 172 body = `E2(176) E2(29) E1(1) E4(位置) E1(1) E1(0) E2(0)
+  E1(0) E1(flag)`，位置/朝向逐次变化；Room.aiTick 每 500ms 广播一次）。逐槽位包公式
+  （8 槽样本逐字节验证）：op106=E1((slot<<4)|2)、op104=E1(slot0?0:(slot<<4)|8)、
+  op105=E1(slot)E1(5)、op114=E1(slot)E1(5)E1(5)E1(0)E2(0)、op103=E2(slot+1)E1(1)E2(slot+1)E2(1)。
+  实现见 `handler/CreatePracticeSessionReq.kt`（op 75，⚠️ 原误绑 op 86）、`handler/Unk_92.kt`（游戏开始）、
+  `handler/Unk_172.kt`（客户端游戏内空包 ack）、`packet/Practice*.kt` / `packet/room/ItemThrow.kt`；
+  工具 `tools/extract_op75.py`（提取回放+blob）、`tools/gen_practice_kotlin.py`（生成 blob 常量）；
+  基准 cap/practice_s2c_op*.bin。op 4 的 13B/65B 变体与进频道一致（body 已核对 = chan 基准）。
 - 注意：**带下划线的 Kotlin 函数名无法注册发送包**（OpcodeManager 的 filteredName 会
   substringBefore('_') 截断），新 Packet 类名不能含下划线；handler 顶层 val 名可含下划线（精确匹配字段名）
 - 关键观察：**op 87 = 房间列表（真，2026-08-30 确认，非普通周期推送）**：34 个实例、11 种长度
@@ -180,7 +195,14 @@
   出现顺序逐字节断言全部 op 4（13B + 65B）/ op 274（两变体）/ op 14（10B + 9B 变体）；
   op 81 名册基准 = chan_s2c_op81_101B_0.bin（2026-08-31 从 pcap 提取）；
   connect 用例断言 [7]——op 6 ReqConnectToSvr 必须回 **op 7**，回 6 客户端会忽略、频道点击无反应；
-  该 bin 为真实 op 6 载荷（E1(10)+E4(2)，原帧 seq=70/uid=198）以 ssc_enc 重封装至 seq=40 的单帧）
+  该 bin 为真实 op 6 载荷（E1(10)+E4(2)，原帧 seq=70/uid=198）以 ssc_enc 重封装至 seq=40 的单帧）；
+  practice 用例（replay_practice_cs.bin = op7@40 + op75@43 + op92@46）断言整套练习房回应链
+  [87,83,4×2,113,100,108,106×8,每槽114/104/105/103,198,423] + 游戏开始 [111,112,100,136] + AI 自动行动
+  [172,139]，并逐字节断言 op 83/113/108/112/136/139/198/423（基准 cap/practice_s2c_op*.bin，含 2B opcode）
+- `tools/extract_op75.py`：从 tst.pcap stream4 提取练习房流程的 C→S 完整流/裁剪回放
+  （op7/op75/op92 帧，op75/op92 以 ssc_enc 重封装到连续 seq）+ S→C 各 op 完整 payload
+  （cap/practice_s2c_op*.bin，含 2B opcode，replay_test 基准）；`tools/gen_practice_kotlin.py`：
+  由上述 payload（去 2B opcode）生成 `packet/PracticeBlobs.kt` 的 blob 常量
 - `tools/extract_first_push.py`：从 start.pcap 提取首连推送明文（cap/firstconn_s2c_op*.bin）、
   改写 op1 内 IP 并生成 Kotlin hex 常量与 replay_first_cs.bin
 - `tools/extract_login_flow.py`：从 login.pcap 提取登录连接的 op4/11/13/12 明文

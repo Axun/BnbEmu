@@ -7,6 +7,7 @@ import pingu.netty.ClientSocket
 import pingu.netty.NettyServer.workerGroup
 import pingu.netty.PKT
 import pingu.packet.room.*
+import pingu.packet.PracticeAiAck
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
@@ -14,7 +15,9 @@ import kotlin.random.Random
 object Room {
     private val executor: EventLoop = workerGroup.next()
     private var tickFuture: ScheduledFuture<*>? = null
+    private var aiTickFuture: ScheduledFuture<*>? = null
     private var nextBombId = 0
+    private var nextAiPos = 0x191
     val slots = Array(8) { Slot() }
     var mapId = 89
     val bombs = mutableListOf<Bomb>()
@@ -63,6 +66,20 @@ object Room {
         }
     }
 
+    // 练习房游戏开始后, 周期性广播 AI 自动行动 (op 172 ItemThrow + op 139 推进包),
+    // 让电脑敌人"自己动起来" (tst.pcap stream4 sq=343~400 时序验证)。
+    fun startAiTick() {
+        aiTickFuture = executor.scheduleAtFixedRate(::aiTick, 500, 500, TimeUnit.MILLISECONDS)
+    }
+
+    private fun aiTick() {
+        // 每次广播一个 AI 丢道具 (位置递增 + 随机, 朝向往复 0..3)
+        val flag = (System.currentTimeMillis() / 500).toInt() % 4
+        nextAiPos = (nextAiPos + 0x190) and 0xFFFF // 模拟敌人逐格移动
+        BC(ItemThrow(nextAiPos, flag))
+        BC(PracticeAiAck())
+    }
+
     fun addBomb(slotId: Int, pos: Int, bombAttr: Int, isSpecial: Boolean, unk: Int) {
         executor.execute {
             val bombId = nextBombId++
@@ -106,8 +123,10 @@ object Room {
 
     fun reset() {
         tickFuture?.cancel(false)
+        aiTickFuture?.cancel(false)
         bombs.clear()
         nextBombId = 0
         lastAirplaneTime = 0L
+        nextAiPos = 0x191
     }
 }
