@@ -36,28 +36,8 @@
 
 ## 端口拓扑（tshark SYN 实测）
 - 游戏 TCP **3838**：登录、频道、房间全部业务都在这一个端口；项目原 3838/4848/4849 多端口分服布局与真实不符
-- TCP **47611**：Nexon passport 登录协议（nmco_session，UTF-16），客户端先在此验证账号密码换取票据再连 3838。
-  **2026-08-30 已实现桩**（`netty/PassportServer.kt`，isEN 时随 NettyServer.start() 绑定）：
-  逐字节回放 login.pcap 的真实成功回应，任何账号密码都能过认证。请求 blob 为 NMCO 私有加密
-  （非游戏协议的 Encode/ssc 家族，固定密钥流、暴力尝试未破），桩不解密，因此**所有账号在游戏内
-  都会得到角色名 ffdf**（抓包账号 kcworms1 的角色）；真实服务器的 0x0C/0x2E 两步 4B 会话值本就
-  互不关联，桩回放无交叉校验风险。"NGP"+账号 身份串是否被客户端严格校验未考证——用抓包账号
-  kcworms1 测试与真实服务器逐字节等价，换其他账号若登录卡住优先怀疑此处（需逆向 nmconew.dll 解密）
-  ⚠️ 客户端二进制侧的 47611 地址在 nmconew.dll/nmcogame.dll 的 **UTF-16LE 表**（各 8 槽），
-  patch_ip.py 已补齐该编码的替换（此前只补 ASCII 导致打过补丁仍连远端 passport）
-
-## passport (47611) 协议（2026-08-30 逆向，工具 extract_passport.py）
-- 每命令独立一条 TCP 连接，一问一答即由客户端 FIN；帧 = `[len:u16 BE][cmd:u16 BE][payload: len 字节]`，
-  total = len + 4
-- C→S **0x000B 登录**（加密凭据 blob，长度随账号 UTF-16 长度变化：kcworm1=72B / kcworms1=74B）
-  → S→C **0x000C**：成功 = 4B会话值 + UTF-16LE "nmco_session" + UTF-16LE "NGP"+账号（86B/84B）；
-  失败 = 40B 短帧（tst s0 即一次密码打错的现场）
-- C→S **0x002D 会话查询**（加密 blob，42B/44B）→ S→C **0x002E**：4B会话值 + u32(账号数值 7215/7307, LE)
-  + UTF-16LE 角色名(u16 前缀) + `01 01 00 00` + u32(5000, LE)（135B/141B）
-- 加密 blob（帧内 `[tot-20][4B 头][密文][4B trailer]`）：4B 头 = pcap 级常数 u16（59f4/5b32，疑似日期，
-  同 pcap 内所有帧共享）+ 逐请求变化 u16；密文段同账号跨 pcap 仍共享字节（e2b0b435 恒在段首），
-  同账号不同密码的两次尝试仅在部分 2 字节单元相异 —— 固定密钥流、无 nonce；不是 ssc/XOR 家族
-- 3838 的 op 2 票据（36B）与 passport 回应 4B 会话值的关系未考证——模拟器不验证票据，无影响
+- TCP **47611**：Nexon passport 登录协议（nmco_session，UTF-16），客户端先在此验证账号密码换取票据再连 3838。2026-10-07 已彻底逆向 nmconew.dll 破译；协议帧封装、0x18 容器流、PCBC 加密算法及业务字段等所有具体实现细节已全部记录在源码注释中，详见 `src/main/kotlin/pingu/netty/PassportServer.kt`。
+  ⚠️ 客户端二进制侧的 47611 地址在 nmconew.dll/nmcogame.dll 的 **UTF-16LE 表**（各 8 槽），patch_ip.py 已补齐该编码的替换（此前只补 ASCII 导致打过补丁仍连远端 passport）。
 
 ## opcode（已补全进 EN_0_recv/send.yaml）
 - 可信命名（抓包时序验证）：C→S 2 AskFirstInfo、7 OnConnEstablished、15 ChannelsStateReq、
@@ -109,12 +89,13 @@
      `PracticeBoard (op 136)` (`0x00556b1d` -> `0x00553aa0`) 会直接调用 `0x0053291c` 启动对局全局时钟 `CGameClock` 并初始化所有 Bomber 槽位（设置 `m_bActive = 1`）。
      ⚠️ **练习房绝不能发送 op 170 / op 171**（op 171 的 `0x00558667` 会设置 `[esi + 0x311c] = 1` 开启多人倒计时 UI；若传入 0 秒时限会导致界面顶部倒计时初始即为 0 且超时卡死）。
   2. **局内炸弹状态与引爆机制（S→C op 138 SetBombState / S→C op 141 DetonateBomb / S→C op 148 TileBombExplode）**：
-     - **S→C op 138 SetBombState**（`0x55A627` -> `0x5481BD`）：`Encode1(count) + N * [Encode2(bombId) + Encode1(state) + if (state == 0) Encode4(param)]`。`0x534B18` 收到 state=0 时调用 `0x565E9F` 引爆炸弹并生成火焰十字。
+     - **S→C op 138 SetBombState**（`0x55A627` -> `0x5481BD`）：`Encode1(count) + N * [Encode2(bombId) + Encode1(state) + if (state == 0) Encode4(param)]`。生成炸弹时下发 state=1 激活状态；`0x534B18` 收到 state=0 时调用 `0x565E9F` 引爆炸弹。
      - **S→C op 141 DetonateBomb / BombIgnite**（`0x55A600` -> `0x54BD14`）：`Encode1((action << 4) | (slotId & 0x0F)) + Encode2(bombId) + Encode1(x) + Encode1(y) + Encode1(isSpecial) + Encode1(flags) + Encode1(power)`。action=0 为放置水泡，action=4 为引爆炸弹。
-     - **S→C op 148 TileBombExplode**（`0x55A69B` -> `0x54BA1A`）：`Encode1(((isSpecial?1:0)<<6) | (slotId&0x0F)) + Encode1(x) + Encode1(y) + Encode1(power)`。直接在 `(x, y)` 触发爆炸火焰、杀伤目标、炸毁箱子并掉落道具。
+     - **S→C op 148 TileBombExplode**（`0x55A69B` -> `0x54BA1A`）：`Encode1(((isSpecial?1:0)<<6) | (slotId&0x0F)) + Encode1(x) + Encode1(y)`（3 字节）。直接在 `(x, y)` 触发爆炸火焰十字、杀伤目标、炸毁箱子并掉落道具。
   3. **客户端事件与状态同步上报机制（C→S op 149 EventItemReq，2026-09-30 逆向 CA.exe 确认）**：
-     - **开局就绪通知（Ready Ack）**：当客户端收到 `PracticeBoard (op 136)` 完成本地棋盘与槽位初始化后，于 `CA.exe 0x00553E5F` 自动发送 **C→S op 149**（`slotId = -1 (0xFF)`, `token = userId (7215)`, `action = 0`, `param = -1`，混淆字节 `A5 96 CA 4F BA 5A 69 35 AC 6A`）。此包为对局加载就绪同步包，**绝非放置炸弹**。服务端在 `EventItemReq.kt` 严禁在此无脑生成水泡或下发 `SetBombStateBatch`。
-     - **局内异常回退与状态上报**：客户端在 `0x0054A58A` (Action 1: 炸弹计数不一致)、`0x0054A678` (Action 2: 放置炸弹失败回退)、`0x0054BFF7` (Action 3: 碰撞校验不一致)、`0x0054A6E7` (Action 4: 引爆炸弹失败回退)、`0x00549DDF` (Action 10: 特殊道具/事件)、`0x0044BD9B` (Action 0: AI/HollowBomb 状态更新) 等处均通过 `0x00549C35` 发送 op 149，作为状态同步/异常回退通知。
+     - **开局就绪通知（Ready Ack）**：当客户端收到 `PracticeBoard (op 136)` 完成本地棋盘与槽位初始化后，于 `CA.exe 0x00553E5F` 自动发送 **C→S op 149**（`slotId = -1 (0xFF)`, `token = userId (7215)`, `action = 0`, `param = -1`，混淆字节 `A5 96 CA 4F BA 5A 69 35 AC 6A`）。此包为对局加载就绪同步包，**绝非放置炸弹**。
+     - **AI/玩家放置炸弹**：客户端在 `0x0044BD9B` 发送 **C→S op 149**（`slotId = 0..7`, `token = 0`, `action = 0`, `param = -1`）。服务端在 `EventItemReq.kt` 收到后根据槽位当前坐标调用 `Room.addBomb(slotId, slot.gridX, slot.gridY)`，下发 `SetBombState(bombId, state=1)` 并启动 2.5s 倒计时引爆。
+     - **局内异常回退与状态上报**：客户端在 `0x0054A58A` (Action 1: 炸弹计数不一致)、`0x0054A678` (Action 2: 放置炸弹失败回退)、`0x0054BFF7` (Action 3: 碰撞校验不一致)、`0x0054A6E7` (Action 4: 引爆炸弹失败回退)、`0x00549DDF` (Action 10: 特殊道具/事件) 等处均通过 `0x00549C35` 发送 op 149，作为状态同步/异常回退通知。
      - **局内操作包（C→S op 112）**：局内本地玩家移动、按空格放炸弹（Action 0xA0 | slotId, posX, posY）、使用道具（Action 0x20）与踢水泡（Action 0x40）均在 `0x0054C8B3` 统一构造并发送 **C→S op 112**。
   4. **CPU 单核 100% 满载说明**：
      - `CA.exe` 采用经典 DirectDraw/Direct3D 游戏消息循环（`PeekMessage`），在未开启垂直同步（VSync）或外部帧率限制器时会以最大帧率无限渲染，属于老游戏客户端的固有表现。
@@ -198,8 +179,7 @@
 - 客户端行为：op1 到达后写 multisvr.ssd 并取得 login 服务器地址；**缺失即报"无法连接登录服务器"**
 
 ## 真实流程（按抓包时序，逐字节细节查 decoded_dump.txt）
-1. 连 47611 passport：**0x000B 登录换会话 → 换线 0x002D 查询角色**（协议见上"passport (47611) 协议"节，
-   桩已实现）；随后带 36B 票据连 3838
+1. 连 47611 passport：**0x000B 登录换会话 → 换线 0x002D 查询角色**（协议实现见 `netty/PassportServer.kt`）；随后带 36B 票据连 3838
 2. 连 3838 → 收 banner → 客户端会话的首个连接发 op 0（22B）→ S 推送启动序列 **[193, 2 FirstInfoInit 1861B, 67, 1 MultiServerInit 54B, 51]**（seq 43/46/49/52/55）
 3. 登录连接：C 发 op 2（2B opcode + 40B 票据数据）→ S 回 **op 4**（65B）；
    紧跟 C 自动发 op 55 StringTableRevisionReq → S 推 **[11 ChannelsExtraInfo 218B, 13 ChannelsState 44B, 12 27B]**（频道列表）；
