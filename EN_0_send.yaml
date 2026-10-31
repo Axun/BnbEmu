@@ -34,6 +34,9 @@ SetPlayer: 105
 SetSlotState: 107
 SelectColor: 108
 SelectBomber: 109
+# 房間內切換角色的回顯 (C→S op 87 的應答): 2B = E1(slot) E1(bomber),
+# 客戶端據此清除槽位等待鎖 [+0x2f64]==5 (CA.exe 0x4EFC96)
+SlotBomber: 105
 DoOpenCloseSlot: 110
 AILevelChange: 111
 SelectMap: 112
