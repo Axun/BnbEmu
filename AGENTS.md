@@ -65,7 +65,7 @@
   293/78（E1(0)/E4(0) 小回应）、60（46KB 资源块，原样重放）、
   81 JoinSessionResult（**大厅名册**，已结构化 `packet/JoinSessionResult.kt` 的 `RosterEntry`，
   `E4(人数)+N×[E1槽位+E4账号数值+E2名长+令牌]`，账号数值=passport 0x2E 同值）、
-  413/198/200 FxStockInit/274×2/212/210 EnableShop/65(50KB)/204/66/14(9B 变体)/20/261/247
+  413/198/200 FxStockInit/274×2/212/210 EnableShop/65 ShopCatalog(50KB)/204/66/14(9B 变体)/20/261/247
   （进频道握手推送，原样重放，顺序与触发见 JoinSessionReq.kt）
 - 尚无 handler/packet（yaml 里 Unk_* 占位）：
   S→C 86（大厅期周期推送，⚠️ 非"进房后"）
@@ -139,7 +139,7 @@
   op 86（12 次，23~25B）；
   op 122 体为 `[Encode1(0)][Encode4(5000)]` 疑似 5 秒定时器；op 4 有三个变体（登录连线 65B /
   频道连线 65B 全零 / 13B 查询应答，均含或邻接 4B 会话串）；
-  op 210 EnableShop 实为 24KB 商城目录、op 65 ≈50KB、op 60 ≈46KB（资源块，已原样重放）；
+  op 210 EnableShop 实为 24KB 商城目录、op 65 ShopCatalog ≈50KB（商城商品与角色卡全量目录，已结构化）、op 60 ≈46KB（资源块，已原样重放）；
   **op 72 SessionList = 频道在线用户列表**（⚠️ 2026-08-30 与游戏界面比对，非房间列表；已结构化：`packet/SessionList.kt` 的 SessionEntry）：
   `E2(0) + E1(条目数) + N 条目`，条目 = `E2(len)+角色名令牌(4~6B) + 42B 固定栏位`；
   已解出栏位语义：number=E2 玩家**等级**（样本 326→1 递减 = 326..1 级玩家，非房间号）、

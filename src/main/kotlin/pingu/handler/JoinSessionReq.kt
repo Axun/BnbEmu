@@ -15,7 +15,7 @@ import pingu.packet.Unk261
 import pingu.packet.Unk274
 import pingu.packet.Unk413
 import pingu.packet.Unk423
-import pingu.packet.Unk65
+import pingu.packet.ShopCatalog
 import pingu.packet.Unk66
 import pingu.packet.Unk198
 import pingu.packet.Unk212
@@ -49,7 +49,7 @@ val JoinSessionReq = PKTHandler { c ->
         Unk413(), Unk198(), FxStockInit(),
         Unk274(), Unk274(1),
         Unk122(), Unk212(), EnableShop(),
-        RoomList(), Unk65(),
+        RoomList(), ShopCatalog(),
         Unk204(), Unk66(), ChannelsGameState(tailOnes = 2),
         Unk20(), Unk261(), Unk247(), Unk423(),
         JoinSessionResult(), SessionList(),

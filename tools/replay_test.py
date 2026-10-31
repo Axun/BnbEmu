@@ -112,7 +112,7 @@ if __name__ == "__main__":
             198: open(os.path.join(base, "cap/chan_s2c_op198_137B_0.bin"), "rb").read().hex(),
             200: open(os.path.join(base, "cap/chan_s2c_op200_105B_0.bin"), "rb").read().hex(),
             212: open(os.path.join(base, "cap/chan_s2c_op212_22B_0.bin"), "rb").read().hex(),
-            65: open(os.path.join(base, "cap/chan_s2c_op65_50550B_0.bin"), "rb").read().hex(),
+            65: open(os.path.join(base, "cap/chan_s2c_op65_poshevie.bin"), "rb").read().hex(),
             204: open(os.path.join(base, "cap/chan_s2c_op204_14B_0.bin"), "rb").read().hex(),
             66: open(os.path.join(base, "cap/chan_s2c_op66_14B_0.bin"), "rb").read().hex(),
             20: open(os.path.join(base, "cap/chan_s2c_op20_46B_0.bin"), "rb").read().hex(),
