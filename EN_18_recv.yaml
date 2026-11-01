@@ -80,7 +80,7 @@ EnterChannelReq: 11
 Unk_39: 39
 StringTableRevisionReq: 55
 StageInitReq: 78
-Unk_92: 92
+StartGameReq: 92
 BomberActionAckReq: 172
 Unk_274: 274
 Unk_276: 276

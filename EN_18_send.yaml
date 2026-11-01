@@ -72,7 +72,7 @@ CartList: 214
 # 語義已確認的用功能名 (RoomList=房間列表; SessionList 實為頻道在線用戶列表, 名字待改), 其餘維持 UnkNNN
 # (⚠️ 發送包函數名不可含下劃線 — OpcodeManager 的 filteredName 會截斷, yaml 鍵須與函數名全等)
 ChannelsNotice: 12
-Unk48: 48
+PermissionInfo: 48
 ItemDef: 60
 ShopCatalog: 65
 Unk66: 66
@@ -81,20 +81,20 @@ QuestConfigTable: 78
 Unk78Result: 78
 Unk_86: 86
 RoomList: 87
-Unk97: 97
+ChangeStage: 97
 UserDynamicInfo: 122
 Unk198: 198
 Unk204: 204
-Unk212: 212
-Unk227: 227
+FxConfig: 212
+MyPageInfo: 227
 Unk247: 247
-Unk254: 254
-Unk261: 261
-Unk274: 274
+UserMapInfo: 254
+ShopVersion: 261
+UserItemUpdate: 274
 Unk293: 293
 Unk302: 302
 Unk310: 310
-Unk413: 413
+UserInventoryInfo: 413
 Unk423: 423
 # 进练习房 (op 75) 回应链的 send 包 (tst.pcap 逆向; 同 op 多包名可并存, OpcodeManager 按函数名查表)
 PracticeSlotReady: 106

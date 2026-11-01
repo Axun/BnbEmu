@@ -15,8 +15,8 @@ import pingu.packet.EnterShopStage
 import pingu.packet.RoomList
 import pingu.packet.UserDynamicInfo
 import pingu.packet.Unk423
-import pingu.packet.Unk48
-import pingu.packet.Unk97
+import pingu.packet.PermissionInfo
+import pingu.packet.ChangeStage
 import pingu.server.User
 import java.net.InetSocketAddress
 
@@ -56,17 +56,17 @@ val OnConnEstablished = PKTHandler { c ->
                 // EN payload = E1(1) + [E2(4)+4B會話串] + E4(639) + E4(0) + 00000000(原樣)
                 //   + 71b18589(原樣,hash?) + E1(0) + E1(1) + 頻道hash×2(與 op 15 內一致) + E1(1)
                 //   (前段 userCount/name/userId 已由上方共通解析邏輯吃掉, name 即會話串)
-                // 回應批次 (enter-channel.pcap 線序 seq=43~61): [48 空體, 13 ChannelsState,
-                //   14 ChannelsGameState, 97] + [122 UserDynamicInfo (金幣同步), 87, 423 週期推送]
+                // 回應批次 (enter-channel.pcap 線序 seq=43~61): [48 PermissionInfo 空體, 13 ChannelsState,
+                //   14 ChannelsGameState, 97 ChangeStage] + [122 UserDynamicInfo (金幣同步), 87 RoomList, 423 週期推送]
                 // 之後客戶端跟發 297 / 302 / 310 / 64 / 293 / 78 批次, 整套回應由 StageInitReq (op 78) 觸發
                 // 批次後還有自動空包 81 (⚠️ 非進房, 見 JoinSessionReq.kt 註釋) 與 274/281/276;
-                // 大廳期 S 週期推送 [413,198,200,274×2,212,210,87,65,204,66,14,20,261,247,423]
-                // 及 S→C 81 名冊/72 交替 (回應尚未實作, 為下一缺口)
+                // 大廳期 S 週期推送 [413 UserInventoryInfo, 198, 200, 274 UserItemUpdate×2, 212 FxConfig, 210, 87, 65, 204, 66, 14, 20, 261 ShopVersion, 247, 423]
+                // 及 S→C 81 名冊/72 交替
                 c.send(
-                    Unk48(),
+                    PermissionInfo(),
                     ChannelsState(),
                     ChannelsGameState(),
-                    Unk97(),
+                    ChangeStage(),
                     UserDynamicInfo(),
                     RoomList(),
                     Unk423(),

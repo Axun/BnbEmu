@@ -3,23 +3,22 @@ package pingu.handler
 import pingu.netty.PKTHandler
 import pingu.packet.ChannelsGameState
 import pingu.packet.EnableShop
-import pingu.packet.shop.FxStockInit
+import pingu.packet.FxConfig
 import pingu.packet.JoinSessionResult
 import pingu.packet.RoomList
 import pingu.packet.SessionList
-import pingu.packet.UserDynamicInfo
-import pingu.packet.Unk204
-import pingu.packet.Unk20
-import pingu.packet.Unk247
-import pingu.packet.Unk261
-import pingu.packet.Unk274
-import pingu.packet.Unk413
-import pingu.packet.Unk423
 import pingu.packet.ShopCatalog
-import pingu.packet.UserItemList
+import pingu.packet.ShopVersion
+import pingu.packet.Unk20
+import pingu.packet.Unk204
+import pingu.packet.Unk247
+import pingu.packet.Unk423
 import pingu.packet.Unk66
+import pingu.packet.UserDynamicInfo
 import pingu.packet.UserInventory
-import pingu.packet.Unk212
+import pingu.packet.UserInventoryInfo
+import pingu.packet.UserItemUpdate
+import pingu.packet.shop.FxStockInit
 
 // C→S op 81 進頻道自動空包 —— ⚠️ 不是「進房」請求
 // =================================================
@@ -28,9 +27,9 @@ import pingu.packet.Unk212
 // 載荷: 空 (ln=2 僅 opcode)
 // 行為: 真實伺服器不回 81 的逐包回應, 而是跟發整條「進頻道握手推送」(2026-08-31 時序對齊確認:
 //       客戶端發 81 後會等這條推送才繼續發 274/281/276, 缺它客戶端卡「正在連接」對話框):
-//         seq=100~121: [413, 198, 200 FxStockInit, 274×2, 122 UserDynamicInfo, 212, 210 EnableShop]
-//         seq=124~127: [87 RoomList, 65(50KB)]          ← 客戶端 274/274/281 之後
-//         seq=130~148: [204, 66, 14(9B 變體), 20, 261, 247, 423]
+//         seq=100~121: [413 UserInventoryInfo, 198, 200 FxStockInit, 274 UserItemUpdate×2, 122 UserDynamicInfo, 212 FxConfig, 210 EnableShop]
+//         seq=124~127: [87 RoomList, 65 ShopCatalog(50KB)]          ← 客戶端 274/274/281 之後
+//         seq=130~148: [204, 66, 14(9B 變體), 20, 261 ShopVersion, 247, 423]
 //         seq=151~154: [81 名冊, 72 用戶列表]            ← 之後大廳期週期重發 (週期未實作)
 // S→C op 81 JoinSessionResult 名冊 (大廳期週期推送, 非 81 請求的回應)
 // ==================================================================
@@ -47,12 +46,12 @@ import pingu.packet.Unk212
 // server = C???::On??? (原始名稱未知, 綁定見 EN_18_recv.yaml JoinSessionReq)
 val JoinSessionReq = PKTHandler { c ->
     c.send(
-        Unk413(), UserInventory(), FxStockInit(),
-        Unk274(), Unk274(1),
-        UserDynamicInfo(), Unk212(), EnableShop(),
+        UserInventoryInfo(), UserInventory(), FxStockInit(),
+        UserItemUpdate(), UserItemUpdate(1),
+        UserDynamicInfo(), FxConfig(), EnableShop(),
         RoomList(), ShopCatalog(),
         Unk204(), Unk66(), ChannelsGameState(tailOnes = 2),
-        Unk20(), Unk261(), Unk247(), Unk423(),
+        Unk20(), ShopVersion(), Unk247(), Unk423(),
         JoinSessionResult(), SessionList(),
     )
 }

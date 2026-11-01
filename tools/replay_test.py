@@ -108,6 +108,8 @@ if __name__ == "__main__":
             413, 198, 200, 274, 212, 210, 65, 204, 66, 20, 261, 247, 81},
            {72: open(os.path.join(base, "cap/chan_s2c_op72_396B_0.bin"), "rb").read().hex(),
             87: open(os.path.join(base, "cap/chan_s2c_op87_41B_0.bin"), "rb").read().hex(),
+            254: open(os.path.join(base, "cap/chan_s2c_op254_56B_0.bin"), "rb").read().hex(),
+            227: open(os.path.join(base, "cap/chan_s2c_op227_37B_0.bin"), "rb").read().hex(),
             413: open(os.path.join(base, "cap/chan_s2c_op413_616B_0.bin"), "rb").read().hex(),
             198: open(os.path.join(base, "cap/chan_s2c_op198_poshevie.bin"), "rb").read().hex(),
             200: open(os.path.join(base, "cap/chan_s2c_op200_105B_0.bin"), "rb").read().hex(),

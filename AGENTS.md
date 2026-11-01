@@ -56,16 +56,16 @@
   / SessionInfoResult（频道连线 65B 全零变体）/ UserSimpleInfoResult（13B 变体，三种同类名映射同 op 4；
   前两者已结构化为 `packet/AskFirstInfoResult.kt` 的 `UserInfo` 类，userId=7215/会话串
   f0ae35f3 等账号值暂用抓包常量 CAPTURE_USER_ID/SESSION_STRING）、
-  12 ChannelsNotice（**公告与PPL广告信息**，已结构化可动态生成）、48 Unk48（op 7 后的空体回应）、97 Unk97（E2(11)，与 op 14 内 ChannelID 同值，推测频道标识）、
+  12 ChannelsNotice（**公告与PPL广告信息**，已结构化可动态生成）、48 PermissionInfo（**玩家权限设定与功能开关**，空体或 E4(id)+16×E1(flag) 列表，CPermissionMan）、97 ChangeStage（**切换游戏阶段**，E2(11) 大厅 / E2(20) 广场，CMainSystem::SetStage，触发客户端自动发 op 78 StageInitReq）、
   7 ResConnectToSvr（op 6 ReqConnectToSvr 的回应，见下方关键观察）、
   122 UserDynamicInfo（**用户动态数据同步**，如 Lucci 金币同步，详见 `packet/UserDynamicInfo.kt` ）、423（op 7 回应后的推送，原样重放）、87 RoomList（**房间列表**，已结构化可动态生成，见关键观察）、
   310/302（进频道批次回应，E2(1)+E4(0)×2+E2(0)+E4(0)+E2(0)，
-  各发两次）、254/227（含 4B 会话串的块，原样重放）、72 SessionList（**频道在线用户列表**，已结构化可动态
+  各发两次）、254 UserMapInfo（**频道在线用户地图/占位同步**，CUserMap）、227 MyPageInfo（**个人资料摘要与商城版本**，CMyPageDialog）、72 SessionList（**频道在线用户列表**，已结构化可动态
   生成，见关键观察）、
   293(E1(0))/78 QuestConfigTable（任务配置表，E4(count)+条目列表，空为 E4(0)）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、
   81 JoinSessionResult（**大厅名册**，已结构化 `packet/JoinSessionResult.kt` 的 `RosterEntry`，
   `E4(人数)+N×[E1槽位+E4账号数值+E2名长+令牌]`，账号数值=passport 0x2E 同值）、
-  413/198/200 FxStockInit/274×2/212/210 EnableShop/65 ShopCatalog(50KB)/204/66/14(9B 变体)/20/261/247
+  413 UserInventoryInfo（**玩家背包全量槽位初始化**，614B 50槽，CUserInventoryMan）/ 198 / 200 FxStockInit / 274 UserItemUpdate×2（**道具槽位更新**，CUserItemMan）/ 212 FxConfig（**特效与角色可用性配置**，CFxContext）/ 210 EnableShop / 65 ShopCatalog(50KB) / 204 / 66 / 14(9B 变体) / 20 / 261 ShopVersion（**商城目录版本校验与开关**，CShopItemMan，不一致触发客户端发 276）/ 247
   （进频道握手推送，原样重放，顺序与触发见 JoinSessionReq.kt）
 - 尚无 handler/packet（yaml 里 Unk_* 占位）：
   S→C 86（大厅期周期推送，⚠️ 非"进房后"）
@@ -263,4 +263,4 @@
 - 启动命令：`mvn compile exec:java`  **必须在项目根目录启动**（Config.yaml / EN_18_*.yaml 按 CWD 加载）。
 - JAVA_HOME: `C:\Program Files\Java\jdk21.0.12_9`
 - Locale=EN：EN_18_*.yaml = 破解适配的真实协议；TW_5_*.yaml = 老版本其他区域客户端实现，仅供参考
-- 新加的逻辑一律按EN区域客户端处理，不用判断区域了。完全实现后会删除其他区域的逻辑
+- 新加的逻辑一律按EN区域客户端处理，不用判断区域。

@@ -15,7 +15,7 @@ fun ChannelsGameState(tailOnes: Int = 3) = PKT {
     if (isEN) {
         // enter-channel.pcap +0.305s (op 7 回應序列 #3, 8B):
         // E1(11) E1(4) E1(0) E1(0) E1(0) E1(1) E1(1) E1(1)
-        // 11 與 Unk97 內的 E2(11) 同值 (推測頻道標識; TW 版此處為 Encode1(10)=ChannelID);
+        // 11 與 ChangeStage 內的 E2(11) 同值 (大廳階段 stageId 11; TW 版此處為 Encode1(10)=ChannelID);
         // 4 與 TW 版的 State 欄位位置對應; 其餘語義未知, 原樣重放
         Encode1(11)
         Encode1(4)
