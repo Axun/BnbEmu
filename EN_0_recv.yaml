@@ -69,7 +69,7 @@ NotifyUDPLossReq: 185
 UserInventoryReq: 209
 AskFxStock: 213
 AskStringTable: 215
-UserItemListReq: 217
+UserItemListReq: 264
 AskPackageMap: 220
 CartListReq: 221
 DigiQAuthorizationReq: 224

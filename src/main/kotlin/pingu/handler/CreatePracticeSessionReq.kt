@@ -11,7 +11,8 @@ import pingu.packet.PracticeSlot103
 import pingu.packet.PracticeSlot104
 import pingu.packet.PracticeSlot114
 import pingu.packet.PracticeSlotReady
-import pingu.packet.PracticeUnk198
+import pingu.packet.PracticeUserInventory
+import pingu.packet.UserItemList
 import pingu.packet.PracticeUnk423
 import pingu.packet.RoomList
 import pingu.packet.SessionInfoResult
@@ -86,6 +87,7 @@ val CreatePracticeSessionReq = PKTHandler { c ->
         )
         if (slot < 7) c.send(PracticeSlot103(slot = slot + 1, isAI = true, aiLevel = slot + 1, flag = 1))
     }
-    c.send(PracticeUnk198())
+    c.send(UserItemList())
+    c.send(PracticeUserInventory())
     c.send(PracticeUnk423())
 }

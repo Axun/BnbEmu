@@ -54,9 +54,16 @@ fun PracticeBoard() = PKT {
 // ---- op 139 已改为按 C→S op 106 字段动态生成 (见 packet/room/SetBomberEvent.kt) ----
 
 // ---- 练习房专用 198 / 423 变体 (与进频道握手推送的 198/423 略异) ----
-fun PracticeUnk198() = PKT {
-    EncodeBuffer(EN_OP198_PRACTICE)
+fun PracticeUserInventory(
+    items: List<UserInventoryEntry> = DEFAULT_PRACTICE_INVENTORY_ITEMS
+) = PKT {
+    Encode1(2)
+    repeat(2) {
+        Encode4(items.size)
+        items.forEach { it.Encode(this) }
+    }
 }
+fun PracticeUnk198() = PracticeUserInventory()
 fun PracticeUnk423() = PKT {
     EncodeBuffer(EN_OP423_PRACTICE)
 }

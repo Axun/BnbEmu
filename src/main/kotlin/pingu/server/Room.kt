@@ -62,17 +62,19 @@ object Room {
         val now = System.currentTimeMillis()
         val stateChanged = mutableListOf<Bomb>()
 
-        bombs.removeIf { bomb ->
-            if (bomb.updateState(now)) {
-                stateChanged.add(bomb)
+        synchronized(bombs) {
+            bombs.removeIf { bomb ->
+                if (bomb.updateState(now)) {
+                    stateChanged.add(bomb)
+                }
+                bomb.shouldRemove()
             }
-            bomb.shouldRemove()
         }
 
         if (stateChanged.isNotEmpty()) {
             stateChanged.forEach { bomb ->
                 BC(SetBombState(bomb.id, 0))
-                BC(TileBombExplode(bomb.ownerSlotId, bomb.gridX, bomb.gridY, power = 1))
+                BC(TileBombExplode(bomb.ownerSlotId, bomb.gridX, bomb.gridY))
             }
         }
     }
@@ -96,9 +98,12 @@ object Room {
             val bomb = Bomb(bombId, slotId, (gridY shl 8) or gridX, 0, isSpecial).apply {
                 this.gridX = gridX
                 this.gridY = gridY
+                this.expireAt = System.currentTimeMillis() + 2500
             }
-            bombs += bomb
-            BC(BombIgnite(slotId, gridX, gridY, bombId, unk))
+            synchronized(bombs) {
+                bombs += bomb
+            }
+            BC(SetBombState(bombId, state = 1))
         }
     }
 

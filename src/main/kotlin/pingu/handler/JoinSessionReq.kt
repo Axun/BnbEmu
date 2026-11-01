@@ -16,8 +16,9 @@ import pingu.packet.Unk274
 import pingu.packet.Unk413
 import pingu.packet.Unk423
 import pingu.packet.ShopCatalog
+import pingu.packet.UserItemList
 import pingu.packet.Unk66
-import pingu.packet.Unk198
+import pingu.packet.UserInventory
 import pingu.packet.Unk212
 
 // C→S op 81 進頻道自動空包 —— ⚠️ 不是「進房」請求
@@ -46,7 +47,7 @@ import pingu.packet.Unk212
 // server = C???::On??? (原始名稱未知, 綁定見 EN_0_recv.yaml JoinSessionReq)
 val JoinSessionReq = PKTHandler { c ->
     c.send(
-        Unk413(), Unk198(), FxStockInit(),
+        Unk413(), UserItemList(), UserInventory(), FxStockInit(),
         Unk274(), Unk274(1),
         Unk122(), Unk212(), EnableShop(),
         RoomList(), ShopCatalog(),

@@ -18,8 +18,12 @@ val EventItemReq = PKTHandler { c ->
     val action = Decode1
     val param = Decode4
 
-    // 严禁在此无脑生成炸弹或下发 SetBombStateBatch！
-    // 尤其是开局收到 slotId=-1, action=0 (A5 96 CA 4F BA 5A 69 35 AC 6A) 时，仅为开局就绪确认。
+    // 开局就绪确认包 (slotId == 255 / -1)
+    if (slotId in 0..7 && action == 0) {
+        val slot = Room.slots[slotId]
+        Room.addBomb(slotId, slot.gridX, slot.gridY)
+    }
+
     Room.onEventItem(slotId, token, action, param)
 }
 

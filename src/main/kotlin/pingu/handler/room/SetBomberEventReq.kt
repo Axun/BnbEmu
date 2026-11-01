@@ -38,6 +38,5 @@ val SetBomberEventReq = PKTHandler { c ->
     }
 
     val pkt = SetBomberEvent(slotId, gridX, gridY)
-    c.send(pkt)
     Room.BC(pkt)
 }
