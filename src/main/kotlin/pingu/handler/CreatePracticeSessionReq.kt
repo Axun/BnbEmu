@@ -37,7 +37,7 @@ import pingu.server.*
 //    106×8, 每槽(114,104,105,103), 198, 423]
 // 之后客户端自动跟发 297/302, 并再发 op 92 触发游戏开始 (见 Unk_92.kt)。
 // 玩家注册进 Room slot 0 (leader), 其余 7 槽设为 AI, 以便 AI 自动行动广播 (Room.BC) 能送达。
-// server = C???::OnCreatePracticeSession (原始名称未知, 绑定见 EN_0_recv.yaml)
+// server = C???::OnCreatePracticeSession (原始名称未知, 绑定见 EN_18_recv.yaml)
 val CreatePracticeSessionReq = PKTHandler { c ->
     Decode2 // 0 房号
     Decode2 // 0

@@ -21,7 +21,7 @@ import pingu.server.Room
 //   [111 AILevelChange, 112 SelectMap, 100 PracticeStartInfo, 136 Board, 170 LaunchGameStage, 171 DoStartGame]
 // 之后客户端发 149 EventItemReq×7, 服务器开始周期性广播 op 172 ItemThrow / op 139 (AI 自动行动,
 // 见 Room.kt aiTick)。
-// server = C???::OnStartPracticeGame (原始名称未知, 绑定见 EN_0_recv.yaml)
+// server = C???::OnStartPracticeGame (原始名称未知, 绑定见 EN_18_recv.yaml)
 val Unk_92 = PKTHandler { c ->
     Decode4
     Decode2

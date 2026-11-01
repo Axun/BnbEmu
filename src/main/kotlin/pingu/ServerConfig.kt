@@ -16,11 +16,9 @@ val Ver by lazy {
 }
 
 val ACP: Charset = when (locale) {
-    Region.TH -> Charset.forName("MS874")
     Region.JP -> Charset.forName("MS932")
     Region.CN -> Charset.forName("MS936")
     Region.TW -> Charset.forName("MS950")
-    Region.VN -> Charset.forName("CP1258")
     Region.EN -> Charset.forName("windows-1252")
     else -> StandardCharsets.UTF_8
 }
@@ -28,9 +26,6 @@ val ACP: Charset = when (locale) {
 val isJP = locale == Region.JP
 val isTW = locale == Region.TW
 val isCN = locale == Region.CN
-val isTH = locale == Region.TH
-val isNA = locale == Region.NA
-val isVN = locale == Region.VN
 val isEN = locale == Region.EN
 
 val debugMode = true
@@ -40,7 +35,7 @@ inline val tickCount
     get() = System.currentTimeMillis().toInt()
 
 enum class Region {
-    JP, TW, CN, TH, VN, NA, EN
+    JP, TW, CN, EN
 }
 
 inline fun <reified T> loadYaml(fileName: String): T {

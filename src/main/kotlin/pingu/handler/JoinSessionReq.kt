@@ -44,7 +44,7 @@ import pingu.packet.Unk212
 //   帳號數值與 passport 0x2E 回應的 u32(帳號數值) 一致 (ffdf = 7215).
 //   令牌編碼 = SessionList.kt encodeName 同款 (4B 塊 LE 讀 ^0x96CA5395 按 BE 寫,
 //   尾 2B LE 讀 ^0xA569 按 BE 寫, 尾 1B ^0x5A). 結構化實作見 packet/JoinSessionResult.kt
-// server = C???::On??? (原始名稱未知, 綁定見 EN_0_recv.yaml JoinSessionReq)
+// server = C???::On??? (原始名稱未知, 綁定見 EN_18_recv.yaml JoinSessionReq)
 val JoinSessionReq = PKTHandler { c ->
     c.send(
         Unk413(), UserInventory(), FxStockInit(),

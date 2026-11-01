@@ -12,7 +12,7 @@ import pingu.packet.MultiServerTail
 // 真實伺服器收到後在同一連線上主動推送啟動序列: 193 | 2 FirstInfoInit | 67 | 1 MultiServerInit | 51
 // (NA_12 同構: AskMultiServer 後推 192 | 2 | 67 | 61 | 1 | 51, 見 AskMultiServer.kt 註解)
 // 缺少 op 1 MultiServerInit 客戶端就拿不到 login 伺服器地址, 報"無法連接登入伺服器"
-// server = C???Pool::OnFirstSession (原始名稱未知, opcode 對應見 EN_0_recv.yaml)
+// server = C???Pool::OnFirstSession (原始名稱未知, opcode 對應見 EN_18_recv.yaml)
 val AskFirstSession = PKTHandler { c ->
     c.send(
         FirstSessionNotify(),

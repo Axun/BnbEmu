@@ -15,8 +15,8 @@ PopTag 真实服务器协议解码器 (从 cap/*.pcap 逆向, 经 CRC8 oracle �
 import subprocess, struct, yaml, os, sys
 TSHARK = r"E:\Softwares\Wireshark\tshark.exe"
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-RECV = yaml.safe_load(open(os.path.join(BASE, "EN_0_recv.yaml"), encoding="utf-8"))
-SEND = yaml.safe_load(open(os.path.join(BASE, "EN_0_send.yaml"), encoding="utf-8"))
+RECV = yaml.safe_load(open(os.path.join(BASE, "EN_18_recv.yaml"), encoding="utf-8"))
+SEND = yaml.safe_load(open(os.path.join(BASE, "EN_18_send.yaml"), encoding="utf-8"))
 RECV_BY = {v: k for k, v in RECV.items()}
 SEND_BY = {v: k for k, v in SEND.items()}
 

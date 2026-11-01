@@ -2,9 +2,6 @@ package pingu.packet
 
 import pingu.Ver
 import pingu.isEN
-import pingu.isNA
-import pingu.isTH
-import pingu.isVN
 import pingu.netty.PKT
 
 // 握手
@@ -21,8 +18,8 @@ fun ConnEstablished() = PKT {
         EncodeStr() // PatchURL
 
         // NDA
-        if (isTH || isVN || isNA) {
-            Encode1Bool()
-        }
+//        if (isNA) {
+//            Encode1Bool()
+//        }
     }
 }

@@ -14,7 +14,6 @@ import pingu.*
 //   payload = [Encode2(opcode)][欄位...], opcode = BE16 ^ 0xA569
 // 加密 (simpleStream3)、CRC8、headerCode 與 3 度實作完全一致, 故 EN 直接採用 degree 3
 val m_nCipherDegreeInit = when {
-    isTH || isVN || isNA -> 3
     isCN -> 2
     isEN -> 3
     else -> 1

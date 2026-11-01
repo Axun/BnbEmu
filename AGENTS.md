@@ -39,7 +39,7 @@
 - TCP **47611**：Nexon passport 登录协议（nmco_session，UTF-16），客户端先在此验证账号密码换取票据再连 3838。2026-10-07 已彻底逆向 nmconew.dll 破译；协议帧封装、0x18 容器流、PCBC 加密算法及业务字段等所有具体实现细节已全部记录在源码注释中，详见 `src/main/kotlin/pingu/netty/PassportServer.kt`。
   ⚠️ 客户端二进制侧的 47611 地址在 nmconew.dll/nmcogame.dll 的 **UTF-16LE 表**（各 8 槽），patch_ip.py 已补齐该编码的替换（此前只补 ASCII 导致打过补丁仍连远端 passport）。
 
-## opcode（已补全进 EN_0_recv/send.yaml）
+## opcode（已补全进 EN_18_recv/send.yaml）
 - 可信命名（抓包时序验证）：C→S 2 AskFirstInfo、7 OnConnEstablished、15 ChannelsStateReq、
   64 UserSimpleInfoReq、81 JoinSessionReq；S→C 1 MultiServerInit、2 FirstInfoInit、7 ResConnectToSvr、
   11 ChannelsExtraInfo、13 ChannelsState、14 ChannelsGameState、20 ResEstimateRTT、
@@ -79,7 +79,7 @@
   （op 172 body = `E2(176) E2(29) E1(1) E4(elapsed_ms) E1(1) E1(0) E2(0) E1(0) E1(flag)`，
   **E4 = 对局开始以来的毫秒数**，13 样本 401/801/1201/1601/2002... 与墙钟吻合，flag 疑似朝向；
   `Room.aiTick` 每 400ms 广播一次）。⚠️ **ItemThrow 实测 opcode = 172**（tst.pcap stream4
-  sq=343~400 逐包 CRC8 验证），**不是**局内 +200 偏移的 374——EN_0_send.yaml 曾误配 374 导致
+  sq=343~400 逐包 CRC8 验证），**不是**局内 +200 偏移的 374——EN_18_send.yaml 曾误配 374 导致
   周期广播发到错误 opcode。逐槽位包公式
   （8 槽样本逐字节验证）：op106=E1((slot<<4)|2)、op104=E1(slot0?0:(slot<<4)|8)、
   op105=E1(slot)E1(5)、op114=E1(slot)E1(5)E1(5)E1(0)E2(0)、op103=E2(slot+1)E1(1)E2(slot+1)E2(1)。
@@ -167,7 +167,7 @@
   实际藏在 enter-channel.pcap 登录连线收尾的半截流里，decoded_dump 对其记 0 包）：C 发 op 6
   （E1(10)+E4(2)，E4 含义不明、真实抓包为 2 / live 客户端为 0）→ S 回 **op 7**
   （E1(1)+E1(10)+E4(回显)+E4(IP)+E2(3838)，已逐字节解出）→ 客户端关登录连线、新开连线到 IP:port。
-  ResConnectToSvr 已注册为 S→C op 7（EN_0_send.yaml；TW 客户端仍预期 op 6，TW_5_send.yaml 未动）
+  ResConnectToSvr 已注册为 S→C op 7（EN_18_send.yaml；TW 客户端仍预期 op 6，TW_5_send.yaml 未动）
 - 与旧 TW_5 表冲突处：进频道请求真实是 **op 11**（旧表 EnterChannelStageReq=9）；
   C 发 2 后服务器回 **op 4**（旧表把 FirstInfoInit 当 2 的回应；实际 1861B 的 op 2 是服务器主动推送）
 
@@ -260,7 +260,7 @@
 
 ## 构建 / 运行约定
 - JDK 21
-- 启动命令：`mvn compile exec:java`  **必须在项目根目录启动**（Config.yaml / EN_0_*.yaml 按 CWD 加载）。
+- 启动命令：`mvn compile exec:java`  **必须在项目根目录启动**（Config.yaml / EN_18_*.yaml 按 CWD 加载）。
 - JAVA_HOME: `C:\Program Files\Java\jdk21.0.12_9`
-- Locale=EN：EN_0_*.yaml = 破解适配的真实协议；TW_5_*.yaml = 老版本其他区域客户端实现，仅供参考
+- Locale=EN：EN_18_*.yaml = 破解适配的真实协议；TW_5_*.yaml = 老版本其他区域客户端实现，仅供参考
 - 新加的逻辑一律按EN区域客户端处理，不用判断区域了。完全实现后会删除其他区域的逻辑

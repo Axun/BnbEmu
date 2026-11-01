@@ -9,7 +9,7 @@ import pingu.netty.PKTHandler
 // 即本用戶的 4B 會話令牌; 兩個抓包中伺服器都「從不回應」→ fire-and-forget
 // 推測作用: 向頻道登記自己的會話令牌 (好友/邀請/P2P 定位用, NMCO 體系)
 // 綁定空 handler 以對齊真實行為 (只消費欄位, 不回包, 消除 "找不到 Handler" 噪音)
-// server = C???::On??? (原始名稱未知, 綁定見 EN_0_recv.yaml Unk_297)
+// server = C???::On??? (原始名稱未知, 綁定見 EN_18_recv.yaml Unk_297)
 val Unk_297 = PKTHandler { _ ->
     DecodeStr // E2(4) + 4B 會話令牌
     Decode1   // 1

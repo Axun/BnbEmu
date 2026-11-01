@@ -4,7 +4,7 @@ import pingu.netty.PKT
 import pingu.netty.toBA
 
 // EN 首連推送序列的三個附屬包, 內容取自 start.pcap stream 0 (banner 之後伺服器主動推送),
-// 生成工具: tools/extract_first_push.py; 名稱為推測, opcode 對應見 EN_0_send.yaml
+// 生成工具: tools/extract_first_push.py; 名稱為推測, opcode 對應見 EN_18_send.yaml
 
 // opcode 193 (sq=43): payload 僅 Encode1(0)
 fun FirstSessionNotify() = PKT {
