@@ -7,7 +7,7 @@ import pingu.packet.shop.FxStockInit
 import pingu.packet.JoinSessionResult
 import pingu.packet.RoomList
 import pingu.packet.SessionList
-import pingu.packet.Unk122
+import pingu.packet.UserDynamicInfo
 import pingu.packet.Unk204
 import pingu.packet.Unk20
 import pingu.packet.Unk247
@@ -28,7 +28,7 @@ import pingu.packet.Unk212
 // 載荷: 空 (ln=2 僅 opcode)
 // 行為: 真實伺服器不回 81 的逐包回應, 而是跟發整條「進頻道握手推送」(2026-08-31 時序對齊確認:
 //       客戶端發 81 後會等這條推送才繼續發 274/281/276, 缺它客戶端卡「正在連接」對話框):
-//         seq=100~121: [413, 198, 200 FxStockInit, 274×2, 122, 212, 210 EnableShop]
+//         seq=100~121: [413, 198, 200 FxStockInit, 274×2, 122 UserDynamicInfo, 212, 210 EnableShop]
 //         seq=124~127: [87 RoomList, 65(50KB)]          ← 客戶端 274/274/281 之後
 //         seq=130~148: [204, 66, 14(9B 變體), 20, 261, 247, 423]
 //         seq=151~154: [81 名冊, 72 用戶列表]            ← 之後大廳期週期重發 (週期未實作)
@@ -49,7 +49,7 @@ val JoinSessionReq = PKTHandler { c ->
     c.send(
         Unk413(), UserInventory(), FxStockInit(),
         Unk274(), Unk274(1),
-        Unk122(), Unk212(), EnableShop(),
+        UserDynamicInfo(), Unk212(), EnableShop(),
         RoomList(), ShopCatalog(),
         Unk204(), Unk66(), ChannelsGameState(tailOnes = 2),
         Unk20(), Unk261(), Unk247(), Unk423(),

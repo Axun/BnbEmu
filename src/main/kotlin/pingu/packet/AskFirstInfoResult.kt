@@ -25,7 +25,7 @@ internal val SESSION_STRING = "f0ae35f3".toBA()
 // 語義已釘死: userId/userId2 = 賬號數值 (passport 0x2E 同值; 登入版兩處皆 7215, 頻道版僅
 //   userId2 保留 7215、userId 為 0), session = 4B 會話串 (兩變體同串)。
 // 其餘 v* 語義未知, 僅登入版有值 (v2=1, v4=1000, v16=1, v27=1, v31=5000, v32=3; 頻道版全 0;
-// 5000 亦見 op122 與 passport 0x2E)。13B 變體 (UserSimpleInfoResult) 結構不同, 不走本類
+// 5000 亦見 op122 UserDynamicInfo 金幣同步與 passport 0x2E)。13B 變體 (UserSimpleInfoResult) 結構不同, 不走本類
 class UserInfo(
     val userId: Int = 0,
     val userId2: Int = 0,
