@@ -62,7 +62,7 @@
   310/302（进频道批次回应，E2(1)+E4(0)×2+E2(0)+E4(0)+E2(0)，
   各发两次）、254/227（含 4B 会话串的块，原样重放）、72 SessionList（**频道在线用户列表**，已结构化可动态
   生成，见关键观察）、
-  293/78（E1(0)/E4(0) 小回应）、60（46KB 资源块，原样重放）、
+  293/78（E1(0)/E4(0) 小回应）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、
   81 JoinSessionResult（**大厅名册**，已结构化 `packet/JoinSessionResult.kt` 的 `RosterEntry`，
   `E4(人数)+N×[E1槽位+E4账号数值+E2名长+令牌]`，账号数值=passport 0x2E 同值）、
   413/198/200 FxStockInit/274×2/212/210 EnableShop/65 ShopCatalog(50KB)/204/66/14(9B 变体)/20/261/247
@@ -149,7 +149,7 @@
   op 86（12 次，23~25B）；
   op 122 体为 `[Encode1(0)][Encode4(5000)]` 疑似 5 秒定时器；op 4 有三个变体（登录连线 65B /
   频道连线 65B 全零 / 13B 查询应答，均含或邻接 4B 会话串）；
-  op 210 EnableShop 实为 24KB 商城目录、op 65 ShopCatalog ≈50KB（商城商品与角色卡全量目录，已结构化）、op 60 ≈46KB（资源块，已原样重放）；
+  op 210 EnableShop 实为 24KB 商城目录、op 65 ShopCatalog ≈50KB（商城商品与角色卡全量目录，已结构化）、op 60 ItemDef ≈46KB（全量物品定义目录，已结构化支持动态配置与进阶角色卡启用）；
   **op 72 SessionList = 频道在线用户列表**（⚠️ 2026-08-30 与游戏界面比对，非房间列表；已结构化：`packet/SessionList.kt` 的 SessionEntry）：
   `E2(0) + E1(条目数) + N 条目`，条目 = `E2(len)+角色名令牌(4~6B) + 42B 固定栏位`；
   已解出栏位语义：number=E2 玩家**等级**（样本 326→1 递减 = 326..1 级玩家，非房间号）、
@@ -245,7 +245,7 @@
   （cap/login_s2c_op*.bin）、改写 op11 内 5 处 IP 并生成 Kotlin hex 常量
   （op11 已结构化，该基准现仅作 replay_test 的 IP 改写版断言源 login_s2c_op11_ip127.bin）
 - `tools/extract_channel_flow.py`：从 enter-channel.pcap stream1 按 TCP 线序提取进频道整套 S→C 回应
-  （cap/chan_s2c_op*.bin），Unk423/Unk254/Unk227/Unk60/SessionInfoResult 的
+  （cap/chan_s2c_op*.bin），Unk423/Unk254/Unk227/ItemDef/SessionInfoResult 的
   Kotlin blob 常量源（blob = 载荷去 2B opcode 前缀，已验证重编码逐字节一致）；
   op 87/op 72 载荷现为 RoomList/SessionList 结构化编码的逐字节断言基准
 - `tools/dump_flow.py <pcap> <stream>`：按时间戳交错输出指定 TCP 流的 C→S/S→C 解码包（对齐请求→回应）

@@ -73,7 +73,7 @@ CartList: 214
 # (⚠️ 發送包函數名不可含下劃線 — OpcodeManager 的 filteredName 會截斷, yaml 鍵須與函數名全等)
 ChannelsNotice: 12
 Unk48: 48
-Unk60: 60
+ItemDef: 60
 ShopCatalog: 65
 Unk66: 66
 SessionList: 72

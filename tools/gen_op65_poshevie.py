@@ -41,7 +41,7 @@ def main():
     # cat = 0x10 (Category 16: 角色卡 / 升级卡)
     # name = "Posh Evie"
     # p50 = 1
-    # item_id = 2082 (指向 Unk60 中 TargetCharID == 4 的 ItemDef)
+    # item_id = 2082 (指向 ItemDef 中 TargetCharID == 4 的条目)
     # cnt = 1 (Count >= 1 满足 FindCharacterStock 校验)
     # desc = "Item/CharDeco"
     prod_id = 2082001

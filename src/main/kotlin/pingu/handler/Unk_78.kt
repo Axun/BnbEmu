@@ -8,7 +8,7 @@ import pingu.packet.Unk227
 import pingu.packet.Unk293
 import pingu.packet.Unk302
 import pingu.packet.Unk310
-import pingu.packet.Unk60
+import pingu.packet.ItemDef
 import pingu.packet.Unk78Result
 import pingu.packet.UserSimpleInfoResult
 
@@ -23,7 +23,7 @@ val Unk_78 = PKTHandler { c ->
         SessionList(),
         Unk293(), Unk78Result(),
         UserSimpleInfoResult(), SessionInfoResult(),
-        Unk227(), Unk60(),
+        Unk227(), ItemDef(),
         Unk310(), Unk302(),
     )
 }
