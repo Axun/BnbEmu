@@ -47,7 +47,7 @@ import pingu.packet.Unk212
 // server = C???::On??? (原始名稱未知, 綁定見 EN_0_recv.yaml JoinSessionReq)
 val JoinSessionReq = PKTHandler { c ->
     c.send(
-        Unk413(), UserItemList(), UserInventory(), FxStockInit(),
+        Unk413(), UserInventory(), FxStockInit(),
         Unk274(), Unk274(1),
         Unk122(), Unk212(), EnableShop(),
         RoomList(), ShopCatalog(),

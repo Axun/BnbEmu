@@ -105,7 +105,7 @@ if __name__ == "__main__":
     # op 72 SessionList / op 87 RoomList / op 81 JoinSessionResult 已結構化, 載荷須與抓包逐位元組一致
     replay("enter", open(os.path.join(base, "tools/replay_enter_cs.bin"), "rb").read(),
            {48, 13, 14, 97, 122, 87, 423, 310, 302, 254, 72, 293, 78, 4, 227, 60,
-            413, 320, 198, 200, 274, 212, 210, 65, 204, 66, 20, 261, 247, 81},
+            413, 198, 200, 274, 212, 210, 65, 204, 66, 20, 261, 247, 81},
            {72: open(os.path.join(base, "cap/chan_s2c_op72_396B_0.bin"), "rb").read().hex(),
             87: open(os.path.join(base, "cap/chan_s2c_op87_41B_0.bin"), "rb").read().hex(),
             413: open(os.path.join(base, "cap/chan_s2c_op413_616B_0.bin"), "rb").read().hex(),
@@ -135,7 +135,7 @@ if __name__ == "__main__":
     #   各 blob 包 (83/113/100/108/112/136/198/423) 載荷逐位元組與抓包一致
     #   (op 139 只在收到 C→S op 106 後回顯, 見 tools/test_ai_sync.py)
     replay("practice", open(os.path.join(base, "tools/replay_practice_cs.bin"), "rb").read(),
-           {87, 83, 4, 113, 100, 108, 106, 114, 104, 105, 103, 320, 198, 423, 111, 112, 136, 172},
+           {87, 83, 4, 113, 100, 108, 106, 114, 104, 105, 103, 198, 423, 111, 112, 136, 172},
            {83: open(os.path.join(base, "cap/practice_s2c_op83_8B_0.bin"), "rb").read().hex(),
             113: open(os.path.join(base, "cap/practice_s2c_op113_4B_0.bin"), "rb").read().hex(),
             108: open(os.path.join(base, "cap/practice_s2c_op108_10B_0.bin"), "rb").read().hex(),

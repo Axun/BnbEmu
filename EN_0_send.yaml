@@ -62,7 +62,7 @@ AirplaneItemProb: 375
 FirstSessionNotify: 193
 FxStockInit: 200
 UserInventory: 198
-UserItemList: 320
+UserItemList: 202
 StringTableInit: 205
 DigiQAuthorizationResult: 209
 EnableShop: 210

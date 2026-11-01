@@ -76,14 +76,14 @@ class UserInventoryEntry(
 val DEFAULT_USER_INVENTORY_ITEMS = listOf(
     UserInventoryEntry(itemId = 1, slot = 15, param = 20, token = "Dao", status = 192),
     UserInventoryEntry(itemId = 10006, slot = 13, param = 1, token = "Item/ItemBag", status = 255),
-    UserInventoryEntry(itemId = 2083, slot = 15, param = 1, token = "Item/CharDeco", status = 255), // 蓝妹妹 (LuxuryMarid / Posh Evie) 进阶卡
+    UserInventoryEntry(itemId = 2082, slot = 4, param = 1, token = "Item/CharDeco", status = 255), // 蓝妹妹 (LuxuryMarid / Posh Evie) 进阶卡
 )
 
 // 练习房默认生效/穿戴道具列表
 val DEFAULT_PRACTICE_INVENTORY_ITEMS = listOf(
     UserInventoryEntry(itemId = 5, slot = 15, param = 20, token = "Boz", expireDate = DEFAULT_PRACTICE_EXPIRE_DATE, status = 192),
     UserInventoryEntry(itemId = 10006, slot = 13, param = 1, token = "Item/ItemBag", expireDate = DEFAULT_PRACTICE_EXPIRE_DATE, status = 255),
-    UserInventoryEntry(itemId = 2083, slot = 15, param = 1, token = "Item/CharDeco", expireDate = DEFAULT_PRACTICE_EXPIRE_DATE, status = 255), // 蓝妹妹 (LuxuryMarid / Posh Evie) 进阶卡
+    UserInventoryEntry(itemId = 2082, slot = 4, param = 1, token = "Item/CharDeco", expireDate = DEFAULT_PRACTICE_EXPIRE_DATE, status = 255), // 蓝妹妹 (LuxuryMarid / Posh Evie) 进阶卡
 )
 
 fun UserInventory(

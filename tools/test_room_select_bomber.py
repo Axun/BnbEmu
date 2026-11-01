@@ -7,6 +7,8 @@
   2) 该应答载荷逐字节等于 CA.exe 预期的 2 字节回显 (也是 cap/practice_s2c_op105_2B_* 的结构)。
   3) 客户端据 op 105 清除槽位等待锁 [+0x2f64]==5; 缺包会导致后续点击角色无反应,
      因此断言"每个 op 87 都恰好换回一个 op 105"。
+  4) 角色进阶卡系统验证: 客户端点击蓝妹妹时发出基础角色 4 (蓝蓝 Marid),
+     服务端识别进阶卡并回显 10 (蓝妹妹 LuxuryMarid)。
 
 用法: 先运行模拟器 (mvn compile exec:java), 再 python -X utf8 tools/test_room_select_bomber.py
 """
@@ -86,7 +88,6 @@ def main():
     ops, pkts = ops_of(data)
 
     assert 105 in ops, f'C→S op 87 未收到 S→C op 105 应答, 实际: {ops}'
-    # 练习房回应链本身也含 op 105 (整槽资料版), 故取最新一个 105 作为 op 87 的回显
     idx = len(ops) - 1 - ops[::-1].index(105)
     body = pkts[idx]['p'][2:]
     assert body == enc1(0) + enc1(6), (
@@ -95,7 +96,7 @@ def main():
     print(f'[SelectBomber] op 87 → op 105 回显 = {body.hex(" ")} '
           f'(E1(slot)=0, E1(bomber)=6) ✓')
 
-    # ---- 用例 2: 另一个槽位, 确认不是硬编码 ----
+    # ---- 用例 2: 槽位 3 切换到 bomber 2 ----
     payload = enc2(87) + enc1(3) + enc1(2)
     s.sendall(build_c2s_frame(52, payload))
     data += collect(s, 0.6)
@@ -106,6 +107,20 @@ def main():
     assert body == enc1(3) + enc1(2), f'op 105 载荷不符: {body.hex(" ")}'
     print(f'[SelectBomber] 第二次 op 87 → op 105 回显 = {body.hex(" ")} '
           f'(E1(slot)=3, E1(bomber)=2) ✓')
+
+    # ---- 用例 3: 槽位 0 选择角色 4 (蓝蓝 Marid) -> 进阶卡系统应答 10 (蓝妹妹 LuxuryMarid) ----
+    payload = enc2(87) + enc1(0) + enc1(4)
+    s.sendall(build_c2s_frame(55, payload))
+    data += collect(s, 0.6)
+    ops, pkts = ops_of(data)
+    assert ops.count(105) >= 3, f'第三次 op 87 未收到 op 105 应答, 实际: {ops}'
+    idx = len(ops) - 1 - ops[::-1].index(105)
+    body = pkts[idx]['p'][2:]
+    assert body == enc1(0) + enc1(10), (
+        f'op 105 进阶角色回显不符: {body.hex(" ")} != {(enc1(0) + enc1(10)).hex(" ")}'
+    )
+    print(f'[SelectBomber] 第三次 op 87 (bomber=4) → op 105 进阶卡回显 = {body.hex(" ")} '
+          f'(E1(slot)=0, E1(bomber)=10 蓝妹妹) ✓')
 
     s.close()
     print('[SelectBomber] 房间内切换角色测试全部通过！ALL PASS ✓')

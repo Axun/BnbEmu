@@ -3,6 +3,8 @@ package pingu.packet
 import pingu.netty.PKT
 import pingu.netty.SendPacketBase
 import pingu.netty.toBA
+import pingu.server.Room
+import pingu.server.bomber
 
 // ============================================================================
 // 进练习房 (C→S op 75) 回应链 — 按 tst.pcap stream 4 真实线序 (TCP seq) 原样重放
@@ -43,7 +45,14 @@ fun PracticeAiLevel() = PKT {
 
 // ---- op 112 SelectMap 练习房版 (165B, 含 8 槽出生点) ----
 fun PracticeSelectMap() = PKT {
-    EncodeBuffer(EN_OP112)
+    val b0 = Room.slots.getOrNull(0)?.bomber?.toInt() ?: 5
+    if (b0 != 5) {
+        val data = EN_OP112.clone()
+        data[27] = (b0 xor 0x5A).toByte()
+        EncodeBuffer(data)
+    } else {
+        EncodeBuffer(EN_OP112)
+    }
 }
 
 // ---- op 136 棋盘/开局数据块 (178B) — 原样重放 ----
