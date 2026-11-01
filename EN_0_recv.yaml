@@ -79,7 +79,7 @@ AskFirstSession: 0
 EnterChannelReq: 11
 Unk_39: 39
 StringTableRevisionReq: 55
-Unk_78: 78
+StageInitReq: 78
 Unk_92: 92
 BomberActionAckReq: 172
 Unk_274: 274

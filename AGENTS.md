@@ -47,8 +47,8 @@
 - 已实现绑定（原名 Unk_* 占位）：C→S 0 AskFirstSession（首连打开）、
   55 StringTableRevisionReq（登录后上报本地 3 份 SSD 版本号 [StringTable, QuestString, CurseFilter]，触发回频道列表）、
   11 EnterChannelReq（进频道）、15 ChannelsStateReq（频道状态轮询，回 op 13）、
-  64 UserSimpleInfoReq（空消费，回应在 Unk_78 链内）、297/39/302/310/293（空消费/部分消费，
-  整套回应由 Unk_78 触发）、78 Unk_78（批次收齐触发点，回整套进频道回应链）、
+  64 UserSimpleInfoReq（空消费，回应在 StageInitReq 链内）、297/39/302/310/293（空消费/部分消费，
+  整套回应由 StageInitReq 触发）、78 StageInitReq（批次收齐触发点，回整套进频道回应链）、
   81 JoinSessionReq（进频道自动空包，⚠️ 非"进房"；2026-08-31 起回应=整条**进频道握手推送**，
   客户端发 81 后会等这条推送才继续发 274/281/276，缺它卡"正在连接"对话框，见 JoinSessionReq.kt）、
   274（13B×2）/281（空）/276（空）（握手后续，空消费，无逐包回应）；
@@ -62,7 +62,7 @@
   310/302（进频道批次回应，E2(1)+E4(0)×2+E2(0)+E4(0)+E2(0)，
   各发两次）、254/227（含 4B 会话串的块，原样重放）、72 SessionList（**频道在线用户列表**，已结构化可动态
   生成，见关键观察）、
-  293/78（E1(0)/E4(0) 小回应）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、
+  293(E1(0))/78 QuestConfigTable（任务配置表，E4(count)+条目列表，空为 E4(0)）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、
   81 JoinSessionResult（**大厅名册**，已结构化 `packet/JoinSessionResult.kt` 的 `RosterEntry`，
   `E4(人数)+N×[E1槽位+E4账号数值+E2名长+令牌]`，账号数值=passport 0x2E 同值）、
   413/198/200 FxStockInit/274×2/212/210 EnableShop/65 ShopCatalog(50KB)/204/66/14(9B 变体)/20/261/247

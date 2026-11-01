@@ -99,7 +99,7 @@ if __name__ == "__main__":
             11: open(os.path.join(base, "cap/login_s2c_op11_ip127.bin"), "rb").read().hex(),
             13: open(os.path.join(base, "cap/login_s2c_op13.bin"), "rb").read().hex()})
     # enter-channel.pcap stream1: op7 OnConnEstablished → EN 應回 [48,13,14,97,122,87,423]
-    #   (87 RoomList 房間列表); 其後批次 297/302/310/64/293/78 → Unk_78 觸發整套回應
+    #   (87 RoomList 房間列表); 其後批次 297/302/310/64/293/78 → StageInitReq (op 78) 觸發整套回應
     #   [310,302,254,72 用戶列表,293,78,4×2,227,60,310,302]; C 的 81 空包 → 進頻道握手推送
     #   [413,198,200,274×2,122,212,210,87,65,204,66,14(9B),20,261,247,423,81 名冊,72]
     # op 72 SessionList / op 87 RoomList / op 81 JoinSessionResult 已結構化, 載荷須與抓包逐位元組一致
