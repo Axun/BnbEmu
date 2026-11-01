@@ -135,7 +135,7 @@
   于 `0x4EFC96` 把 `[+0x2f64] == 5` 清零。缺此应答 → 槽位永久卡等待锁、再点角色无任何反应。
   实现见 `handler/room/RoomSelectBomberReq.kt` + `packet/room/SlotBomber.kt`（op 105 的 2B 变体，
   与 SetPlayer/PracticeSetPlayer 的整槽版同 op 异体）；回归测试 `tools/test_room_select_bomber.py`。
-- **个人名片与玩家详细资料界面（My Page / op 301, op 73, op 66, op 74, op 273 ChangeEquipReq，**：参见UserInfoReq.kt
+- **个人名片与玩家详细资料界面（My Page / op 301, op 73, op 66, op 74, op 273, op 288 SweetieInfoReq）**：参见 `UserInfoReq.kt` + `UserRestrictReq.kt` + `SweetieInfoReq.kt`。
 - **玩家换装/装备穿戴变更同步请求（C→S op 273 **：参见ChangeEquipReq.kt
 - 注意：**带下划线的 Kotlin 函数名无法注册发送包**（OpcodeManager 的 filteredName 会
   substringBefore('_') 截断），新 Packet 类名不能含下划线；handler 顶层 val 名可含下划线（精确匹配字段名）

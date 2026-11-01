@@ -18,6 +18,19 @@ private fun SendPacketBase.EncodeTokenStr(s: String) {
     }
 }
 
+data class UserEquipEntry(
+    val itemId: Int = 1,
+    val slot: Int = 15,
+    val param1: Int = 20,
+    val param2: Int = 0
+)
+
+val DEFAULT_USER_EQUIPS = listOf(
+    UserEquipEntry(itemId = 1, slot = 15, param1 = 20, param2 = 0),
+    UserEquipEntry(itemId = 10006, slot = 13, param1 = 1, param2 = 0),
+    UserEquipEntry(itemId = 2082, slot = 4, param1 = 1, param2 = 0)
+)
+
 /**
  * S->C op 73: 玩家详细资料回应 (PUserInfoResult)
  *
@@ -61,7 +74,8 @@ fun UserInfoResult(
     maxExp: Int = 1000,
     level: Int = 5,
     favorite: String = "Bazzi",
-    sweetieName: String = ""
+    sweetieName: String = "",
+    equips: List<UserEquipEntry> = emptyList()
 ) = PKT {
     Encode4(errCode)
     if (errCode == 0) {
@@ -100,7 +114,13 @@ fun UserInfoResult(
         Encode1(0) // [esi + 0xc0]
         Encode4(0) // [esi + 0xfc]
         Encode4(0) // [esi + 0x100]
-        Encode4(0) // [esi + 0xec] subListCount
+        Encode4(equips.size) // [esi + 0xec] subListCount (装备槽位列表)
+        equips.forEach { eq ->
+            Encode4(eq.itemId)
+            Encode1(eq.slot)
+            Encode4(eq.param1)
+            Encode4(eq.param2)
+        }
         // feature 0x16 未启用，跳过 0xcc..0xe4
         Encode4(0) // [esi + 0x84]
         Encode4(0) // [esi + 0x88]

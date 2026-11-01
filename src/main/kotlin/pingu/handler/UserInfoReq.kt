@@ -5,8 +5,12 @@ import pingu.netty.ClientSocket
 import pingu.netty.Decode1
 import pingu.netty.PKTHandler
 import pingu.netty.PassportServer
+import pingu.packet.DEFAULT_USER_EQUIPS
 import pingu.packet.UserDynamicInfo
+import pingu.packet.UserEquipEntry
 import pingu.packet.UserInfoResult
+import pingu.server.Room
+import pingu.server.bomber
 
 private val LAST_USER_INFO_SEND_TIME = AttributeKey.valueOf<Long>("LAST_USER_INFO_SEND_TIME")
 
@@ -28,9 +32,27 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
     // 先同步客户端 Lucci 动态属性 (CUserDynamicInfo.propertyId[0])
     c send UserDynamicInfo(0, lucci)
 
+    // 安全约束: CMyPageDialog 仅分配 2 个槽位 (0=自己, 1=对比目标), 必须在 0..1 范围内,
+    // 超过 1 会在 0x67973E ([0x009E06C0 + slotIndex * 0x438]) 发生堆越界导致 0xC0000005 崩溃闪退
+    val safeSlotIndex = slotIndex.coerceIn(0, 1)
+
+    // 根据当前槽位选中的角色动态配置角色卡与装扮
+    val userSlot = Room.slots.find { it.user?.c == c }
+    val currentBomber = userSlot?.bomber?.toInt() ?: 0
+    val charItemId = when (currentBomber) {
+        5 -> 5 // Boz
+        4, 10, 2 -> 2082 // Marid
+        else -> 1 // Dao / Bazzi
+    }
+    val equips = listOf(
+        UserEquipEntry(itemId = charItemId, slot = 15, param1 = 20, param2 = 0),
+        UserEquipEntry(itemId = 10006, slot = 13, param1 = 1, param2 = 0),
+        UserEquipEntry(itemId = 2082, slot = 4, param1 = 1, param2 = 0)
+    )
+
     c send UserInfoResult(
         isSelf = true,
-        slotIndex = slotIndex,
+        slotIndex = safeSlotIndex,
         characterName = charName,
         gender = 0,
         motto = user?.motto ?: "",
@@ -43,7 +65,58 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
         maxExp = 1000,
         level = user?.level ?: 5,
         favorite = user?.favorite ?: "Bazzi",
-        sweetieName = ""
+        sweetieName = "",
+        equips = equips
+    )
+}
+
+/**
+ * 下发其他玩家的详细资料 (展示他人名片 COtherUserPageDialog)
+ */
+fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
+    // 优先从房间槽位玩家或当前服务端连接中查找
+    val targetSlot = Room.slots.find { it.user?.name.equals(targetCharName, ignoreCase = true) }
+    val targetUser = targetSlot?.user
+        ?: c.users.find { it.name.equals(targetCharName, ignoreCase = true) }
+
+    val bomberId = targetSlot?.bomber?.toInt() ?: 1
+    val charItemId = when (bomberId) {
+        5 -> 5 // Boz
+        2 -> 2082 // Marid
+        else -> 1 // Dao / Bazzi
+    }
+    val equips = listOf(
+        UserEquipEntry(itemId = charItemId, slot = 15, param1 = 20, param2 = 0),
+        UserEquipEntry(itemId = 10006, slot = 13, param1 = 1, param2 = 0),
+        UserEquipEntry(itemId = 2082, slot = 4, param1 = 1, param2 = 0)
+    )
+
+    val win = targetUser?.win ?: 10
+    val draw = targetUser?.draw ?: 0
+    val lose = targetUser?.lose ?: 5
+    val exp = targetUser?.exp ?: 500
+    val level = targetUser?.level ?: 5
+    val motto = targetUser?.motto?.ifEmpty { "PopTag Forever!" } ?: "PopTag Forever!"
+    val gender = 0
+    val favorite = targetUser?.favorite ?: "Bazzi"
+
+    c send UserInfoResult(
+        isSelf = false,
+        slotIndex = 0,
+        characterName = targetCharName,
+        gender = gender,
+        motto = motto,
+        guildName = "",
+        guildRank = 0,
+        win = win,
+        draw = draw,
+        lose = lose,
+        curExp = exp,
+        maxExp = 1000,
+        level = level,
+        favorite = favorite,
+        sweetieName = "",
+        equips = equips
     )
 }
 
@@ -52,16 +125,24 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
  *
  * 逆向确认 (CA.exe EN v18):
  * - 发包点: CA.exe 0x00501BAF (CStage::OnMyPageButton) -> 0x004F881E
- * - 包体结构: Encode1(count) + repeat(count) { Encode1(slotIndex) }
- *   (日志样本: 5B 5A -> count=1, slotIndex=0)
- * - 关键机制:
+ * - 包体结构: Encode1(count) + repeat(count) { Encode1(bomberId) }
+ *   (日志样本: 5B 5A -> count=1, bomberId=0; 5B 5E -> count=1, bomberId=4)
+ * - 关键机制与防崩溃说明:
+ *   客户端在 0x004F881E 发送 op 73 时，通过 0x006E50F0 循环读取本地各槽位选中的角色 ID (bomberId)，
+ *   绝非槽位索引 slotIndex！
+ *   若服务端将其误认为 slotIndex 回传给客户端，客户端 CMyPageDialog (0x005E5688 -> 0x0067973E) 寻址
+ *   [0x009E06C0 + slotIndex * 0x438]（仅分配了 2 个槽位元素），当 slotIndex >= 2 时将发生堆越界访问
+ *   非法虚表指针而触发 0xC0000005 崩溃闪退！
+ *   展示自己名片时 slotIndex 恒为玩家在房间中的有效槽位 (通常为 0，安全范围 0..1)。
  *   客户端在 0x004F881E 发送 op 73 时会调用 0x006E4CDA 将内部标志 [0x00993E70 + 0x358] 置为 0 (锁定)。
  *   后续再次打开 My Page 时将跳过 op 73，转由 op 66 / op 301 驱动。
  */
 val UserInfoReq = PKTHandler { c ->
     val count = Decode1
-    val slots = (0 until count).map { Decode1 }
-    val slotIndex = slots.firstOrNull() ?: 0
+    val bomberIds = (0 until count).map { Decode1 }
+
+    // 客户端上报的是各槽位已选角色 ID (bomberIds), 槽位索引恒为其在房间中的有效槽位 (通常为 0)
+    val slotIndex = Room.slots.indexOfFirst { it.user?.c == c }.takeIf { it in 0..1 } ?: 0
 
     sendUserInfo(c, slotIndex)
 }
@@ -91,4 +172,6 @@ val UserInfoReq = PKTHandler { c ->
       - `+0x98`: Level (`Encode4`)
       - Lucci 金币由先行下发的 `UserDynamicInfo(0, lucci)`（op 122）写入客户端单例 `CUserDynamicInfo`。
   - 实现见 `handler/UserInfoReq.kt` + `handler/UserRestrictReq.kt` + `packet/UserInfoResult.kt`；关闭包见 `handler/WatchUserInfoReq.kt` (74) + `handler/ChangeEquipReq.kt` (273)；单元测试见 `src/test/kotlin/pingu/netty/MyPageTest.kt`。
+  - **他人名片角色形象显示机制（S→C op 73 UserInfoResult 装备槽位列表）**：
+    `COtherUserPageDialog::InitData` (`0x005E2F9B`) 调用 `0x005F488E` 设置角色装扮。客户端反序列化 `UserInfoResult` 时在 `0x0044A178` 读取 `[esi + 0xec]`（`subListCount`，装备条目数）及循环条目（`Encode4(itemId) + Encode1(slot) + Encode4(param1) + Encode4(param2)`）。若 `subListCount == 0`，客户端跳过装备查找，无法解析角色卡与外观导致他人角色形象不显示；服务端在 `UserInfoResult` 下发装备槽位（包含角色卡 `itemId=1/5/2082` 等）即可让他人形象完整渲染。
  */

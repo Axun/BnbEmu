@@ -19,7 +19,6 @@ GuildMarkRevision: 38
 UserSimpleInfoReq: 64
 MyInfoReq: 65
 UserRestrictReq: 66
-ModifyUserInfoReq: 66
 UserInfoDetailReq: 67
 SessionInfoDetailReq: 68
 UserLocationReq: 69
@@ -103,3 +102,4 @@ MyPageReq: 301
 
 WatchUserInfoReq: 74
 ChangeEquipReq: 273
+SweetieInfoReq: 288
