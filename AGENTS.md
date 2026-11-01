@@ -135,8 +135,11 @@
   于 `0x4EFC96` 把 `[+0x2f64] == 5` 清零。缺此应答 → 槽位永久卡等待锁、再点角色无任何反应。
   实现见 `handler/room/RoomSelectBomberReq.kt` + `packet/room/SlotBomber.kt`（op 105 的 2B 变体，
   与 SetPlayer/PracticeSetPlayer 的整槽版同 op 异体）；回归测试 `tools/test_room_select_bomber.py`。
+- **个人名片与玩家详细资料界面（My Page / op 301, op 73, op 66, op 74, op 273 ChangeEquipReq，**：参见UserInfoReq.kt
+- **玩家换装/装备穿戴变更同步请求（C→S op 273 **：参见ChangeEquipReq.kt
 - 注意：**带下划线的 Kotlin 函数名无法注册发送包**（OpcodeManager 的 filteredName 会
   substringBefore('_') 截断），新 Packet 类名不能含下划线；handler 顶层 val 名可含下划线（精确匹配字段名）
+- **大厅聊天 C→S op 18**：参见ChatMsg.kt
 - 关键观察：**op 87 = 房间列表（真，2026-08-30 确认，非普通周期推送）**：34 个实例、11 种长度
   （40~59B，随房名长短变化；出现于登录期与大厅期）；结构
   `E2(1) + E4(f1) + E4(f2) + E4(f3) + E4(f4) + E4(名长) + 房名(NUL 补齐到 dword) + E4×3 + E1/E2(0)`；
@@ -235,6 +238,9 @@
   `E1(slot) E1(bomber)`（两个不同槽位各验一次，确认非硬编码）
 - `tools/test_bomb_explosion.py`：水泡状态机回归（启动模拟器后跑）。C→S op 140 放泡 → S→C op 352
   (BombIgnite) → ~2.5s → S→C op 353 (SetBombState, state=0 爆炸消除)
+- `tools/test_chat.py`：大厅聊天**发送方向**回归（启动模拟器后跑）。回放 replay_practice_cs.bin 进大厅，
+  发 C→S op 18（文字 "asf"，令牌化 `D6 08 3C`），断言服务端能正确解码出明文 "asf"
+  且不误判队伍聊天（chatType=1）。⚠️ 不校验 S→C 显示，该 opcode 尚未确定（见上文）。
 - `tools/extract_op75.py`：从 tst.pcap stream4 提取练习房流程的 C→S 完整流/裁剪回放
   （op7/op75/op92 帧，op75/op92 以 ssc_enc 重封装到连续 seq）+ S→C 各 op 完整 payload
   （cap/practice_s2c_op*.bin，含 2B opcode，replay_test 基准）；`tools/gen_practice_kotlin.py`：

@@ -46,6 +46,42 @@ internal fun encodeName(name: String): ByteArray {
     return dst
 }
 
+/**
+ * [encodeName] 的逆變換：4B 一塊 BE 讀 ^0x96CA5395 按 LE 寫回, 尾 2B BE 讀 ^0xA569 按 LE 寫回, 尾 1B ^0x5A。
+ *
+ * 用途：C→S 的字串欄位（聊天文字 op 18、會話令牌 op 297 等）客戶端也是用同一套令牌變換送出的
+ * （實測 "asf" → D6 08 3C），伺服器要拿到明文才能處理/轉發。
+ */
+internal fun decodeName(token: ByteArray): String {
+    val dst = ByteArray(token.size)
+    var i = 0
+    while (i + 4 <= token.size) {
+        val be = ((token[i].toInt() and 0xFF) shl 24) or
+                ((token[i + 1].toInt() and 0xFF) shl 16) or
+                ((token[i + 2].toInt() and 0xFF) shl 8) or
+                (token[i + 3].toInt() and 0xFF)
+        val dec = be xor 0x96CA5395.toInt()
+        dst[i] = dec.toByte()
+        dst[i + 1] = (dec ushr 8).toByte()
+        dst[i + 2] = (dec ushr 16).toByte()
+        dst[i + 3] = (dec ushr 24).toByte()
+        i += 4
+    }
+    while (i < token.size) {
+        if (token.size - i >= 2) {
+            val be = ((token[i].toInt() and 0xFF) shl 8) or (token[i + 1].toInt() and 0xFF)
+            val dec = be xor 0xA569
+            dst[i] = dec.toByte()
+            dst[i + 1] = (dec ushr 8).toByte()
+            i += 2
+        } else {
+            dst[i] = (token[i].toInt() xor 0x5A).toByte()
+            i += 1
+        }
+    }
+    return String(dst, ACP)
+}
+
 class SessionEntry(
     val name: String,
     val level: Int,

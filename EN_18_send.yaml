@@ -77,6 +77,7 @@ ItemDef: 60
 ShopCatalog: 65
 Unk66: 66
 SessionList: 72
+UserInfoResult: 73
 QuestConfigTable: 78
 Unk78Result: 78
 Unk_86: 86

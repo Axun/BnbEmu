@@ -22,7 +22,7 @@ import pingu.netty.PKT
  * 抓包中 [Encode1(0)][Encode4(5000)] 曾被误推为 "疑似 5 秒定时器", 实为初始金币 Lucci=5000,
  * 与 AskFirstInfoResult (op 4) 的 v31=5000 及 Nexon Passport 0x2E 初始金币完全对应.
  */
-fun UserDynamicInfo(propertyId: Int = 0, value: Int = 5000) = PKT {
+fun UserDynamicInfo(propertyId: Int = 0, value: Int = 1234567) = PKT {
     Encode1(propertyId)
     Encode4(value)
 }

@@ -45,10 +45,12 @@ import pingu.packet.shop.FxStockInit
 //   尾 2B LE 讀 ^0xA569 按 BE 寫, 尾 1B ^0x5A). 結構化實作見 packet/JoinSessionResult.kt
 // server = C???::On??? (原始名稱未知, 綁定見 EN_18_recv.yaml JoinSessionReq)
 val JoinSessionReq = PKTHandler { c ->
+    val user = c.users.firstOrNull()
+    val lucci = user?.lucci ?: 1234567
     c.send(
         UserInventoryInfo(), UserInventory(), FxStockInit(),
         UserItemUpdate(), UserItemUpdate(1),
-        UserDynamicInfo(), FxConfig(), EnableShop(),
+        UserDynamicInfo(0, lucci), FxConfig(), EnableShop(),
         RoomList(), ShopCatalog(),
         Unk204(), Unk66(), ChannelsGameState(tailOnes = 2),
         Unk20(), ShopVersion(), Unk247(), Unk423(),
