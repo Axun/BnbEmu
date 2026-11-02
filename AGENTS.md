@@ -1,4 +1,4 @@
-#
+# BnBEmu
 
 尝试适配泡泡堂老版本服务端模拟器的项目。
 
@@ -139,7 +139,8 @@
 - **玩家换装/装备穿戴变更同步请求（C→S op 273 **：参见ChangeEquipReq.kt
 - 注意：**带下划线的 Kotlin 函数名无法注册发送包**（OpcodeManager 的 filteredName 会
   substringBefore('_') 截断），新 Packet 类名不能含下划线；handler 顶层 val 名可含下划线（精确匹配字段名）
-- **大厅聊天 C→S op 18**：参见ChatMsg.kt
+- **进入游戏商城流程（C→S op 315）**：参见EnterShopReq.kt
+- **大厅聊天 C→S （op 18）**：参见ChatMsg.kt
 - 关键观察：**op 87 = 房间列表（真，2026-08-30 确认，非普通周期推送）**：34 个实例、11 种长度
   （40~59B，随房名长短变化；出现于登录期与大厅期）；结构
   `E2(1) + E4(f1) + E4(f2) + E4(f3) + E4(f4) + E4(名长) + 房名(NUL 补齐到 dword) + E4×3 + E1/E2(0)`；

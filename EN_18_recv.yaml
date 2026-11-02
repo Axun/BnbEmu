@@ -84,7 +84,7 @@ StageInitReq: 78
 StartGameReq: 92
 BomberActionAckReq: 172
 Unk_274: 274
-Unk_276: 276
+ShopCatalogReq: 276
 Unk_281: 281
 Unk_293: 293
 Unk_297: 297
@@ -103,3 +103,8 @@ MyPageReq: 301
 WatchUserInfoReq: 74
 ChangeEquipReq: 273
 SweetieInfoReq: 288
+EnterShopReq: 315
+ShopSyncReq: 317
+ShopUserSyncReq: 37
+ShopPackageMapReq: 258
+ShopStringTableReq: 278

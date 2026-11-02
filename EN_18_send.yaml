@@ -15,7 +15,7 @@ ChannelsExtraInfo: 11
 ChannelsState: 13
 ChannelsGameState: 14
 EnterLobbyStage: 15
-EnterShopStage: 18
+EnterShopStage: 17
 ResEstimateRTT: 20
 # op 20 大廳推送版 (44B, 與 ResEstimateRTT 同 op 異構, 見 packet/Unk20.kt)
 Unk20: 20
@@ -115,3 +115,5 @@ PracticeUserInventory: 198
 PracticeUnk198: 198
 PracticeUnk423: 423
 Unk113: 113
+
+EnterShopResult: 259

@@ -221,19 +221,43 @@ object ShopCatalog {
     val DEFAULT_ITEMS: List<ShopItemEntry> by lazy {
         val list = loadBaseItems().toMutableList()
         // 注入蓝妹妹 (TargetCharID == 4 对应 Marid/蓝蓝)
-        list.add(
-            ShopItemEntry(
-                prodId = 2082001,
-                category = 0x10,
-                name = "Posh Evie",
-                periodType = 1,
-                itemId = 2082,
-                count = 1,
-                desc = "Item/CharDeco",
-                tail = ShopItemTail.DEFAULT_ACTIVE,
-            )
-        )
+//        list.add(
+//            ShopItemEntry(
+//                prodId = 2082001,
+//                category = 0x10,
+//                name = "Posh Evie",
+//                periodType = 1,
+//                itemId = 2082,
+//                count = 1,
+//                desc = "Item/CharDeco",
+//                tail = ShopItemTail.DEFAULT_ACTIVE,
+//            )
+//        )
         list
+    }
+
+    /**
+     * Adler-32 校验 (初始值为 0, 对应 CA.exe 0x0074EE50)
+     */
+    fun adler32Zero(data: ByteArray, offset: Int, length: Int): Int {
+        var s1 = 0L
+        var s2 = 0L
+        val mod = 65521L
+        for (i in offset until offset + length) {
+            val b = data[i].toLong() and 0xFFL
+            s1 = (s1 + b) % mod
+            s2 = (s2 + s1) % mod
+        }
+        return (((s2 shl 16) or s1) and 0xFFFFFFFFL).toInt()
+    }
+
+    /**
+     * 计算并缓存当前商城目录在客户端 fxstock.ini 对应的校验哈希 (CheckRevision)
+     */
+    val CATALOG_HASH: Int by lazy {
+        val block = buildBlock(DEFAULT_ITEMS)
+        val bLen = (block[1].toInt() and 0xFF) or ((block[2].toInt() and 0xFF) shl 8)
+        adler32Zero(block, 5, bLen)
     }
 
     /**

@@ -121,30 +121,35 @@ fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
 }
 
 /**
- * C->S op 73: 请求用户详细资料 (用于 My Page 个人中心首次打开或查看他人资料)
+ * C->S op 73: 客户端槽位角色/状态同步请求 (UserInfoReq)
  *
  * 逆向确认 (CA.exe EN v18):
- * - 发包点: CA.exe 0x00501BAF (CStage::OnMyPageButton) -> 0x004F881E
+ * - 发包点: CA.exe 0x004F881E
+ *   - 触发点包括:
+ *     1. 商城退出: CShopStageNew::ExitShop (0x005CDAF2)
+ *     2. 个人名片首次打开: CStage::OnMyPageButton (0x00501BAF)
+ *     3. 切换舞台/阶段: CMainSystem::SetStage (0x0068EA26)
+ *     4. 商城购买/装扮更新等 (0x005DE3B4)
  * - 包体结构: Encode1(count) + repeat(count) { Encode1(bomberId) }
  *   (日志样本: 5B 5A -> count=1, bomberId=0; 5B 5E -> count=1, bomberId=4)
- * - 关键机制与防崩溃说明:
- *   客户端在 0x004F881E 发送 op 73 时，通过 0x006E50F0 循环读取本地各槽位选中的角色 ID (bomberId)，
- *   绝非槽位索引 slotIndex！
- *   若服务端将其误认为 slotIndex 回传给客户端，客户端 CMyPageDialog (0x005E5688 -> 0x0067973E) 寻址
- *   [0x009E06C0 + slotIndex * 0x438]（仅分配了 2 个槽位元素），当 slotIndex >= 2 时将发生堆越界访问
- *   非法虚表指针而触发 0xC0000005 崩溃闪退！
- *   展示自己名片时 slotIndex 恒为玩家在房间中的有效槽位 (通常为 0，安全范围 0..1)。
- *   客户端在 0x004F881E 发送 op 73 时会调用 0x006E4CDA 将内部标志 [0x00993E70 + 0x358] 置为 0 (锁定)。
- *   后续再次打开 My Page 时将跳过 op 73，转由 op 66 / op 301 驱动。
+ * - 关键机制与防误触发说明:
+ *   客户端在此包仅上报本地各槽位选中的角色 ID (bomberId)，以同步服务端角色状态，
+ *   本身并不期望服务端回显 S->C op 73 (UserInfoResult)！
+ *   ⚠️ 游戏内 CMyPageDialog 唯一定义的构造与弹出点位于 0x004FBB6F (CStage::OnUserInfoResult -> 0x004FBFD4)。
+ *   若服务端在此处下发 S->C op 73 UserInfoResult，客户端无论处于何种状态 (例如商城退出时)，
+ *   均会无条件弹出 CMyPageDialog 对话框，导致商城退出时误打开账号资料界面！
+ *   因此本 Handler 仅负责消费载荷并更新槽位角色，切勿在此下发 UserInfoResult。
+ *   名片弹窗功能由 C->S op 66 (UserRestrictReq) 的 isMe==1 分支精准驱动。
  */
 val UserInfoReq = PKTHandler { c ->
     val count = Decode1
     val bomberIds = (0 until count).map { Decode1 }
 
-    // 客户端上报的是各槽位已选角色 ID (bomberIds), 槽位索引恒为其在房间中的有效槽位 (通常为 0)
-    val slotIndex = Room.slots.indexOfFirst { it.user?.c == c }.takeIf { it in 0..1 } ?: 0
-
-    sendUserInfo(c, slotIndex)
+    // 客户端上报的是各槽位已选角色 ID (bomberIds), 同步更新对应槽位角色
+    val userSlot = Room.slots.find { it.user?.c == c }
+    if (userSlot != null && bomberIds.isNotEmpty()) {
+        userSlot.bomber = bomberIds[0].toByte()
+    }
 }
 
 

@@ -29,7 +29,7 @@ data class MyPageUser(
 
 fun MyPageInfo(
     hasProfile: Boolean = true,
-    shopVersion: Int = 0x75D92163,
+    shopVersion: Int = ShopCatalog.CATALOG_HASH,
     packageVersion: Int = 0,
     bannerVersion: Int = 0,
     session: ByteArray = SESSION_STRING,
