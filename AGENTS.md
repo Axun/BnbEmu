@@ -83,97 +83,19 @@
   周期广播发到错误 opcode。逐槽位包公式
   （8 槽样本逐字节验证）：op106=E1((slot<<4)|2)、op104=E1(slot0?0:(slot<<4)|8)、
   op105=E1(slot)E1(5)、op114=E1(slot)E1(5)E1(5)E1(0)E2(0)、op103=E2(slot+1)E1(1)E2(slot+1)E2(1)。
-- **对局阶段启动与水泡引爆机制（2026-09-29 逆向 CA.exe 确认）**：
-  1. **练习房/单人模式（tst.pcap stream 4）**：
-     由 `Unk_92` (C→S op 92) 触发开始序列：`[111 AILevelChange, 112 SelectMap, 100 PracticeStartInfo, 136 PracticeBoard]`。
-     `PracticeBoard (op 136)` (`0x00556b1d` -> `0x00553aa0`) 会直接调用 `0x0053291c` 启动对局全局时钟 `CGameClock` 并初始化所有 Bomber 槽位（设置 `m_bActive = 1`）。
-     ⚠️ **练习房绝不能发送 op 170 / op 171**（op 171 的 `0x00558667` 会设置 `[esi + 0x311c] = 1` 开启多人倒计时 UI；若传入 0 秒时限会导致界面顶部倒计时初始即为 0 且超时卡死）。
-  2. **局内炸弹状态与引爆机制（S→C op 138 SetBombState / S→C op 141 DetonateBomb / S→C op 148 TileBombExplode）**：
-     - **S→C op 138 SetBombState**（`0x55A627` -> `0x5481BD`）：`Encode1(count) + N * [Encode2(bombId) + Encode1(state) + if (state == 0) Encode4(param)]`。生成炸弹时下发 state=1 激活状态；`0x534B18` 收到 state=0 时调用 `0x565E9F` 引爆炸弹。
-     - **S→C op 141 DetonateBomb / BombIgnite**（`0x55A600` -> `0x54BD14`）：`Encode1((action << 4) | (slotId & 0x0F)) + Encode2(bombId) + Encode1(x) + Encode1(y) + Encode1(isSpecial) + Encode1(flags) + Encode1(power)`。action=0 为放置水泡，action=4 为引爆炸弹。
-     - **S→C op 148 TileBombExplode**（`0x55A69B` -> `0x54BA1A`）：`Encode1(((isSpecial?1:0)<<6) | (slotId&0x0F)) + Encode1(x) + Encode1(y)`（3 字节）。直接在 `(x, y)` 触发爆炸火焰十字、杀伤目标、炸毁箱子并掉落道具。
-  3. **客户端事件与状态同步上报机制（C→S op 149 EventItemReq，2026-09-30 逆向 CA.exe 确认）**：
-     - **开局就绪通知（Ready Ack）**：当客户端收到 `PracticeBoard (op 136)` 完成本地棋盘与槽位初始化后，于 `CA.exe 0x00553E5F` 自动发送 **C→S op 149**（`slotId = -1 (0xFF)`, `token = userId (7215)`, `action = 0`, `param = -1`，混淆字节 `A5 96 CA 4F BA 5A 69 35 AC 6A`）。此包为对局加载就绪同步包，**绝非放置炸弹**。
-     - **AI/玩家放置炸弹**：客户端在 `0x0044BD9B` 发送 **C→S op 149**（`slotId = 0..7`, `token = 0`, `action = 0`, `param = -1`）。服务端在 `EventItemReq.kt` 收到后根据槽位当前坐标调用 `Room.addBomb(slotId, slot.gridX, slot.gridY)`，下发 `SetBombState(bombId, state=1)` 并启动 2.5s 倒计时引爆。
-     - **局内异常回退与状态上报**：客户端在 `0x0054A58A` (Action 1: 炸弹计数不一致)、`0x0054A678` (Action 2: 放置炸弹失败回退)、`0x0054BFF7` (Action 3: 碰撞校验不一致)、`0x0054A6E7` (Action 4: 引爆炸弹失败回退)、`0x00549DDF` (Action 10: 特殊道具/事件) 等处均通过 `0x00549C35` 发送 op 149，作为状态同步/异常回退通知。
-     - **局内操作包（C→S op 112）**：局内本地玩家移动、按空格放炸弹（Action 0xA0 | slotId, posX, posY）、使用道具（Action 0x20）与踢水泡（Action 0x40）均在 `0x0054C8B3` 统一构造并发送 **C→S op 112**。
-  4. **CPU 单核 100% 满载说明**：
-     - `CA.exe` 采用经典 DirectDraw/Direct3D 游戏消息循环（`PeekMessage`），在未开启垂直同步（VSync）或外部帧率限制器时会以最大帧率无限渲染，属于老游戏客户端的固有表现。
-- **局内 C→S op 106 / S→C op 139 一问一答（2026-09-11 修正，AI 僵死/水泡不爆的根因之一）**：
-  对局中客户端为每个 AI 槽位发出 C→S **op 106 SetBomberEventReq**（11B body =
-  `E2(0) E1(slot) E4(slot) E1(a) E1(b) E1(0) E1(1)`），真实服务器对每个 op 106 **回显一个
-  S→C op 139**（24B body = `E2(0) E1(slot) E4(slot) E4(0) E4(0) E1(a) E1(b) E1(0) E1(1) E2(slot)
-  E2(0) E1(0)`，前 7 栏与 op 106 相同、尾部 E2=slot；6 样本逐字节验证）。抓包线序显示两者
-  **严格一问一答**：客户端收到对应 slot 的 op 139 后才发下一个槽位的 op 106（seq 逐对验证）。
-  ⚠️ 缺这个回显会让客户端局内事件同步回圈停摆 → **AI 僵死、水泡倒计时不再推进**（此前服务端
-  收到 op 106 后不回包即此症状）。实现见 `handler/room/SetBomberEventReq.kt` +
-  `packet/room/SetBomberEvent.kt`；回归测试 `tools/test_ai_sync.py`。
+- 大厅中参见 `docs/agents-notes-lobby.md`
+- 房间中参见 `docs/agents-notes-room.md`
+- 对局中参见 `docs/agents-notes-battle.md`
 - 实现见 `handler/CreatePracticeSessionReq.kt`（op 75，⚠️ 原误绑 op 86）、`handler/Unk_92.kt`（游戏开始）、
   `handler/room/BomberActionAckReq.kt`（C→S op 172 角色动作切换确认空包）、`packet/Practice*.kt` / `packet/room/ItemThrow.kt`；
   工具 `tools/extract_op75.py`（提取回放+blob）、`tools/gen_practice_kotlin.py`（生成 blob 常量）；
   基准 cap/practice_s2c_op*.bin。op 4 的 13B/65B 变体与进频道一致（body 已核对 = chan 基准）。
-- **设置电脑敌人等级（op 88 AILevelChangeReq，2026-09-10 逆向 CA.exe 确认）**：在房间/练习房界面调整
-  AI 难度等级时由客户端发出 **op 88 (0x58)**（CA.exe 中 `CPrepareStrategyAIBattle::OnButtonClick`
-  触发，原 TW_5 为 op 110）。body = `E1(chief/f1) + E1(slotIdx) + E1(newLevel) + E1(flags/f4)`（4 字节）；
-  服务器更新 `Room.slots[slotIdx].AILevel = newLevel` 并下发 **op 103 PracticeSlot103**
-  （`E2(slotIdx) + E1Bool(isAI) + E2(newLevel) + E2(flags)`，7 字节），`CPrepareStrategyAIBattle::OnPacket`
-  (`0x52d188` -> Case 103 `0x52b39a`) 收到后调用 `0x52b048`/`0x52b0ad` 刷新槽位 UI 并执行
-  `and dword ptr [esi + 0x3250], 0` 清除等待锁。
-- **踢出电脑敌人 / 打开关闭槽位（op 89 OpenCloseSlotReq，2026-09-10 逆向 CA.exe 确认）**：在房间/练习房
-  界面踢出 AI 或切换槽位开关时由客户端发出 **op 89 (0x59)**（CA.exe 中 `0x4f6866` / `0x51c7ea` 触发，
-  原 TW_5 为 op 100）。body = `E1((slotIdx << 4) | (action & 0x0F))`（1 字节）；
-  服务器重置该槽位 AI 状态并下发 **op 106 PracticeSlotReady**（`E1((slotIdx << 4) | state)`，清除
-  `CSlotStage` 的 `[esi + 0x2f64]` 等待锁 2）与 **op 103 PracticeSlot103(isAI=false)**（`E2(slotIdx) + E1Bool(0) + E2(0) + E2(0)`，
-  触发 `CPrepareStrategyAIBattle` 的 `0x685ed9` 移除 AI 槽位并清除策略等待锁）。
-- **房间内切换角色（C→S op 87，2026-10-31 逆向 CA.exe 确认）**：在房间界面点击槽位里的角色头像切换
-  bomber 时由客户端发出 **op 87 (0x57)**（CA.exe `0x4F67E9`，`CPrepareStrategyAIBattle` 的槽位角色设置；
-  原 TW_5 把切换角色放在 op 99，真实 EN 客户端发的是 87）。body = `E1(slotIdx) + E1(bomberIdx)`（2 字节，
-  实测明文 `5A 5C` → 槽位 0 / bomber 6）。
-  ⚠️ 发包后客户端立刻把 `[esi + 0x2f64] = 5` 锁住该槽位（`0x4F6848`），锁未清前 `0x4F67F7` 的 guard 会
-  直接丢弃后续 op 87 → **服务器必须回 S→C op 105**（`E1(slotIdx) + E1(bomberIdx)`，2 字节）才能解锁。
-  房间阶段分派器 `0x4F480C` 的 op 105 分支走虚表 `+0x1A0` → `0x4EFBF6`：只读两个 Encode1 应用角色后，
-  于 `0x4EFC96` 把 `[+0x2f64] == 5` 清零。缺此应答 → 槽位永久卡等待锁、再点角色无任何反应。
-  实现见 `handler/room/RoomSelectBomberReq.kt` + `packet/room/SlotBomber.kt`（op 105 的 2B 变体，
-  与 SetPlayer/PracticeSetPlayer 的整槽版同 op 异体）；回归测试 `tools/test_room_select_bomber.py`。
 - **个人名片与玩家详细资料界面（My Page / op 301, op 73, op 66, op 74, op 273, op 288 SweetieInfoReq）**：参见 `UserInfoReq.kt` + `UserRestrictReq.kt` + `SweetieInfoReq.kt`。
 - **玩家换装/装备穿戴变更同步请求（C→S op 273 **：参见ChangeEquipReq.kt
 - 注意：**带下划线的 Kotlin 函数名无法注册发送包**（OpcodeManager 的 filteredName 会
   substringBefore('_') 截断），新 Packet 类名不能含下划线；handler 顶层 val 名可含下划线（精确匹配字段名）
 - **进入游戏商城流程（C→S op 315）**：参见EnterShopReq.kt
 - **大厅聊天 C→S （op 18）**：参见ChatMsg.kt
-- 关键观察：**op 87 = 房间列表（真，2026-08-30 确认，非普通周期推送）**：34 个实例、11 种长度
-  （40~59B，随房名长短变化；出现于登录期与大厅期）；结构
-  `E2(1) + E4(f1) + E4(f2) + E4(f3) + E4(f4) + E4(名长) + 房名(NUL 补齐到 dword) + E4×3 + E1/E2(0)`；
-  **房名加密与 op 72 令牌同款变换**，已解出 13 个真实房名：rd / Everyone welcome! /
-  Taylor Swift is here / gogo battle / 01234567899 / vietnam / come together! / /np / all no /
-  K8-k-3 / K8XNaVYLFQ / tw / 1 —— enter-channel.pcap 的 41B 实例就是 **"rd" 房**（模拟器 RoomList
-  重放包，客户端 UI 显示的正是它）。f1/f2/f3/f4/tail 与 房间编号/上限/当前人数 的对应尚未钉死
-  （rd 实例：f1=33, f2=7192[低16位恒 0x18], f3=61<<16, f4=119, t1=0x08000000, t2=0x04100077, t3=0）；
-  下一步：在真实服务器房间界面（rd #12 1/1）抓 1 分钟 op 87，按 12/1/1 值匹配钉死字段；
-  op 86（12 次，23~25B）；
-  **op 122 UserDynamicInfo = 用户动态数据同步（Lucci金币等，详见 `packet/UserDynamicInfo.kt` ）**；op 4 有三个变体（登录连线 65B /
-  频道连线 65B 全零 / 13B 查询应答，均含或邻接 4B 会话串）；
-  op 210 EnableShop 实为 24KB 商城目录、op 65 ShopCatalog ≈50KB（商城商品与角色卡全量目录，已结构化）、op 60 ItemDef ≈46KB（全量物品定义目录，已结构化支持动态配置与进阶角色卡启用）；
-  **op 72 SessionList = 频道在线用户列表**（⚠️ 2026-08-30 与游戏界面比对，非房间列表；已结构化：`packet/SessionList.kt` 的 SessionEntry）：
-  `E2(0) + E1(条目数) + N 条目`，条目 = `E2(len)+角色名令牌(4~6B) + 42B 固定栏位`；
-  已解出栏位语义：number=E2 玩家**等级**（样本 326→1 递减 = 326..1 级玩家，非房间号）、
-  maxCount=E4 恒 50（频道人数上限）、curCount=E4（样本 16/17/0，频道当前在线数）、
-  state=E1 与 state2=E2（样本仅一玩家同为 1，是否同一标志待观察），其余恒 0；
-  **令牌 = 玩家角色名的加密形式**（2026-08-30 由末条 = 抓包账号 kcworms1 的角色名 ffdf 对出：
-  按 4B 一块 LE 读 ^ 0x96CA5395 按 BE 写回（SSD/Encode4 逆变换），尾部 2B **LE 读 ^0xA569 按 BE 写回**、
-  尾部 1B ^0x5A，**尾部 3B = 2B 尾 + 1B 尾**（2026-08-30 由 tst.pcap 角色名 kcworm1 [7B] 对出：
-  令牌 f9bd30fec81b6b = kcwo 4B块 + rm 2B尾 + 1 1B尾；初解漏 2B 尾字节序交换导致 6B 名末两字对调），
-  令牌长恒等于角色名长、任意长度成立；8 条 enter-channel 样本经游戏界面人名核为
-  Kuso/Lotso/Jacko/suan/Hello/Mirage/Static/ffdf 且回编码逐字节一致）；
-  S→C op 81 名册回显同一批玩家令牌（细节见 JoinSessionReq.kt 注释）
-  —— replay_test 对 op 72 做逐字节断言；
-  **op 6 ReqConnectToSvr 是 EN 进频道的真实步骤**（2026-08-30 更正：此前误判"TW 专用、EN 抓包从未出现"，
-  实际藏在 enter-channel.pcap 登录连线收尾的半截流里，decoded_dump 对其记 0 包）：C 发 op 6
-  （E1(10)+E4(2)，E4 含义不明、真实抓包为 2 / live 客户端为 0）→ S 回 **op 7**
-  （E1(1)+E1(10)+E4(回显)+E4(IP)+E2(3838)，已逐字节解出）→ 客户端关登录连线、新开连线到 IP:port。
-  ResConnectToSvr 已注册为 S→C op 7（EN_18_send.yaml；TW 客户端仍预期 op 6，TW_5_send.yaml 未动）
-- 与旧 TW_5 表冲突处：进频道请求真实是 **op 11**（旧表 EnterChannelStageReq=9）；
-  C 发 2 后服务器回 **op 4**（旧表把 FirstInfoInit 当 2 的回应；实际 1861B 的 op 2 是服务器主动推送）
 
 ## SSD 资料块编码（op1/op2/op51/op11/op13/op12 内嵌子块，2026-08-30/2026-09-10 逆向）
 - 结构：`Encode1Bool(true) + Encode4(len) + len 字节资料块`（op13/op12 无开头的 Encode1Bool）；

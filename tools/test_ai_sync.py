@@ -1,10 +1,14 @@
 # -*- coding: utf-8 -*-
-"""局内 AI/角色事件同步回归测试 (先启动模拟器, 再运行)。
+"""局内 AI/角色放置水泡与引爆同步回归测试 (先启动模拟器, 再运行)。
 
 验证对局中:
   1) 每 ~400ms 周期性收到 S→C op 172 (ItemThrow, 实体时间同步);
-  2) 发出 C→S op 106 (SetBomberEventReq) 后, 收到 S→C op 139 (SetBomberEvent) 回显,
-     且载荷与 tst.pcap stream4 抓包逐位元组一致 (slot/a/b 三栏随 op 106 变化)。
+  2) 第一轮发出 C→S op 106 (SetBomberEventReq, slot=4, bombToken=4) 后,
+     收到 S→C op 139 (SetBomberEvent) 回显, 且载荷与 tst.pcap stream4 抓包逐位元组一致;
+  3) 2.5s 倒计时到期后, 收到 S→C op 138 (SetBombState, bombId=4, state=0),
+     且不会误发 S→C op 148 (DropObstacleResult, 避免在地面错误生成香蕉皮/图钉);
+  4) 第二轮发出 C→S op 106 (slot=4, bombToken=12=4+8) 后,
+     收到 S→C op 139 回显且第 3 栏 bombToken=12、第 10 栏 bombId=12。
 
 用法: 先 `mvn exec:java` 启动模拟器, 再 `python tools/test_ai_sync.py`
 """
@@ -16,11 +20,16 @@ from decode_final import dec_s2c, ssc_enc, crc8_pingu
 PORT = 3838
 BANNER_BODY = bytes.fromhex('0000120012000000000100000000000037000000')
 
-# tst.pcap stream4 真实 C→S op 106 载荷 (含 2B opcode): slot=4, a=1, b=12
-OP106_SLOT4 = bytes.fromhex('a503 a569 5e 96ca5391 5b 56 5a 5b'.replace(' ', ''))
+# tst.pcap stream4 真实 C→S op 106 载荷 (含 2B opcode): slot=4, bombToken=4, gridX=1, gridY=12
+OP106_SLOT4_R1 = bytes.fromhex('a503 a569 5e 96ca5391 5b 56 5a 5b'.replace(' ', ''))
 # 真实 S→C op 139 回显 (含 2B opcode), 同一对
-OP139_SLOT4 = bytes.fromhex(
+OP139_SLOT4_R1 = bytes.fromhex(
     'a5e2 a569 5e 96ca5391 96ca5395 96ca5395 5b 56 5a 5b a56d a569 5a'.replace(' ', ''))
+
+# 第二轮放泡: slot=4, bombToken=12 (0x96CA5395 ^ 12 = 0x96CA5399), bombId=12 (0xA569 ^ 12 = 0xA565)
+OP106_SLOT4_R2 = bytes.fromhex('a503 a569 5e 96ca5399 5b 56 5a 5b'.replace(' ', ''))
+OP139_SLOT4_R2 = bytes.fromhex(
+    'a5e2 a569 5e 96ca5399 96ca5395 96ca5395 5b 56 5a 5b a565 a569 5a'.replace(' ', ''))
 
 
 def build_c2s_frame(seq, payload, uid=198):
@@ -37,10 +46,10 @@ def collect(s, seconds):
     while time.time() < end:
         try:
             d = s.recv(65536)
-            if d:
-                data += d
         except socket.timeout:
-            pass
+            continue
+        if d:
+            data += d
     return data
 
 
@@ -62,26 +71,38 @@ def main():
     s.sendall(open(os.path.join(base, 'tools/replay_practice_cs.bin'), 'rb').read())
 
     # 累积整段 S→C 流 (dec_s2c 只能从 seq=40/43 起对齐, 故必须一次解码整条流)
-    data = collect(s, 1.2)
+    data = collect(s, 1.0)
 
-    # 发 C→S op 106 (seq=49, 接续回放帧 40/43/46), 期望回 S→C op 139
-    s.sendall(build_c2s_frame(49, OP106_SLOT4))
-    data += collect(s, 0.8)
+    # 1) 第一轮发 C→S op 106 (seq=49, slot=4, bombToken=4), 期望回 S→C op 139 + 2.5s 后 op 138
+    s.sendall(build_c2s_frame(49, OP106_SLOT4_R1))
+    data += collect(s, 2.8)
+
+    # 2) 第二轮发 C→S op 106 (seq=52, slot=4, bombToken=12), 期望回 S→C op 139 (bombToken=12, bombId=12)
+    s.sendall(build_c2s_frame(52, OP106_SLOT4_R2))
+    data += collect(s, 0.5)
 
     ops, pkts = ops_of(data)
     assert 172 in ops, f'未收到周期性 op 172 (ItemThrow), ops={ops}'
     n172 = ops.count(172)
     print(f'[AiSync] 收到周期性 op 172 (ItemThrow) ×{n172} ✓')
 
-    assert 139 in ops, f'未收到 op 139 (SetBomberEvent) 回显, ops={ops}'
-    got = next(p['p'] for p in pkts if p['crc_ok']
-               and struct.unpack('>H', p['p'][:2])[0] ^ 0xA569 == 139)
-    assert got == OP139_SLOT4, \
-        f'op 139 载荷与抓包不一致:\n  got {got.hex(" ")}\n  exp {OP139_SLOT4.hex(" ")}'
-    print(f'[AiSync] op 106 → op 139 回显逐位元组与抓包一致 ✓ ({len(got)}B)')
+    op139_list = [p['p'] for p in pkts if p['crc_ok']
+                  and struct.unpack('>H', p['p'][:2])[0] ^ 0xA569 == 139]
+    assert len(op139_list) >= 2, f'未收到两轮 op 139 (SetBomberEvent) 回显, got={len(op139_list)}'
+    assert op139_list[0] == OP139_SLOT4_R1, \
+        f'第一轮 op 139 载荷与抓包不一致:\n  got {op139_list[0].hex(" ")}\n  exp {OP139_SLOT4_R1.hex(" ")}'
+    print(f'[AiSync] 第一轮 op 106 → op 139 回显逐位元组与抓包一致 ✓ ({len(op139_list[0])}B)')
+
+    assert 138 in ops, f'未收到 2.5s 到期引爆包 op 138 (SetBombState), ops={ops}'
+    assert 148 not in ops, f'不应发送 op 148 (DropObstacleResult), ops={ops}'
+    print('[AiSync] 收到 2.5s 到期引爆包 op 138 (SetBombState) 且未误发 op 148 ✓')
+
+    assert op139_list[1] == OP139_SLOT4_R2, \
+        f'第二轮 op 139 (bombToken=12, bombId=12) 载荷不一致:\n  got {op139_list[1].hex(" ")}\n  exp {OP139_SLOT4_R2.hex(" ")}'
+    print('[AiSync] 第二轮 op 106 → op 139 (bombToken=12, bombId=12) 验证通过 ✓')
 
     s.close()
-    print('[AiSync] AI 事件同步测试全部通过！ALL PASS ✓')
+    print('[AiSync] AI 放泡与引爆同步测试全部通过！ALL PASS ✓')
 
 
 if __name__ == '__main__':

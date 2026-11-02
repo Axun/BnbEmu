@@ -7,26 +7,27 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.room.SetBomberEvent
 import bnbemu.server.Room
 
-// 局内角色/AI 网格位置与移动事件同步 (C→S op 106)
-// 逆向定位: CA.exe 0x00638851 (CBomberSlot::OnTileStep) -> 0x00643f37 (SendPacket)
-// 触发机制: 角色 (玩家 Slot 0 或 AI Slot 1~7) 在地图上移动踏入新格子或到达路径点时触发。
+// 局内角色/AI 放置水泡请求 (C→S op 106)
+// 逆向定位: CA.exe 0x006375A1 / 0x00534CCA -> CBombBag::0x0044C056 -> CGameMsgCache::0x005391AB -> 0x00539A4B (push 0x6a)
+// 触发机制: 角色 (玩家 Slot 0 或 AI Slot 1~7) 放置水泡时，先在本地分配待确认水泡并生成全局唯一 bombToken (slotId + 8*k)，随后发出本包。
 // 载荷结构 (11B):
-//   E2(0)         固定序列号/子类型
+//   E2(subType)   子类型 (恒为 0)
 //   E1(slotId)    角色槽位 (0=玩家, 1~7=AI)
-//   E4(slotParam) 槽位参数 (与 slotId 同值)
-//   E1(gridX)     当前网格 X 坐标 (0..14)
-//   E1(gridY)     当前网格 Y 坐标 (0..12)
-//   E1(0)         固定标志 0 (无按键/放弹状态位)
-//   E1(1)         固定标志 1
+//   E4(bombToken) 客户端生成的待确认水泡令牌 (0x0044BFE0: 初始为 slotId, 该槽位每放一颗泡 +8)
+//   E1(gridX)     水泡所在行坐标 (0..12)
+//   E1(gridY)     水泡所在列坐标 (0..14)
+//   E1(flag0)     特殊水泡标志 (0=普通)
+//   E1(flag1)     水泡威力与标志位 (低 4 位 = 水泡威力 power)
 //
-// 真实服务器对每个 op 106 回显一个 S→C op 139 (SetBomberEvent)，且两者严格一问一答：
-// 客户端收到对应 slot 的 op 139 后才会允许推进下一个事件节点 / 下一个 slot 发包。
-// 缺少回显会导致客户端局内事件同步回路停摆 -> AI 僵死。
+// 服务端处理:
+//   1) 调用 Room.addBomb 注册水泡 2.5s 倒计时 (到期后由 Room.onTick 广播 S→C op 138 SetBombState(bombId, 0) 与 op 148 引爆);
+//   2) 回显 S→C op 139 (SetBomberEvent)，原样带回 bombToken 及服务端分配的 bombId，
+//      客户端在 0x0054A3EA -> 0x0044BD9B 匹配 bombToken 后将 bombId 写入水泡对象 (+0x90) 并扣减待确认计数。
 // server = CGameSession::OnSetBomberEvent
 val SetBomberEventReq = PKTHandler { c ->
     val subType = Decode2
     val slotId = Decode1
-    val slotParam = Decode4
+    val bombToken = Decode4
     val gridX = Decode1
     val gridY = Decode1
     val flag0 = Decode1
@@ -37,6 +38,24 @@ val SetBomberEventReq = PKTHandler { c ->
         Room.slots[slotId].gridY = gridY
     }
 
-    val pkt = SetBomberEvent(slotId, gridX, gridY)
+    val bombId = Room.addBomb(
+        slotId = slotId,
+        gridX = gridX,
+        gridY = gridY,
+        isSpecial = (flag0 != 0),
+        bombId = bombToken,
+        broadcastInitialState = false
+    )
+
+    val pkt = SetBomberEvent(
+        slot = slotId,
+        gridX = gridX,
+        gridY = gridY,
+        bombToken = bombToken,
+        bombId = bombId,
+        subType = subType,
+        flag0 = flag0,
+        flag1 = flag1
+    )
     Room.BC(pkt)
 }

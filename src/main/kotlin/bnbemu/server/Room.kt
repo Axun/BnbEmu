@@ -58,6 +58,10 @@ object Room {
     }
 
     // CGameSession::Update - 定时更新水泡倒计时并广播爆炸状态
+    // 注意: S→C op 138 SetBombState(bombId, 0) (CA.exe 0x005481BD -> 0x00534B18 -> 0x00565E9F)
+    // 已完整处理水泡引爆、十字水柱、炸箱子与爆出道具。
+    // 绝不可在此追加发送 S→C op 148 (CA.exe 0x0054BA1A -> 0x00477CEF), 因为 op 148 实为
+    // DropObstacleResult (放置地面障碍物: 1=地雷, 2=陷阱, 3=香蕉皮 Item/BananaGround, 4=图钉 Item/PushpinGround)!
     private fun onTick() {
         val now = System.currentTimeMillis()
         val stateChanged = mutableListOf<Bomb>()
@@ -73,8 +77,7 @@ object Room {
 
         if (stateChanged.isNotEmpty()) {
             stateChanged.forEach { bomb ->
-                BC(SetBombState(bomb.id, 0))
-                BC(TileBombExplode(bomb.ownerSlotId, bomb.gridX, bomb.gridY))
+                BC(SetBombState(bomb.id, bomb.state))
             }
         }
     }
@@ -92,19 +95,34 @@ object Room {
     }
 
 
-    fun addBomb(slotId: Int, gridX: Int, gridY: Int, isSpecial: Boolean = false, unk: Int = 0) {
+    fun addBomb(
+        slotId: Int,
+        gridX: Int,
+        gridY: Int,
+        isSpecial: Boolean = false,
+        unk: Int = 0,
+        bombId: Int? = null,
+        broadcastInitialState: Boolean = true
+    ): Int {
+        val allocatedId = bombId ?: nextBombId++
+        if (allocatedId >= nextBombId) {
+            nextBombId = allocatedId + 1
+        }
         executor.execute {
-            val bombId = nextBombId++
-            val bomb = Bomb(bombId, slotId, (gridY shl 8) or gridX, 0, isSpecial).apply {
+            val bomb = Bomb(allocatedId, slotId, (gridY shl 8) or gridX, 0, isSpecial).apply {
                 this.gridX = gridX
                 this.gridY = gridY
                 this.expireAt = System.currentTimeMillis() + 2500
             }
             synchronized(bombs) {
+                bombs.removeIf { it.id == allocatedId }
                 bombs += bomb
             }
-            BC(SetBombState(bombId, state = 1))
+            if (broadcastInitialState) {
+                BC(SetBombState(allocatedId, state = 1))
+            }
         }
+        return allocatedId
     }
 
     fun getBomb(bombId: Int): Bomb? {
