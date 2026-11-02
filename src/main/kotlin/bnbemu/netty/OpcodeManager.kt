@@ -36,7 +36,12 @@ object OpcodeManager {
                             recvYaml[fieldInfo.name]?.let { op ->
                                 if (op in handlerArray.indices) {
                                     val field = fieldInfo.loadClassAndGetField().apply { isAccessible = true }
-                                    handlerArray[op] = field.get(null) as? PKTHandler
+                                    val handler = field.get(null) as? PKTHandler
+                                    val existing = handlerArray[op]
+                                    if (existing != null && existing !== handler) {
+                                        error("Opcode $op (${fieldInfo.name}) 衝突! 已綁定 Handler 被 ${classInfo.name}.${fieldInfo.name} 重複定義/覆蓋")
+                                    }
+                                    handlerArray[op] = handler
                                 }
                             }
                         }
