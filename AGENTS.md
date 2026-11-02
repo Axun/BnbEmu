@@ -36,7 +36,7 @@
 
 ## 端口拓扑（tshark SYN 实测）
 - 游戏 TCP **3838**：登录、频道、房间全部业务都在这一个端口；项目原 3838/4848/4849 多端口分服布局与真实不符
-- TCP **47611**：Nexon passport 登录协议（nmco_session，UTF-16），客户端先在此验证账号密码换取票据再连 3838。2026-10-07 已彻底逆向 nmconew.dll 破译；协议帧封装、0x18 容器流、PCBC 加密算法及业务字段等所有具体实现细节已全部记录在源码注释中，详见 `src/main/kotlin/pingu/netty/PassportServer.kt`。
+- TCP **47611**：Nexon passport 登录协议（nmco_session，UTF-16），客户端先在此验证账号密码换取票据再连 3838。2026-10-07 已彻底逆向 nmconew.dll 破译；协议帧封装、0x18 容器流、PCBC 加密算法及业务字段等所有具体实现细节已全部记录在源码注释中，详见 `src/main/kotlin/bnbemu/netty/PassportServer.kt`。
   ⚠️ 客户端二进制侧的 47611 地址在 nmconew.dll/nmcogame.dll 的 **UTF-16LE 表**（各 8 槽），patch_ip.py 已补齐该编码的替换（此前只补 ASCII 导致打过补丁仍连远端 passport）。
 
 ## opcode（已补全进 EN_18_recv/send.yaml）

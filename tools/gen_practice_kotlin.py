@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """从 cap/practice_s2c_op*.bin 生成 Kotlin blob 常量 (保证逐字节一致)。
-用法: python tools/gen_practice_kotlin.py > src/main/kotlin/pingu/packet/PracticeBlobs.kt
+用法: python tools/gen_practice_kotlin.py > src/main/kotlin/bnbemu/packet/PracticeBlobs.kt
 """
 import os
 
@@ -33,9 +33,9 @@ def fmt_kotlin_hex(b, per_line=16):
 
 
 def main():
-    print("package pingu.packet")
+    print("package bnbemu.packet")
     print()
-    print("import pingu.netty.toBA")
+    print("import bnbemu.netty.toBA")
     print()
     print("// ============================================================")
     print("// Practice room (op 75) response-chain blobs.")
