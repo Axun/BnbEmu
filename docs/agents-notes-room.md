@@ -23,7 +23,7 @@
   与 SetPlayer/PracticeSetPlayer 的整槽版同 op 异体）；回归测试 `tools/test_room_select_bomber.py`。
 - **房间内选择地图（C→S op 85 SelectMapReq / S→C op 108 SelectMap，2026-11-03 逆向 CA.exe 确认）**：在房间界面选择地图时由客户端发出 **op 85 (0x55)**（CA.exe 中 `0x51c60f` 触发，原 TW_5 为 op 97）。body = `E2(themeId) + E4(mapId)`（6 字节，实测 `A5 75 96 CA 53 3A` → themeId 28, mapId 175）。
   ⚠️ 发包后客户端在 `0x51c65b` 设置选图等待锁 `[esi + 0x2f78] = 1` 并调用虚表 `[+0x1c4](0)` 禁用选图按钮。
-  **服务端响应必须下发 S→C op 108 SelectMap**（原 TW_5 误标为 112；112 实为开局 165B 地图槽位出生点初始化 `PracticeSelectMap`）。
+  **服务端响应必须下发 S→C op 108 SelectMap**（原 TW_5 误标为 112；112 实为开局 165B 对局地图与出生点初始化 `GameStartMapInfo`）。
   `CPrepareStage::OnPacket` (`0x52a949` -> Case 108: `0x51efe0`) 收到后：
   1. 检查 `[esi + 0x2f78] == 1` 并清零解锁，调用 `[edx + 0x1c4](1)` 重新启用选图按钮；
   2. 读取 `E2(result)`，若为 0 进入成功分支 `0x51f105`；

@@ -15,8 +15,6 @@ import kotlin.random.Random
 object Room {
     private val executor: EventLoop = workerGroup.next()
     private var tickFuture: ScheduledFuture<*>? = null
-    private var aiTickFuture: ScheduledFuture<*>? = null
-    private var gameStartMs = 0L
     private var nextBombId = 0
     val slots = Array(8) { Slot() }
     var mapId = 89
@@ -37,13 +35,7 @@ object Room {
         tickFuture?.cancel(false)
         tickFuture = executor.scheduleAtFixedRate(::onTick, 0, 200, TimeUnit.MILLISECONDS)
 
-        if (isEN) {
-            // 真实 EN 服务器在对局中每 ~400ms 广播一个 op 172 (ItemThrow/实体时间同步),
-            // 见 tst.pcap stream4 sq=343~400。移除它会让客户端局内实体推进停摆。
-            gameStartMs = System.currentTimeMillis()
-            aiTickFuture?.cancel(false)
-            aiTickFuture = executor.scheduleAtFixedRate(::aiTick, 400, 400, TimeUnit.MILLISECONDS)
-        } else {
+        if (!isEN) {
             // temp fix jp crash
             if (isJP)
                 mapId = 118
@@ -56,6 +48,9 @@ object Room {
                 DoStartGame(random)
             )
         }
+        // EN: 对局推进完全由客户端本地 AI (CAIPlayer / CAIGoal*) 与本地时钟驱动,
+        // 服务端只在 C→S op 106 时回 S→C op 139、2.5s 后回 op 138 引爆, 无需任何周期广播。
+        // (曾误加每 400ms 的 op 172 "ItemThrow" 广播, 实为地图事件时间轴同步, 见 MapEventSync.kt)
     }
 
     // CGameSession::Update - 定时更新水泡倒计时并广播爆炸状态
@@ -87,14 +82,24 @@ object Room {
     fun onEventItem(slotId: Int, token: Int, action: Int, param: Int) {
     }
 
-    // 对局进行中周期性广播 op 172 (实体/道具时间同步) — 复刻真实服务器 ~400ms 节奏。
-    // body 的 E4 为对局开始以来的毫秒数 (抓包样本 401/801/1201/2002... 与墙钟吻合)。
-    private fun aiTick() {
-        val elapsed = (System.currentTimeMillis() - gameStartMs).toInt()
-        val flag = (elapsed / 400) % 4
-        BC(ItemThrow(elapsed, flag))
+    // 角色死亡上报处理 (C→S op 154 action=5 -> CA.exe 0x0046DB1D CGOGameBomber::OnDie)
+    fun onBomberDie(slotId: Int) {
+        if (slotId in slots.indices) {
+            // 广播 S→C op 159 BomberDie 触发客户端播放死亡动画与淘汰状态设置 (CA.exe 0x0054C378)
+            BC(BomberDie(slotId))
+            // 若玩家自己 (槽位 0) 阵亡，延迟 1.5 秒下发 GameOver 结束对局 (CA.exe 0x0055345D)
+            // 紧接着下发 S→C op 169 InitGameResult 与 op 150 GameResult 弹出结算界面 (CA.exe 0x0055856A / 0x00559854)
+            if (slotId == 0) {
+                executor.schedule({
+                    BC(
+                        GameOver(winnerSlotId = 1),
+                        InitGameResult(mode = 0, mapId = 0),
+                        GameResult(winnerTeam = 1, delayMs = 2000)
+                    )
+                }, 1500, TimeUnit.MILLISECONDS)
+            }
+        }
     }
-
 
     fun addBomb(
         slotId: Int,
@@ -156,16 +161,13 @@ object Room {
 
     fun endGame() {
         tickFuture?.cancel(false)
-        aiTickFuture?.cancel(false)
         bombs.clear()
     }
 
     fun reset() {
         tickFuture?.cancel(false)
-        aiTickFuture?.cancel(false)
         bombs.clear()
         nextBombId = 0
         lastAirplaneTime = 0L
-        gameStartMs = 0L
     }
 }

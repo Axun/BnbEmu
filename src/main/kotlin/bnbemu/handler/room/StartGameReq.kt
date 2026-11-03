@@ -79,6 +79,6 @@ val StartGameReq = PKTHandler { c ->
         PracticeBoard(),
     )
 
-    // 啟動遊戲主循環 (onTick 爆炸檢測與炸彈狀態同步, aiTick 實體時間同步)
+    // 啟動對局主循環 (onTick: 水泡倒计时与 op 138 爆炸状态同步)
     Room.startGame()
 }

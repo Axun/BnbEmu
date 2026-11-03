@@ -17,7 +17,8 @@ BLOBS = [
     ("EN_OP111", "practice_s2c_op111_3B_0.bin"),
     ("EN_OP112", "practice_s2c_op112_167B_0.bin"),
     ("EN_OP136", "practice_s2c_op136_180B_0.bin"),
-    ("EN_OP172", "practice_s2c_op172_17B_0.bin"),
+    # op 172 不再作為原樣重放的 blob 內嵌: 逆向確認為 MapEventSync (地圖事件時間軸同步),
+    # 且其前 4 字節是必須匹配的會話校驗值, 硬編碼抓包值無意義 (見 tools/rev_op172.py)。
     ("EN_OP198_PRACTICE", "practice_s2c_op198_137B_0.bin"),
     ("EN_OP423_PRACTICE", "practice_s2c_op423_26B_0.bin"),
 ]

@@ -75,19 +75,12 @@
   `[87 RoomList, 83 SessionSimpleInfo, 4(13B), 4(65B), 113, 100(78B), 108, 106×8,
   每槽(114,104,105,103 交错, 槽7 无 103), 198, 423]`；
   随后客户端自动跟发 297/302，再发 **op 92** 触发游戏开始 → S 回 `[111, 112 SelectMap(165B),
-  100(77B), 136(178B 棋盘块)]`（线序 seq=331~340）；之后服务器**周期性广播 op 172 ItemThrow**
-  （op 172 body = `E2(176) E2(29) E1(1) E4(elapsed_ms) E1(1) E1(0) E2(0) E1(0) E1(flag)`，
-  **E4 = 对局开始以来的毫秒数**，13 样本 401/801/1201/1601/2002... 与墙钟吻合，flag 疑似朝向；
-  `Room.aiTick` 每 400ms 广播一次）。⚠️ **ItemThrow 实测 opcode = 172**（tst.pcap stream4
-  sq=343~400 逐包 CRC8 验证），**不是**局内 +200 偏移的 374——EN_18_send.yaml 曾误配 374 导致
-  周期广播发到错误 opcode。逐槽位包公式
-  （8 槽样本逐字节验证）：op106=E1((slot<<4)|2)、op104=E1(slot0?0:(slot<<4)|8)、
-  op105=E1(slot)E1(5)、op114=E1(slot)E1(5)E1(5)E1(0)E2(0)、op103=E2(slot+1)E1(1)E2(slot+1)E2(1)。
+  100(77B), 136(178B 棋盘块)]`（线序 seq=331~340）。
 - 大厅中参见 `docs/agents-notes-lobby.md`
 - 房间中参见 `docs/agents-notes-room.md`
 - 对局中参见 `docs/agents-notes-battle.md`
 - 实现见 `handler/CreatePracticeSessionReq.kt`（op 75，⚠️ 原误绑 op 86）、`handler/Unk_92.kt`（游戏开始）、
-  `handler/room/BomberActionAckReq.kt`（C→S op 172 角色动作切换确认空包）、`packet/Practice*.kt` / `packet/room/ItemThrow.kt`；
+  `handler/room/BomberActionAckReq.kt`（C→S op 172 角色动作切换确认空包）、`packet/Practice*.kt` / `packet/room/MapEventSync.kt`；
   工具 `tools/extract_op75.py`（提取回放+blob）、`tools/gen_practice_kotlin.py`（生成 blob 常量）；
   基准 cap/practice_s2c_op*.bin。op 4 的 13B/65B 变体与进频道一致（body 已核对 = chan 基准）。
 - **个人名片与玩家详细资料界面（My Page / op 301, op 73, op 66, op 74, op 273, op 288 SweetieInfoReq）**：参见 `UserInfoReq.kt` + `UserRestrictReq.kt` + `SweetieInfoReq.kt`。
@@ -152,10 +145,13 @@
   connect 用例断言 [7]——op 6 ReqConnectToSvr 必须回 **op 7**，回 6 客户端会忽略、频道点击无反应；
   该 bin 为真实 op 6 载荷（E1(10)+E4(2)，原帧 seq=70/uid=198）以 ssc_enc 重封装至 seq=40 的单帧）；
   practice 用例（replay_practice_cs.bin = op7@40 + op75@43 + op92@46）断言整套练习房回应链
-  [87,83,4×2,113,100,108,106×8,每槽114/104/105/103,198,423] + 游戏开始 [111,112,100,136] + 对局期
-  op 172 周期广播，并逐字节断言 op 83/113/108/112/136/198/423（基准 cap/practice_s2c_op*.bin，含 2B opcode）
-- `tools/test_ai_sync.py`：局内 AI 事件同步回归（启动模拟器后跑）。断言对局中周期性 op 172 (ItemThrow)
-  与 C→S op 106 → S→C op 139 (SetBomberEvent) 一问一答，且 op 139 载荷与 tst.pcap stream4 抓包逐字节一致
+  [87,83,4×2,113,100,108,106×8,每槽114/104/105/103,198,423] + 游戏开始 [111,112,100,136]，
+  并逐字节断言 op 83/113/108/112/136/198/423（基准 cap/practice_s2c_op*.bin，含 2B opcode）；
+  ⚠️ 不期待 op 172（真实服务器有，但模拟器不周期广播，见 MapEventSync 说明）
+- `tools/test_ai_sync.py`：局内水泡闭环回归（启动模拟器后跑）。断言**不再**出现 op 172 周期广播，
+  并验证 C→S op 106 → S→C op 139 (SetBomberEvent) 一问一答、op 139 载荷与 tst.pcap stream4 抓包逐字节一致
+- `tools/rev_op172.py`：op 172 逆向复现脚本（`--capture` 解码抓包 13 样本），输出分发器映射、
+  处理器字段读取顺序、事件分发/激活链与相关 RTTI 类名
 - `tools/test_room_select_bomber.py`：房间内切换角色回归（启动模拟器后跑）。用 replay_practice_cs.bin
   推进到房间阶段后发 C→S op 87（`E2(87) E1(slot) E1(bomber)`），断言换回 S→C op 105 且载荷为
   `E1(slot) E1(bomber)`（两个不同槽位各验一次，确认非硬编码）
@@ -164,6 +160,9 @@
 - `tools/test_chat.py`：大厅聊天**发送方向**回归（启动模拟器后跑）。回放 replay_practice_cs.bin 进大厅，
   发 C→S op 18（文字 "asf"，令牌化 `D6 08 3C`），断言服务端能正确解码出明文 "asf"
   且不误判队伍聊天（chatType=1）。⚠️ 不校验 S→C 显示，该 opcode 尚未确定（见上文）。
+- `tools/test_bomber_die.py`：对局中角色死亡与局内操作包回归（启动模拟器后跑）。模拟客户端在对局中发送
+  C→S op 112 (BomberActionReq) 与 C→S op 154 (BoxItemSpawnReport action=5 角色死亡)，断言服务端不越界、
+  成功广播 S→C op 159 (BomberDie)、S→C op 160 (GameOver)、S→C op 169 (InitGameResult) 与 S→C op 150 (GameResult) 结算对局并弹出结算画面。
 - `tools/extract_op75.py`：从 tst.pcap stream4 提取练习房流程的 C→S 完整流/裁剪回放
   （op7/op75/op92 帧，op75/op92 以 ssc_enc 重封装到连续 seq）+ S→C 各 op 完整 payload
   （cap/practice_s2c_op*.bin，含 2B opcode，replay_test 基准）；`tools/gen_practice_kotlin.py`：

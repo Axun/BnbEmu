@@ -27,9 +27,9 @@ CreateSessionReq: 80
 JoinSessionReq: 81
 AJoinSessionReq: 82
 EnterLobbyStageReq: 83
-GuildMemberInfoReq: 85
+#GuildMemberInfoReq: 85
 SetPlayerReadyReq: 96
-SelectMapReq: 97
+SelectMapReq: 85
 SelectColorReq: 98
 SelectBomberReq: 99
 OpenCloseSlotReq: 89
@@ -52,6 +52,7 @@ SetBombTimerReq: 142
 MovableBoxMoveReq: 143
 EatItemReq: 110
 EatObstacleReq: 111
+BomberActionReq: 112
 SetEffectReq: 147
 DropObstacleReq: 148
 EventItemReq: 149

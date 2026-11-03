@@ -52,12 +52,18 @@ BombKickThrow: 356
 MovableBoxMove: 357
 EatItemResult: 143
 EatObstacleResult: 144
+BomberDie: 159
+GameOver: 160
+InitGameResult: 169
+GameResult: 150
 # SetBomberEvent 原名佔位 op 361 (局內 +200 偏移系列的推測), 無對應 Packet 類;
 # 真實用途為 C→S op 106 的回顯 op 139 (見檔案末尾), 故不再保留 361 鍵。
 SetEffect: 362
 Airplane: 376
-# ItemThrow 實測為 op 172 (tst.pcap stream4 sq=343~400 逐包 CRC8 驗證), 非 +200 偏移的 374
-ItemThrow: 172
+# MapEventSync 實測為 op 172 (tst.pcap stream4 sq=343~400 逐包 CRC8 驗證), 非 +200 偏移的 374。
+# 原名 ItemThrow 是錯的: CA.exe 0x00559FA1 處理器把它交給 CGameContext::OnEvent (0x00533DBE),
+# 按 eventId 激活地圖事件並播放 "Wave/Game/AirPlane1" 波, 與道具拋擲/AI 無關。
+MapEventSync: 172
 AirplaneItemProb: 375
 FirstSessionNotify: 193
 FxStockInit: 200

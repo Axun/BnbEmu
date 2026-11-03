@@ -2,7 +2,8 @@
 """局内 AI/角色放置水泡与引爆同步回归测试 (先启动模拟器, 再运行)。
 
 验证对局中:
-  1) 每 ~400ms 周期性收到 S→C op 172 (ItemThrow, 实体时间同步);
+  1) 不再收到任何周期性 S→C op 172 广播（CA.exe 0x00559FA1 证实 op 172 = MapEventSync 地图事件
+     时间轴同步, 与 AI/道具抛掷无关; 客户端 AI 完全本地运行, 不需要服务端喂包）;
   2) 第一轮发出 C→S op 106 (SetBomberEventReq, slot=4, bombToken=4) 后,
      收到 S→C op 139 (SetBomberEvent) 回显, 且载荷与 tst.pcap stream4 抓包逐位元组一致;
   3) 2.5s 倒计时到期后, 收到 S→C op 138 (SetBombState, bombId=4, state=0),
@@ -82,9 +83,8 @@ def main():
     data += collect(s, 0.5)
 
     ops, pkts = ops_of(data)
-    assert 172 in ops, f'未收到周期性 op 172 (ItemThrow), ops={ops}'
-    n172 = ops.count(172)
-    print(f'[AiSync] 收到周期性 op 172 (ItemThrow) ×{n172} ✓')
+    assert 172 not in ops, f'不应再发送 op 172 (MapEventSync 地图事件同步), ops={ops}'
+    print('[AiSync] 未收到任何 op 172 周期广播 ✓ (AI 由客户端本地驱动)')
 
     op139_list = [p['p'] for p in pkts if p['crc_ok']
                   and struct.unpack('>H', p['p'][:2])[0] ^ 0xA569 == 139]

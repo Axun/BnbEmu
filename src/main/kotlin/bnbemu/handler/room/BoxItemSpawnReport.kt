@@ -4,20 +4,36 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
+import bnbemu.server.Room
 
-// C→S BoxItemSpawnReport (EN op 154 / 0x9A, CA.exe 0x0053DD08 / 0x00461399 / 0x0046D5C3)
-// 历史曾误判为 BomberDieReq。客户端在三处发送 op 154:
-//   1. 0x0053DDD1 (水泡爆炸炸开箱子生成地面道具列表上报, action = 4):
+// C→S BoxItemSpawnReport (EN op 154 / 0x9A)
+// 逆向定位:
+//   CA.exe 0x0053DD81 / 0x0053DDD1 / 0x00461399 / 0x0046D5C3 / 0x0046D986 / 0x0046D9F8 / 0x0046DB1D
+//   客户端在多种状态下复用 op 154 进行事件/状态上报:
+//   1. action = 5 (0x0046DB1D CGOGameBomber::OnDie): 角色死亡上报 (4 字节)
+//      Decode2(slotId) + Decode2(action = 5)
+//   2. action = 4 (0x0053DDD1): 水泡爆炸炸开箱子生成地面道具列表上报 (变长)
 //      Decode2(subType = 0) + Decode2(action = 4) + Decode2(slotId) + Decode2(count)
 //      + count * [Decode2(itemSeq) + Decode2(gridY) + Decode2(gridX) + Decode1(flag)]
-//   2. 0x0046D5C3 (炸弹/实体状态同步, action = 1):
+//   3. action = 1 (0x0046D5C3 / 0x0053DD81): 炸弹/实体状态同步 (8 字节)
 //      Decode2(slotId) + Decode2(action = 1) + Decode4(token)
-//   3. 0x00461399 (角色状态/道具脱困如自救针 Item/Niddle, action = 0):
+//   4. action = 2 / 3 (0x0046D986 / 0x0046D9F8): 角色受困(水泡中)/被救状态变更 (4 字节)
+//      Decode2(slotId) + Decode2(action = 2/3)
+//   5. action = 0 (0x00461399): 角色使用道具脱困 (如自救针 Item/Niddle, 8 字节)
 //      Decode2(slotId) + Decode2(action = 0) + Decode2(arg1) + Decode2(arg2)
 val BoxItemSpawnReport = PKTHandler { c ->
+    if (readableBytes() < 4) {
+        skipBytes(readableBytes())
+        return@PKTHandler
+    }
     val first = Decode2
     val action = Decode2
     when (action) {
+        5 -> {
+            // 角色死亡上报: first 为 slotId
+            val slotId = first
+            Room.onBomberDie(slotId)
+        }
         4 -> {
             val slotId = Decode2
             val count = Decode2
@@ -31,9 +47,22 @@ val BoxItemSpawnReport = PKTHandler { c ->
         1 -> {
             val token = Decode4
         }
-        else -> {
+        2, 3 -> {
+            // 角色受困 / 被救状态同步，仅 4 字节 payload，已读取完毕
+        }
+        0 -> {
             val arg1 = Decode2
             val arg2 = Decode2
         }
+        else -> {
+            // 防御式读取剩余字节，防止未预期的变体引发 IndexOutOfBoundsException 导致断线
+            if (readableBytes() >= 4) {
+                val arg1 = Decode2
+                val arg2 = Decode2
+            }
+        }
+    }
+    if (readableBytes() > 0) {
+        skipBytes(readableBytes())
     }
 }
