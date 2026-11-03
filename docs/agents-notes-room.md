@@ -19,7 +19,7 @@
   直接丢弃后续 op 87 → **服务器必须回 S→C op 105**（`E1(slotIdx) + E1(bomberIdx)`，2 字节）才能解锁。
   房间阶段分派器 `0x4F480C` 的 op 105 分支走虚表 `+0x1A0` → `0x4EFBF6`：只读两个 Encode1 应用角色后，
   于 `0x4EFC96` 把 `[+0x2f64] == 5` 清零。缺此应答 → 槽位永久卡等待锁、再点角色无任何反应。
-  实现见 `handler/room/RoomSelectBomberReq.kt` + `packet/room/SlotBomber.kt`（op 105 的 2B 变体，
+  实现见 `handler/room/SelectBomberReq.kt` + `packet/room/SlotBomber.kt`（op 105 的 2B 变体，
   与 SetPlayer/PracticeSetPlayer 的整槽版同 op 异体）；回归测试 `tools/test_room_select_bomber.py`。
 - **房间内选择地图（C→S op 85 SelectMapReq / S→C op 108 SelectMap，2026-11-03 逆向 CA.exe 确认）**：在房间界面选择地图时由客户端发出 **op 85 (0x55)**（CA.exe 中 `0x51c60f` 触发，原 TW_5 为 op 97）。body = `E2(themeId) + E4(mapId)`（6 字节，实测 `A5 75 96 CA 53 3A` → themeId 28, mapId 175）。
   ⚠️ 发包后客户端在 `0x51c65b` 设置选图等待锁 `[esi + 0x2f78] = 1` 并调用虚表 `[+0x1c4](0)` 禁用选图按钮。

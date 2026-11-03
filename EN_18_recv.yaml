@@ -31,11 +31,10 @@ EnterLobbyStageReq: 83
 SetPlayerReadyReq: 96
 SelectMapReq: 85
 SelectColorReq: 98
-SelectBomberReq: 99
 OpenCloseSlotReq: 89
 # 房間內切換角色 (點擊槽位角色頭像): body 2B = E1(slot) E1(bomber)
 # (CA.exe 0x4F67E9; 原 TW 表把切換角色放在 op 99, 真實 EN 客戶端發 op 87)
-RoomSelectBomberReq: 87
+SelectBomberReq: 87
 SetGameTypeNormalReq: 102
 SetGameTypeModReq: 103
 HostAskBanPlayerReq: 104
