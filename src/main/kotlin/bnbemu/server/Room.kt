@@ -20,6 +20,7 @@ object Room {
     private var nextBombId = 0
     val slots = Array(8) { Slot() }
     var mapId = 89
+    var themeId = 0
     val bombs = mutableListOf<Bomb>()
     var lastAirplaneTime = 0L
 

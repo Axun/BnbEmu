@@ -39,7 +39,7 @@ SelectBomber: 109
 SlotBomber: 105
 DoOpenCloseSlot: 110
 AILevelChange: 111
-SelectMap: 112
+SelectMap: 108
 StartGameResult: 115
 LaunchGameStage: 170
 DoStartGame: 171
