@@ -30,6 +30,8 @@ val ReceivedPacketBase.Decode4
     get() = Decode4At()
 val ReceivedPacketBase.DecodeStr
     get() = DecodeStrAt()
+val ReceivedPacketBase.DecodeCipherStr
+    get() = DecodeCipherStrAt()
 
 fun ReceivedPacketBase.DecodeEncryptedStr(key: Int) =
     DecodeEncryptedStrAt(key)
@@ -74,6 +76,44 @@ private fun ReceivedPacketBase.DecodeStrAt(): String {
     return readString(length, ACP)
 }
 
+/**
+ * 0x75daf0 字串加解密 (CA.exe CInPacket::DecodeStr 當 cipherDegree in 1..3 時調用):
+ *   每 4B 以 BE 讀取, XOR 0x96CA5395, 按 LE 寫入
+ *   剩餘 2B 以 BE 讀取, XOR 0xA569, 按 LE 寫入
+ *   剩餘 1B XOR 0x5A 寫入
+ */
+private fun ReceivedPacketBase.DecodeCipherStrAt(): String {
+    val length = if (m_nCipherDegreeInit == 3 && !isEN) Decode4At() else Decode2At()
+    if (length <= 0) return ""
+    val raw = ByteArray(length)
+    if (m_nCipherDegreeInit in 1..3) {
+        var idx = 0
+        while (idx + 4 <= length) {
+            val beVal = readInt()
+            val leVal = beVal xor 0x96CA5395.toInt()
+            raw[idx] = (leVal and 0xFF).toByte()
+            raw[idx + 1] = ((leVal shr 8) and 0xFF).toByte()
+            raw[idx + 2] = ((leVal shr 16) and 0xFF).toByte()
+            raw[idx + 3] = ((leVal shr 24) and 0xFF).toByte()
+            idx += 4
+        }
+        if (idx + 2 <= length) {
+            val beVal = readUnsignedShort()
+            val leVal = beVal xor 0xA569
+            raw[idx] = (leVal and 0xFF).toByte()
+            raw[idx + 1] = ((leVal shr 8) and 0xFF).toByte()
+            idx += 2
+        }
+        if (idx < length) {
+            raw[idx] = (readUnsignedByte().toInt() xor 0x5A).toByte()
+            idx += 1
+        }
+    } else {
+        readBytes(raw)
+    }
+    return String(raw, ACP)
+}
+
 private fun ReceivedPacketBase.DecodeEncryptedStrAt(key: Int): String {
     val length = if (m_nCipherDegreeInit == 3 && !isEN) Decode4At() else Decode2At()
 
@@ -107,6 +147,42 @@ class SendPacketBase(
         val SA = s.toByteArray(ACP)
         Encode2(SA.size)
         buf.writeBytes(SA)
+    }
+
+    /**
+     * 0x75daf0 字串加解密 (CA.exe CSendPacket::EncodeStr 當 cipherDegree in 1..3 時調用):
+     *   以 LE 讀取字串 4B, XOR 0x96CA5395, 按 BE 寫入封包
+     *   以 LE 讀取字串 2B, XOR 0xA569, 按 BE 寫入封包
+     *   剩餘 1B XOR 0x5A 寫入封包
+     */
+    fun EncodeCipherStr(s: String = "") {
+        val raw = s.toByteArray(ACP)
+        Encode2(raw.size)
+        if (this.m_nCipherDegree in 1..3) {
+            var idx = 0
+            while (idx + 4 <= raw.size) {
+                val leVal = (raw[idx].toInt() and 0xFF) or
+                        ((raw[idx + 1].toInt() and 0xFF) shl 8) or
+                        ((raw[idx + 2].toInt() and 0xFF) shl 16) or
+                        ((raw[idx + 3].toInt() and 0xFF) shl 24)
+                val valEnc = leVal xor 0x96CA5395.toInt()
+                buf.writeInt(valEnc)
+                idx += 4
+            }
+            if (idx + 2 <= raw.size) {
+                val leVal = (raw[idx].toInt() and 0xFF) or
+                        ((raw[idx + 1].toInt() and 0xFF) shl 8)
+                val valEnc = leVal xor 0xA569
+                buf.writeShort(valEnc)
+                idx += 2
+            }
+            if (idx < raw.size) {
+                buf.writeByte((raw[idx].toInt() and 0xFF) xor 0x5A)
+                idx += 1
+            }
+        } else {
+            buf.writeBytes(raw)
+        }
     }
 
     fun EncodeBuffer(ba: ByteArray) {

@@ -107,7 +107,7 @@ PracticeRoomInfo: 100
 PracticeStartInfo: 100
 PracticeColor: 108
 PracticeAiLevel: 111
-PracticeSelectMap: 112
+GameStartMapInfo: 112
 PracticeBoard: 136
 # 局内 AI/角色事件回显 (S→C op 139): 对每个 C→S op 106 回一个, 载荷由 op 106 字段生成
 SetBomberEvent: 139
