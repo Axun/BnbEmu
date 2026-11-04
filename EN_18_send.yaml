@@ -51,7 +51,7 @@ BombIgnite: 141
 DetonateBomb: 141
 TileBombExplode: 148
 BombKickThrow: 356
-MovableBoxMove: 357
+MovableBoxMove: 142
 EatItemResult: 143
 EatObstacleResult: 144
 BomberDie: 159

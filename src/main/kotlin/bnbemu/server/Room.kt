@@ -84,8 +84,10 @@ object Room {
     }
 
     // 可移动箱子 (CGOTileMovableBox) 的最新推动状态。
-    // 来源: C→S op 109 PushMovableBoxReq。客户端在 0x0054CABA 里已完成本地位移预测,
-    // 本包是持续推动时的周期上报, 不需要任何 S→C ack; 服务端只留档, 供日后多人同步/校验使用。
+    // 来源: C→S op 109 PushMovableBoxReq, 消费后必须广播 S→C op 142 MovableBoxMove。
+    // 客户端 (CA.exe 0x0054CABA) 只做格子校验 + 入队, 没有任何本地位移预测,
+    // 箱子位移的唯一实现 0x565CE0 只有一个调用者 —— S→C op 142 的 handler 0x0054A5F9。
+    // 所以「不回包」会让箱子在任何客户端都不动。
     data class MovableBoxState(
         var gridX: Int,
         var gridY: Int,
@@ -95,7 +97,20 @@ object Room {
     )
 
     private val movableBoxes = ConcurrentHashMap<Int, MovableBoxState>()
+    private val movableBoxSentAt = ConcurrentHashMap<Int, Long>()
 
+    // 完全相同的推箱动作(同 boxSeq + 同 src/dst)在该窗口内只广播一次。
+    //
+    // 去重是必须的: 客户端 0x0054CABA 之后进入 0x5393C2 的待确认队列, OnTick (0x0053A700)
+    // 每帧检查、重试计数 > 5 就把**同一个动作**再发一次。而客户端 0x565CE0 会先校验
+    // "箱子此刻仍在 (gridX,gridY)" —— 同一个 src→dst 广播第二次必然校验失败, 各客户端会
+    // 触发 0x549C35 往服务端回 C→S op 149 回滚上报。
+    // 但窗口必须有限: 万一一端的箱子因为漏包/校验失败没动, 玩家再推一次时必须能重播自愈,
+    // 否则那个箱子会永久卡死。窗口取 400ms, 远大于一次重发周期(帧级), 又短于人的连点间隔。
+    // 箱子被推回去再推回来时 src/dst 都不同, 不会被误判成重复。
+    internal var movableBoxDedupeWindowMs = 400L
+
+    // 返回是否真的广播了 (重复上报不广播, 便于测试/调试)。
     fun onMovableBoxPush(
         boxSeq: Int,
         gridX: Int,
@@ -103,9 +118,24 @@ object Room {
         targetX: Int,
         targetY: Int,
         slotId: Int
-    ) {
-        if (boxSeq !in 0..0xFFFF || slotId !in 0..7) return
-        movableBoxes[boxSeq] = MovableBoxState(gridX, gridY, targetX, targetY, slotId)
+    ): Boolean {
+        // boxSeq/末尾字节都是 E1/E2 原样字段, 只做宽度兜底, 不做语义过滤:
+        // 末尾字节是客户端 CGameMsgCache 待确认队列下标, 收到的这一端 (0x565CE0 第 6 参数) 并不使用,
+        // 过滤掉反而可能让某些槽位的推箱永远不生效。
+        if (boxSeq !in 0..0xFFFF || slotId !in 0..0xFF) return false
+
+        val now = System.currentTimeMillis()
+        val next = MovableBoxState(gridX, gridY, targetX, targetY, slotId)
+        val prev = movableBoxes[boxSeq]
+        if (prev == next && now - (movableBoxSentAt[boxSeq] ?: 0L) < movableBoxDedupeWindowMs) {
+            return false
+        }
+        movableBoxes[boxSeq] = next
+        movableBoxSentAt[boxSeq] = now
+
+        // 广播给所有客户端(含推箱者本人): 推箱者自己也需要这一包才会看到箱子动
+        BC(MovableBoxMove(boxSeq, gridX, gridY, targetX, targetY, slotId))
+        return true
     }
 
     fun movableBoxState(boxSeq: Int): MovableBoxState? = movableBoxes[boxSeq]
@@ -191,12 +221,14 @@ object Room {
         tickFuture?.cancel(false)
         bombs.clear()
         movableBoxes.clear()
+        movableBoxSentAt.clear()
     }
 
     fun reset() {
         tickFuture?.cancel(false)
         bombs.clear()
         movableBoxes.clear()
+        movableBoxSentAt.clear()
         nextBombId = 0
         lastAirplaneTime = 0L
     }

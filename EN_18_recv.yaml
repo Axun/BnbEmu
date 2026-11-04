@@ -42,13 +42,12 @@ RespondToBanPlayerReq: 105
 SetBomberEventReq: 106
 ChangeTitleReq: 107
 PlayEmotionReq: 108
-ReadyForImmediateStartReq: 109
+PushMovableBoxReq: 109
 AILevelChangeReq: 88
 #TeamChat: 111
 BombIgniteReq: 140
 BombKickThrowReq: 141
 SetBombTimerReq: 142
-MovableBoxMoveReq: 143
 EatItemReq: 110
 EatObstacleReq: 111
 BomberActionReq: 112
@@ -88,7 +87,12 @@ Unk_274: 274
 ShopCatalogReq: 276
 Unk_281: 281
 Unk_293: 293
-Unk_297: 297
+# 会话密钥登记 (CA.exe 0x6DA5A7 / 0x4AFD1C): body = EStr(4B 会话密钥) + E1(kind)
+#   0x6DA5A7 遍历 CSelfInfo 的会话密钥逐条发, kind 恒 1; 调用者只有「切舞台成功」(0x6DB43F)
+#   与「5 分钟周期」(0x6E0BC6, cmp edx,0x493E0) 两处 → 进大厅/房间/商城各一包 + 5 分钟续命
+#   0x4AFD1C 是 Nexon Messenger (TSingleton<CSmsDlg>) 的应答版, kind 恒 0; 姊妹包 op 299 只发密钥
+#   线上密钥经角色名令牌变换: F0 AE 35 F3 -> 明文 "ffdf" (同 op 4/op 7/op 254); 服务端不回包
+RegisterSessionKey: 297
 Unk_302: 302
 Unk_310: 310
 CreatePracticeSessionReq: 75
