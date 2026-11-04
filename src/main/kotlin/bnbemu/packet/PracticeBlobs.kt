@@ -31,10 +31,6 @@ internal val EN_OP100_START = """
     52 5a a5 69 5a 5a a5 5a 96 ca 53 95 5a
 """.toBA()
 
-internal val EN_OP108 = """
-    a5 69 a5 69 96 ca 53 39
-""".toBA()
-
 internal val EN_OP111 = """
     5a
 """.toBA()

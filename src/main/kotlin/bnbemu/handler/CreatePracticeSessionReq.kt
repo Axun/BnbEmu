@@ -4,7 +4,7 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.PracticeColor
+import bnbemu.packet.PracticeSelectMap
 import bnbemu.packet.PracticeRoomInfo
 import bnbemu.packet.PracticeSetPlayer
 import bnbemu.packet.PracticeSlot103
@@ -71,7 +71,7 @@ val CreatePracticeSessionReq = PKTHandler { c ->
         UserSimpleInfoResult(), SessionInfoResult(),
         Unk113(),
         PracticeRoomInfo(),
-        PracticeColor(),
+        PracticeSelectMap(),
     )
     // 106×8 (sq=208~229)
     repeat(8) { slot ->

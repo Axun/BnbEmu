@@ -1,6 +1,7 @@
 package bnbemu.packet
 
 import bnbemu.netty.PKT
+import bnbemu.packet.room.SelectMap
 import bnbemu.server.Room
 import bnbemu.server.bomber
 
@@ -33,10 +34,10 @@ fun PracticeStartInfo() = PKT {
     EncodeBuffer(EN_OP100_START)
 }
 
-// ---- op 108 练习房版 (8B): E2(0) E2(0) E4(172) ----
-fun PracticeColor() = PKT {
-    EncodeBuffer(EN_OP108)
-}
+// ---- op 108 练习房开局选图回应 (8B): E2(result=0) E2(themeId=0) E4(mapId=172) ----
+//    CA.exe CPrepareStage::OnPacket (0x52A949) 的 case 108 = 0x51EFE0 是选图结果处理;
+//    这里复用结构化 SelectMap 生成, 与 cap/practice_s2c_op108_10B_0.bin 的 body 逐字节一致。
+fun PracticeSelectMap() = SelectMap(result = 0, themeId = 0, mapId = 172)
 
 // ---- op 111 AILevelChange 空体 (1B): E1(0) —— 练习房开局时的 AI 等级重置 ----
 fun PracticeAiLevel() = PKT {
