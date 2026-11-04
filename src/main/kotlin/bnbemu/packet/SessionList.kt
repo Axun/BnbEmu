@@ -49,7 +49,7 @@ internal fun encodeName(name: String): ByteArray {
 /**
  * [encodeName] 的逆變換：4B 一塊 BE 讀 ^0x96CA5395 按 LE 寫回, 尾 2B BE 讀 ^0xA569 按 LE 寫回, 尾 1B ^0x5A。
  *
- * 用途：C→S 的字串欄位（聊天文字 op 18、會話令牌 op 297 等）客戶端也是用同一套令牌變換送出的
+ * 用途：C→S 的字串欄位（聊天文字 op 18、會話密鑰 op 297 RegisterSessionKey 等）客戶端也是用同一套令牌變換送出的
  * （實測 "asf" → D6 08 3C），伺服器要拿到明文才能處理/轉發。
  */
 internal fun decodeName(token: ByteArray): String {

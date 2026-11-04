@@ -8,6 +8,7 @@ import bnbemu.netty.ClientSocket
 import bnbemu.netty.NettyServer.workerGroup
 import bnbemu.netty.PKT
 import bnbemu.packet.room.*
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
 
@@ -81,6 +82,33 @@ object Room {
     // 客户端上报槽位事件 (Opcode 149) 时触发
     fun onEventItem(slotId: Int, token: Int, action: Int, param: Int) {
     }
+
+    // 可移动箱子 (CGOTileMovableBox) 的最新推动状态。
+    // 来源: C→S op 109 PushMovableBoxReq。客户端在 0x0054CABA 里已完成本地位移预测,
+    // 本包是持续推动时的周期上报, 不需要任何 S→C ack; 服务端只留档, 供日后多人同步/校验使用。
+    data class MovableBoxState(
+        var gridX: Int,
+        var gridY: Int,
+        var targetX: Int,
+        var targetY: Int,
+        var slotId: Int
+    )
+
+    private val movableBoxes = ConcurrentHashMap<Int, MovableBoxState>()
+
+    fun onMovableBoxPush(
+        boxSeq: Int,
+        gridX: Int,
+        gridY: Int,
+        targetX: Int,
+        targetY: Int,
+        slotId: Int
+    ) {
+        if (boxSeq !in 0..0xFFFF || slotId !in 0..7) return
+        movableBoxes[boxSeq] = MovableBoxState(gridX, gridY, targetX, targetY, slotId)
+    }
+
+    fun movableBoxState(boxSeq: Int): MovableBoxState? = movableBoxes[boxSeq]
 
     // 角色死亡上报处理 (C→S op 154 action=5 -> CA.exe 0x0046DB1D CGOGameBomber::OnDie)
     fun onBomberDie(slotId: Int) {
@@ -162,11 +190,13 @@ object Room {
     fun endGame() {
         tickFuture?.cancel(false)
         bombs.clear()
+        movableBoxes.clear()
     }
 
     fun reset() {
         tickFuture?.cancel(false)
         bombs.clear()
+        movableBoxes.clear()
         nextBombId = 0
         lastAirplaneTime = 0L
     }
