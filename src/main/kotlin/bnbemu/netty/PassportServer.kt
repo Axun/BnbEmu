@@ -362,6 +362,10 @@ private object PassportHandler : SimpleChannelInboundHandler<PassportFrame>() {
         val hexOp = "0x${frame.cmd.toString(16).padStart(4, '0').uppercase()}"
         if (debugMode) {
             println("[Passport] $hexOp | 接收 | ${ctx.channel().remoteAddress()}")
+            val hexDump = frame.payload.hexDumpTruncated()
+            if (hexDump.isNotEmpty()) {
+                println(hexDump)
+            }
         }
 
         val reply = when (frame.cmd) {

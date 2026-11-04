@@ -137,7 +137,9 @@ object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
             val hexOp = "0x${opcode.toString(16).uppercase()}"
             val payloadLen = buf.readableBytes() - crcLenUDP
             val payloadHex = if (payloadLen > 0) {
-                ByteBufUtil.hexDump(buf, buf.readerIndex(), payloadLen).uppercase().chunked(2).joinToString(" ")
+                val dumpLen = minOf(payloadLen, MAX_DUMP_LEN)
+                val hex = ByteBufUtil.hexDump(buf, buf.readerIndex(), dumpLen).uppercase().chunked(2).joinToString(" ")
+                if (payloadLen > MAX_DUMP_LEN) "$hex ..." else hex
             } else ""
             println("$opcode | $hexOp | UDP Recv from $sender: $payloadHex")
         }
@@ -196,7 +198,9 @@ object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
                 val payloadStart = if (isJP) 6 else 2
                 val payloadLen = packetSize - payloadStart
                 val payloadHex = if (payloadLen > 0) {
-                    ByteBufUtil.hexDump(buf, payloadStart, payloadLen).uppercase().chunked(2).joinToString(" ")
+                    val dumpLen = minOf(payloadLen, MAX_DUMP_LEN)
+                    val hex = ByteBufUtil.hexDump(buf, payloadStart, dumpLen).uppercase().chunked(2).joinToString(" ")
+                    if (payloadLen > MAX_DUMP_LEN) "$hex ..." else hex
                 } else ""
                 println("$opcode | $hexOp | UDP Send to $target: $payloadHex")
             }

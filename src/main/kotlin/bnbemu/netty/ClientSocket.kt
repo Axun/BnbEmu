@@ -9,6 +9,19 @@ import bnbemu.debugMode
 import bnbemu.server.User
 import java.io.IOException
 
+const val MAX_DUMP_LEN = 99
+
+fun ByteBuf.hexDumpTruncated(maxLen: Int = MAX_DUMP_LEN): String {
+    val remaining = readableBytes()
+    if (remaining <= 0) return ""
+    val dumpLen = minOf(remaining, maxLen)
+    val hex = ByteBufUtil.hexDump(this, readerIndex(), dumpLen)
+        .uppercase()
+        .chunked(2)
+        .joinToString(" ")
+    return if (remaining > maxLen) "$hex ..." else hex
+}
+
 val handlerArray = arrayOfNulls<PKTHandler>(1000)
 class ClientSocket : SimpleChannelInboundHandler<ByteBuf>() {
     lateinit var ctx: ChannelHandlerContext
@@ -60,9 +73,9 @@ class ClientSocket : SimpleChannelInboundHandler<ByteBuf>() {
 
         println("[${opName ?: "UNKNOWN"}] $opcode | $hexOp | $status | ${ch.remoteAddress()}")
 
-        val remaining = pkt.readableBytes()
-        if (remaining in 1..99) {
-            println(ByteBufUtil.hexDump(pkt).uppercase().chunked(2).joinToString(" "))
+        val hexDump = pkt.hexDumpTruncated()
+        if (hexDump.isNotEmpty()) {
+            println(hexDump)
         }
     }
 
