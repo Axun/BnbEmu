@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import bnbemu.handler.room.StartGameReq
-import bnbemu.handler.room.loadMapsYaml
-import bnbemu.handler.room.mapsYaml
+import bnbemu.handler.room.loadMapIdTable
+import bnbemu.handler.room.mapIdTable
 import bnbemu.packet.room.GameStartMapInfo
 import bnbemu.server.Room
 import bnbemu.server.bomber
@@ -167,12 +167,20 @@ class GameStartMapInfoTest {
     }
 
     @Test
-    fun testLoadMapsYaml() {
-        val decoded = loadMapsYaml()
-        assertEquals("Cemetery03", decoded[175]?.get("name"))
-        assertEquals("Cemetery04", decoded[176]?.get("name"))
-        assertEquals("Cemetery03", mapsYaml[175]?.get("name"))
-        assertEquals("Cemetery04", mapsYaml[176]?.get("name"))
+    fun testLoadMapIdTable() {
+        val decoded = loadMapIdTable()
+        assertEquals(193, decoded.size, "flag==0 的记录数")
+        assertEquals("HotRandom", decoded[0]?.name)
+        assertEquals("CampRandom", decoded[66]?.name)
+        assertEquals("Patrit14", decoded[145]?.name)
+        assertEquals("Cemetery", decoded[172]?.name)
+        assertEquals("Cemetery03", decoded[175]?.name)
+        assertEquals("Cemetery04", decoded[176]?.name)
+        assertEquals(28, decoded[175]?.themeId)
+        assertEquals(29, decoded[176]?.themeId)
+        assertEquals("Cemetery03", mapIdTable[175]?.name)
+        assertEquals("Cemetery04", mapIdTable[176]?.name)
+        assertEquals(null, decoded[999]?.name, "越界 mapId 不应命中")
     }
 
     @Test

@@ -2,7 +2,7 @@ package bnbemu.handler
 
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ChannelsGameState
-import bnbemu.packet.EnableShop
+import bnbemu.packet.DynamicMapInfo
 import bnbemu.packet.FxConfig
 import bnbemu.packet.JoinSessionResult
 import bnbemu.packet.RoomList
@@ -27,7 +27,7 @@ import bnbemu.packet.shop.FxStockInit
 // 載荷: 空 (ln=2 僅 opcode)
 // 行為: 真實伺服器不回 81 的逐包回應, 而是跟發整條「進頻道握手推送」(2026-08-31 時序對齊確認:
 //       客戶端發 81 後會等這條推送才繼續發 274/281/276, 缺它客戶端卡「正在連接」對話框):
-//         seq=100~121: [413 UserInventoryInfo, 198, 200 FxStockInit, 274 UserItemUpdate×2, 122 UserDynamicInfo, 212 FxConfig, 210 EnableShop]
+//         seq=100~121: [413 UserInventoryInfo, 198, 200 FxStockInit, 274 UserItemUpdate×2, 122 UserDynamicInfo, 212 FxConfig, 210 DynamicMapInfo]
 //         seq=124~127: [87 RoomList, 65 ShopCatalog(50KB)]          ← 客戶端 274/274/281 之後
 //         seq=130~148: [204, 66, 14(9B 變體), 20, 261 ShopVersion, 247, 423]
 //         seq=151~154: [81 名冊, 72 用戶列表]            ← 之後大廳期週期重發 (週期未實作)
@@ -50,7 +50,7 @@ val JoinSessionReq = PKTHandler { c ->
     c.send(
         UserInventoryInfo(), UserInventory(), FxStockInit(),
         UserItemUpdate(), UserItemUpdate(1),
-        UserDynamicInfo(0, lucci), FxConfig(), EnableShop(),
+        UserDynamicInfo(0, lucci), FxConfig(), DynamicMapInfo(),
         RoomList(), ShopCatalog(),
         Unk204(), Unk66(), ChannelsGameState(tailOnes = 2),
         Unk20(), ShopVersion(), Unk247(), Unk423(),

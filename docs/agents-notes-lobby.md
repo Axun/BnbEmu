@@ -10,7 +10,7 @@
   op 86（12 次，23~25B）；
   **op 122 UserDynamicInfo = 用户动态数据同步（Lucci金币等，详见 `packet/UserDynamicInfo.kt` ）**；op 4 有三个变体（登录连线 65B /
   频道连线 65B 全零 / 13B 查询应答，均含或邻接 4B 会话串）；
-  op 210 EnableShop 实为 24KB 商城目录、op 65 ShopCatalog ≈50KB（商城商品与角色卡全量目录，已结构化）、op 60 ItemDef ≈46KB（全量物品定义目录，已结构化支持动态配置与进阶角色卡启用）；
+  op 210 DynamicMapInfo为 **动态地图表**（CDynamicMapMan；由 `fxdynmapinfo.json` 实时生成，见 `docs/client/ssd-file.md`）、op 65 ShopCatalog ≈50KB（商城商品与角色卡全量目录，已结构化）、op 60 ItemDef ≈46KB（全量物品定义目录，已结构化支持动态配置与进阶角色卡启用）；
   **op 72 SessionList = 频道在线用户列表**（⚠️ 2026-08-30 与游戏界面比对，非房间列表；已结构化：`packet/SessionList.kt` 的 SessionEntry）：
   `E2(0) + E1(条目数) + N 条目`，条目 = `E2(len)+角色名令牌(4~6B) + 42B 固定栏位`；
   已解出栏位语义：number=E2 玩家**等级**（样本 326→1 递减 = 326..1 级玩家，非房间号）、

@@ -1,5 +1,6 @@
 package bnbemu.handler.room
 
+import bnbemu.data.FxdynMapInfo
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
@@ -9,32 +10,30 @@ import bnbemu.packet.PracticeBoard
 import bnbemu.packet.PracticeStartInfo
 import bnbemu.packet.room.GameStartMapInfo
 import bnbemu.server.Room
-import com.charleskorn.kaml.Yaml
-import com.charleskorn.kaml.decodeFromStream
-import java.io.File
 import kotlin.random.Random
 
-val mapsYaml: Map<Int, Map<String, String>> by lazy {
-    loadMapsYaml()
-}
+// ============================================================================
+// 地图表: 与 S→C op 210 共用唯一事实源 data/FxdynMapInfo.records
+// ============================================================================
+// 客户端 CDynamicMapMan 只把 flag==0 的记录按数组顺序装入选图数组，其 0-based 下标
+// 就是 C→S op 85 / op 92 的 mapId；themeId 等于记录的 sort_order。
+// op 210 的下发包体由同一 List<FxdynRecord> 序列化，因此改 JSON 时下发内容与
+// mapId 编号必然同步，不会再出现「表已更新、编号没跟上」的漂移。
+// 依据: CA.exe 0x52F56C / 0x51C60F / 0x531A09，详见 docs/client/ssd-file.md (3)(5)。
+data class MapInfo(val name: String, val themeId: Int)
 
-fun loadMapsYaml(): Map<Int, Map<String, String>> {
-    val stream = StartGameReq::class.java.getResourceAsStream("/data/maps.yaml")
-        ?: File("src/main/resources/data/maps.yaml").takeIf { it.exists() }?.inputStream()
-        ?: File("data/maps.yaml").takeIf { it.exists() }?.inputStream()
-        ?: File("maps.yaml").takeIf { it.exists() }?.inputStream()
+private const val FALLBACK_MAP_NAME = "Cemetery03"
 
-    if (stream == null) {
-        System.err.println("Warning: maps.yaml not found, falling back to empty map list")
-        return emptyMap()
+val mapIdTable: Map<Int, MapInfo> by lazy { loadMapIdTable() }
+
+// FxdynMapInfo 读取/校验失败一律 fail-fast，这里只对结果做完整性检查。
+fun loadMapIdTable(): Map<Int, MapInfo> {
+    val table = LinkedHashMap<Int, MapInfo>()
+    FxdynMapInfo.records.filter { it.flag == 0 }.forEachIndexed { mapId, r ->
+        table[mapId] = MapInfo(r.name, r.sortOrder)
     }
-
-    return try {
-        stream.use { Yaml.default.decodeFromStream(it) }
-    } catch (e: Exception) {
-        System.err.println("Failed to parse maps.yaml: ${e.message}")
-        emptyMap()
-    }
+    check(table.isNotEmpty()) { "fxdynmapinfo.json 中没有 flag==0 的记录" }
+    return table
 }
 
 // ============================================================================
@@ -69,7 +68,7 @@ val StartGameReq = PKTHandler { c ->
         println("mapId or themeId mismatch")
     }
 
-    val mapName = mapsYaml[mapId]?.get("name") ?: "Cemetery03"
+    val mapName = mapIdTable[mapId]?.name ?: FALLBACK_MAP_NAME
     println("StartGame. mapId: $mapId, mapName: $mapName")
 
     c.send(

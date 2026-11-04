@@ -43,7 +43,7 @@
 - 可信命名（抓包时序验证）：C→S 2 AskFirstInfo、7 OnConnEstablished、15 ChannelsStateReq、
   64 UserSimpleInfoReq、81 JoinSessionReq；S→C 1 MultiServerInit、2 FirstInfoInit、7 ResConnectToSvr、
   11 ChannelsExtraInfo、13 ChannelsState、14 ChannelsGameState、20 ResEstimateRTT、
-  81 JoinSessionResult、200 FxStockInit、210 EnableShop
+  81 JoinSessionResult、200 FxStockInit、210 DynamicMapInfo
 - 已实现绑定（原名 Unk_* 占位）：C→S 0 AskFirstSession（首连打开）、
   55 StringTableRevisionReq（登录后上报本地 3 份 SSD 版本号 [StringTable, QuestString, CurseFilter]，触发回频道列表）、
   11 EnterChannelReq（进频道）、15 ChannelsStateReq（频道状态轮询，回 op 13）、
@@ -65,8 +65,8 @@
   293(E1(0))/78 QuestConfigTable（任务配置表，E4(count)+条目列表，空为 E4(0)）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、
   81 JoinSessionResult（**大厅名册**，已结构化 `packet/JoinSessionResult.kt` 的 `RosterEntry`，
   `E4(人数)+N×[E1槽位+E4账号数值+E2名长+令牌]`，账号数值=passport 0x2E 同值）、
-  413 UserInventoryInfo（**玩家背包全量槽位初始化**，614B 50槽，CUserInventoryMan）/ 198 / 200 FxStockInit / 274 UserItemUpdate×2（**道具槽位更新**，CUserItemMan）/ 212 FxConfig（**特效与角色可用性配置**，CFxContext）/ 210 EnableShop / 65 ShopCatalog(50KB) / 204 / 66 / 14(9B 变体) / 20 / 261 ShopVersion（**商城目录版本校验与开关**，CShopItemMan，不一致触发客户端发 276）/ 247
-  （进频道握手推送，原样重放，顺序与触发见 JoinSessionReq.kt）
+  413 UserInventoryInfo（**玩家背包全量槽位初始化**，614B 50槽，CUserInventoryMan）/ 198 / 200 FxStockInit / 274 UserItemUpdate×2（**道具槽位更新**，CUserItemMan）/ 212 FxConfig（**特效与角色可用性配置**，CFxContext）/ 210 DynamicMapInfo / 65 ShopCatalog(50KB) / 204 / 66 / 14(9B 变体) / 20 / 261 ShopVersion（**商城目录版本校验与开关**，CShopItemMan，不一致触发客户端发 276）/ 247
+  （进频道握手推送，多为原样重放；其中 210 已改由 `src/main/resources/data/fxdynmapinfo.json` 实时生成，顺序与触发见 JoinSessionReq.kt）
 - 尚无 handler/packet（yaml 里 Unk_* 占位）：
   S→C 86（大厅期周期推送，⚠️ 非"进房后"）
 - **进练习房（op 75，2026-09-01 已实现，tst.pcap stream4 逆向）**：大厅界面点"练习"→ 客户端
@@ -126,7 +126,7 @@
 6. 进频道：C 发 op 11（4B 频道 hash）→ S 回 [11 ChannelsExtraInfo 218B, 13 44B, 12 27B, 11, 13]
 7. 进频道握手（2026-08-31 时序对齐钉死，已实现）：C 收齐 72 用户列表后自动发 **op 81 空包** →
    S 跟发整条**进频道握手推送** [310, 302,] 413, 198, 200 FxStockInit, 274×2, 122 UserDynamicInfo, 212,
-   210 EnableShop, 87 RoomList, 65 50KB, 204, 66, 14(9B 变体), 20, 261, 247, 423, 81 名册, 72
+   210 DynamicMapInfo, 87 RoomList, 65 50KB, 204, 66, 14(9B 变体), 20, 261, 247, 423, 81 名册, 72
    （分三波下发：客户端**等推送才继续发** 274/274/281 → 等 → 276，缺推送客户端卡"正在连接"对话框）；
    之后大厅期 S 周期推 op 81 名册 / 72 / 122 UserDynamicInfo / 87 / 86（86 尚未实现）
 - 版本线索：banner 内两个 Encode2(18)（`00 12 00 12`），若为版本字段则 EN 客户端可能是 **v18**（未验证；EN_VER 现为 0 占位）

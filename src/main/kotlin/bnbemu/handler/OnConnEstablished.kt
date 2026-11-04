@@ -9,7 +9,7 @@ import bnbemu.netty.DecodeStr
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ChannelsGameState
 import bnbemu.packet.ChannelsState
-import bnbemu.packet.EnableShop
+import bnbemu.packet.DynamicMapInfo
 import bnbemu.packet.EnterLobbyStage
 import bnbemu.packet.EnterShopStage
 import bnbemu.packet.RoomList
@@ -76,7 +76,7 @@ val OnConnEstablished = PKTHandler { c ->
                 val checksum = Decode4 xor Decode4
                 Decode1 // 1
                 c.send(
-                    EnableShop(),
+                    DynamicMapInfo(),
                     EnterLobbyStage()
                 )
             }
