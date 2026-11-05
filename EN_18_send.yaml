@@ -55,7 +55,7 @@ MovableBoxMove: 142
 EatItemResult: 143
 EatObstacleResult: 144
 BomberDie: 159
-GameOver: 160
+ReviveBomber: 160
 InitGameResult: 169
 GameResult: 150
 # SetBomberEvent 原名佔位 op 361 (局內 +200 偏移系列的推測), 無對應 Packet 類;

@@ -162,7 +162,10 @@
   且不误判队伍聊天（chatType=1）。⚠️ 不校验 S→C 显示，该 opcode 尚未确定（见上文）。
 - `tools/test_bomber_die.py`：对局中角色死亡与局内操作包回归（启动模拟器后跑）。模拟客户端在对局中发送
   C→S op 112 (BomberActionReq) 与 C→S op 154 (BoxItemSpawnReport action=5 角色死亡)，断言服务端不越界、
-  成功广播 S→C op 159 (BomberDie)、S→C op 160 (GameOver)、S→C op 169 (InitGameResult) 与 S→C op 150 (GameResult) 结算对局并弹出结算画面。
+  成功广播 S→C op 159 (BomberDie)、S→C op 169 (InitGameResult) 与 S→C op 150 (GameResult) 结算对局并弹出结算画面。
+- `tools/test_game_win.py`：**「杀光全部敌人 → 对局结束」回归**（启动模拟器后跑）。默认场景走真实路径：
+  连发 C→S op 112 action=0x60（实测样本 `3A A5 39 A7 6E`），断言 ~1.5s 后下发 169/150、op 150 winnerTeam=0、
+  `--legacy-die154` 保留老的逐槽 action=5 路径。 对应单元测试 `GameOverTest.kt`（20 项）。
 - `tools/extract_op75.py`：从 tst.pcap stream4 提取练习房流程的 C→S 完整流/裁剪回放
   （op7/op75/op92 帧，op75/op92 以 ssc_enc 重封装到连续 seq）+ S→C 各 op 完整 payload
   （cap/practice_s2c_op*.bin，含 2B opcode，replay_test 基准）；`tools/gen_practice_kotlin.py`：
