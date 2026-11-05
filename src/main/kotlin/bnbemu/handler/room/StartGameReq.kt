@@ -71,9 +71,24 @@ val StartGameReq = PKTHandler { c ->
     val mapName = mapIdTable[mapId]?.name ?: FALLBACK_MAP_NAME
     println("StartGame. mapId: $mapId, mapName: $mapName")
 
+    // 開局名冊 = 房間裡真正參戰的槽位 (op 89 踢掉的 AI 已被清成 user=null / isAI=false)。
+    // 與 Room.resetMatchState 的 hasSeat() 判據必須完全一致, 否則會出現
+    // 「服務端按 6 個 AI 判勝負、客戶端卻照 op112 的 8 槽名冊生成 7 個 AI」的錯位。
+    // 異常防護: 若房間槽位尚未初始化 (例如非練習房流程), 退回舊的 8 槽名冊,
+    // 避免給客戶端發 slotCount=0 導致對局載入失敗。
+    val activeSlots = Room.slots.indices.filter { i -> Room.slots[i].user != null || Room.slots[i].isAI }
+        .ifEmpty { (0..7).toList() }
+    println("StartGame. activeSlots=$activeSlots (AI=${activeSlots.count { Room.slots[it].isAI }})")
+
     c.send(
         PracticeAiLevel(),
-        GameStartMapInfo(randomSeed = Random.nextInt(0x7FFFFFFF), mapId = mapId, themeId = themeId, mapName = mapName),
+        GameStartMapInfo(
+            randomSeed = Random.nextInt(0x7FFFFFFF),
+            mapId = mapId,
+            themeId = themeId,
+            mapName = mapName,
+            activeSlots = activeSlots,
+        ),
         PracticeStartInfo(),
         PracticeBoard(),
     )

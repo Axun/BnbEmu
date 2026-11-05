@@ -10,7 +10,6 @@ import bnbemu.handler.room.mapIdTable
 import bnbemu.packet.room.GameStartMapInfo
 import bnbemu.server.Room
 import bnbemu.server.bomber
-import com.charleskorn.kaml.decodeFromStream
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.assertNotNull
 import java.io.File
@@ -258,5 +257,76 @@ class GameStartMapInfoTest {
         val mapId = encBuf.Decode4
         assertEquals(999, mapId)
         assertEquals("Cemetery03", mapName, "Fallback mapName should be Cemetery03")
+    }
+
+    @Test
+    fun testGameStartMapInfoSkipsKickedAiSlot() {
+        // 踢掉 3 號 AI 後, op112 名冊只能有 7 筆, 且槽號/出生點不得壓縮重排。
+        val pkt = GameStartMapInfo(activeSlots = listOf(0, 1, 2, 4, 5, 6, 7))
+        val buf = Unpooled.buffer()
+        pkt.encode(SendPacketBase(buf, 3))
+
+        buf.Decode4 // seed
+        buf.Decode2 // theme
+        buf.DecodeCipherStr // mapName
+        buf.Decode4 // mapId
+        buf.Decode1 // gameOptions
+        buf.Decode1 // flag
+
+        assertEquals(7, buf.Decode1, "踢掉一個 AI 後 slotCount 必須是 7")
+        val expectedSlots = listOf(0, 1, 2, 4, 5, 6, 7)
+        val expectedSpawns = listOf(2, 1, 6, 3, 4, 5, 7)
+        for (n in expectedSlots.indices) {
+            assertEquals(expectedSlots[n], buf.Decode1, "第 $n 筆的槽號")
+            assertEquals(expectedSpawns[n], buf.Decode1, "槽 ${expectedSlots[n]} 的出生點")
+            buf.Decode1 // bomber
+            assertEquals(if (n == 0) 0 else 8, buf.Decode1, "槽 ${expectedSlots[n]} 的隊伍")
+            buf.Decode1 // state
+            buf.Decode4; buf.Decode4; buf.Decode4
+        }
+        repeat(4) { buf.Decode1 } // obsCount / field1 / field2 / timeLimit
+        assertEquals(0, buf.readableBytes(), "變長名冊後封包必須剛好被消費完")
+    }
+
+    @Test
+    fun testStartGameReqUsesRoomSlotsAsRoster() {
+        // op 92 開局時的名冊要跟著 Room.slots 走, 不能寫死 8 槽。
+        val saved = Room.slots.map { it.isAI }
+        try {
+            Room.slots.forEachIndexed { i, slot -> slot.isAI = i <= 5 }
+            val ch = EmbeddedChannel()
+            val client = ClientSocket()
+            ch.pipeline().addLast(client)
+
+            val buf = Unpooled.buffer()
+            val sendPkt = SendPacketBase(buf, 3)
+            sendPkt.Encode4(176)
+            sendPkt.Encode2(29)
+            sendPkt.Encode1(0)
+            sendPkt.Encode4(176)
+            sendPkt.Encode1(0)
+            sendPkt.Encode1(1)
+            sendPkt.Encode4(0)
+            with(StartGameReq) { buf.handle(client) }
+
+            ch.readOutbound<PKT>() // PracticeAiLevel
+            val pkt112 = ch.readOutbound<PKT>() ?: error("缺少 op112 GameStartMapInfo")
+            val encBuf = Unpooled.buffer()
+            pkt112.encode(SendPacketBase(encBuf, 3))
+            encBuf.Decode4; encBuf.Decode2; encBuf.DecodeCipherStr; encBuf.Decode4
+            encBuf.Decode1; encBuf.Decode1
+            assertEquals(6, encBuf.Decode1, "只有 6 個參戰槽位時 slotCount 必須是 6")
+
+            for (i in 0 until 6) {
+                assertEquals(i, encBuf.Decode1)
+                encBuf.Decode1; encBuf.Decode1; encBuf.Decode1; encBuf.Decode1
+                encBuf.Decode4; encBuf.Decode4; encBuf.Decode4
+            }
+            repeat(4) { encBuf.Decode1 }
+            assertEquals(0, encBuf.readableBytes())
+            ch.finishAndReleaseAll()
+        } finally {
+            Room.slots.forEachIndexed { i, slot -> slot.isAI = saved[i] }
+        }
     }
 }

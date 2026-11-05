@@ -3,13 +3,14 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 .kotlin
-__pycache__
+__pycache__/
 
 ### IntelliJ IDEA ###
 .idea/modules.xml
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
+.workbuddy
 *.iws
 *.iml
 *.ipr
