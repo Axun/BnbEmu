@@ -61,12 +61,12 @@ val EnterShopReq = PKTHandler { c ->
      客户端依序发出：
      - **C→S op 273 `ChangeEquipReq`**：`Encode1(1) + Encode1(slot) + Encode2(count) + ...`，同步选角换装（11 字节）；
      - **C→S op 73 `UserInfoReq`**：调用 `0x004F881E` 发送 `Encode1(count) + repeat(count) { Encode1(bomberId) }`（实测 `5B 5A`），上报当前选中的角色；
-     - **C→S op 97 `SelectMapReq`**：调用 `0x004F73B2(0)` 发送 `Encode1(0)`（实测 `5A`），请求退出商城舞台。
+     - **C→S op 97 `StageStateSyncReq`**：调用 `0x004F73B2(0)` 发送 `Encode1(0)`（实测 `5A`），请求退出商城舞台。
   2. **无法退出与误弹个人名片（My Page）对话框的双重根因**：
      - **误弹名片根因**：`CA.exe` 中 `CMyPageDialog` 唯一定义的构造与弹出点位于 `0x004FBB6F` (`CStage::OnUserInfoResult` -> `0x004FBFD4`)。当客户端收到 **S→C op 73 `UserInfoResult`**（且 `isSelf == 1`、`errCode == 0`）时，会无条件创建并弹出 `CMyPageDialog`！此前服务端在收到 C→S op 73 时错误地调用了 `sendUserInfo` 下发 S→C op 73，导致客户端在退出商城时被动唤醒个人资料弹窗。实际上，C→S op 73 仅用于向服务端上报当前选中的 bomber 角色，绝不应回显 S→C op 73（打开名片由 C→S op 66 `UserRestrictReq` 的 `isMe == 1` 分支精准触发）。
      - **无法退出根因**：客户端发送 C→S op 97 (`stageState = 0`) 后等待服务端指示目标阶段。服务端此前未处理 `stageState == 0`，未下发 **S→C op 97 `ChangeStage(11)`**。
   3. **修复方案**：
      - `UserInfoReq.kt` 中仅根据载荷更新玩家槽位的 `bomber` 角色，移除 `sendUserInfo` 调用，杜绝非 MyPage 场景下的误弹窗；
-     - `SelectMapReq.kt` 中当 `stageState == 0` 时，向客户端下发 **S→C op 97 `ChangeStage(11)`**。客户端 `CShopStageNew::OnPacket` (`0x005CDD15` -> `0x005CDDB8`) 收到后调用 `CMainSystem::SetStage(11)` 销毁商城舞台并切回大厅，同时自动向服务端发送 **C→S op 78 `StageInitReq`**，平滑进入大厅。
-  实现见 `handler/room/SelectMapReq.kt` + `handler/UserInfoReq.kt`，单元测试见 `src/test/kotlin/bnbemu/netty/ShopTest.kt`。
+     - `StageStateSyncReq.kt` 中当 `stageState == 0` 时， 向客户端下发 **S→C op 97 `ChangeStage(11)`**。客户端 `CShopStageNew::OnPacket` (`0x005CDD15` -> `0x005CDDB8`) 收到后调用 `CMainSystem::SetStage(11)` 销毁商城舞台并切回大厅，同时自动向服务端发送 **C→S op 78 `StageInitReq`**，平滑进入大厅。
+  实现见 `handler/StageStateSyncReq.kt` + `handler/room/SelectMapReq.kt` + `handler/UserInfoReq.kt`，单元测试见 `src/test/kotlin/bnbemu/netty/ShopTest.kt`。
  */

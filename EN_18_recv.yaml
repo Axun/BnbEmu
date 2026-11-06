@@ -110,6 +110,7 @@ ChangeEquipReq: 273
 SweetieInfoReq: 288
 
 # ----- shop -----
+StageStateSyncReq: 97
 EnterShopReq: 315
 ShopSyncReq: 317
 ShopUserSyncReq: 37

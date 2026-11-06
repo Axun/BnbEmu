@@ -1,8 +1,10 @@
 package bnbemu.netty
 
 import io.netty.buffer.Unpooled
+import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import bnbemu.packet.ChangeStage
 import bnbemu.packet.EnterShopResult
 import bnbemu.packet.EnterShopStage
 
@@ -87,6 +89,53 @@ class ShopTest {
         assertEquals("", msg)
         assertEquals(0, bonusCount)
         assertEquals(0, inBuf.readableBytes())
+    }
+
+    @Test
+    fun testStageStateSyncOpcodeBinding() {
+        // 商城退出真正发包的是 C→S op 97 (Encode1(stageState)), 不是选图用的 op 85
+        assertEquals("StageStateSyncReq", OpcodeManager.recvOps[97], "C->S op 97 must be StageStateSyncReq")
+        assertNotNull(handlerArray[97], "Handler 97 must be registered")
+        assertSame(bnbemu.handler.StageStateSyncReq, handlerArray[97])
+
+        // op 85 仍然是房间内选图, 不能被夺走
+        assertEquals("SelectMapReq", OpcodeManager.recvOps[85])
+    }
+
+    @Test
+    fun testShopExitStageStateTriggersChangeStage() {
+        // 真实日志 (退出商城): payload = 5A -> Encode1(0)
+        val cs = ClientSocket()
+        val ch = EmbeddedChannel(cs)
+        val buf = Unpooled.wrappedBuffer(byteArrayOf(0x5A.toByte()))
+        with(bnbemu.handler.StageStateSyncReq) { buf.handle(cs) }
+        assertEquals(0, buf.readableBytes(), "1B body 必须被完整消费")
+
+        val pkt = ch.readOutbound<PKT>()
+        assertNotNull(pkt, "stageState=0 必须回应 S->C op 97 ChangeStage(11)")
+        assertEquals(97, OpcodeManager.getSendOp(ChangeStage(11)::class.java))
+
+        val out = Unpooled.buffer()
+        pkt.encode(SendPacketBase(out, 3))
+        // Encode2(11) with cipherDegree 3: 0x000B ^ 0xA569 = 0xA562 (BE)
+        assertEquals(0xA5, out.readUnsignedByte().toInt())
+        assertEquals(0x62, out.readUnsignedByte().toInt())
+        assertEquals(0, out.readableBytes())
+
+        ch.finish()
+    }
+
+    @Test
+    fun testShopEnterStageStateHasNoResponse() {
+        // 进商城时客户端上报 5B -> Encode1(1), 只是通知, 不应有任何回包
+        val cs = ClientSocket()
+        val ch = EmbeddedChannel(cs)
+        val buf = Unpooled.wrappedBuffer(byteArrayOf(0x5B.toByte()))
+        with(bnbemu.handler.StageStateSyncReq) { buf.handle(cs) }
+        assertEquals(0, buf.readableBytes())
+        assertNull(ch.readOutbound<PKT>(), "stageState=1 不应回包")
+
+        ch.finish()
     }
 
     @Test
