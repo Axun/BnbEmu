@@ -9,6 +9,7 @@ import bnbemu.packet.PracticeAiLevel
 import bnbemu.packet.PracticeBoard
 import bnbemu.packet.PracticeStartInfo
 import bnbemu.packet.room.GameStartMapInfo
+import bnbemu.packet.room.randomSpawnPositions
 import bnbemu.server.Room
 import kotlin.random.Random
 
@@ -88,6 +89,7 @@ val StartGameReq = PKTHandler { c ->
             themeId = themeId,
             mapName = mapName,
             activeSlots = activeSlots,
+            spawnPositions = randomSpawnPositions(),
         ),
         PracticeStartInfo(),
         PracticeBoard(),

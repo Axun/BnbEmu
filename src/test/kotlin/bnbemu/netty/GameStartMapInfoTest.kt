@@ -8,11 +8,15 @@ import bnbemu.handler.room.StartGameReq
 import bnbemu.handler.room.loadMapIdTable
 import bnbemu.handler.room.mapIdTable
 import bnbemu.packet.room.GameStartMapInfo
+import bnbemu.packet.room.randomSpawnPositions
+import bnbemu.packet.room.spawnRandom
 import bnbemu.server.Room
 import bnbemu.server.bomber
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import java.io.File
+import kotlin.random.Random
 
 class GameStartMapInfoTest {
 
@@ -328,5 +332,84 @@ class GameStartMapInfoTest {
         } finally {
             Room.slots.forEachIndexed { i, slot -> slot.isAI = saved[i] }
         }
+    }
+
+    // ======================================================================
+    // 開局出生點隨機化 (2026-11-06)
+    // ======================================================================
+
+    @Test
+    fun testRandomSpawnPositionsIsPermutationAndVaries() {
+        val saved = spawnRandom
+        try {
+            spawnRandom = Random(20261106)
+            val draws = List(32) { randomSpawnPositions().toList() }
+            draws.forEach { spawns ->
+                assertEquals((0..7).toList(), spawns.sorted(), "出生點必須是 0..7 的排列: 不重複、不越界")
+            }
+            assertTrue(draws.distinct().size > 1, "每次開局都必須重新洗牌")
+        } finally {
+            spawnRandom = saved
+        }
+    }
+
+    @Test
+    fun testStartGameReqRollsSpawnPositionsEachRound() {
+        val savedRandom = spawnRandom
+        val savedAI = Room.slots.map { it.isAI }
+        try {
+            spawnRandom = Random(112)
+            Room.slots.forEach { it.isAI = true } // 固定 8 槽參戰, 方便逐槽比對
+
+            val draws = List(6) { startGameSpawnPositions() }
+            draws.forEach { spawns ->
+                assertEquals(8, spawns.size, "8 個參戰槽位都要有出生點")
+                assertEquals((0..7).toList(), spawns.sorted(), "op112 的出生點不得重複/越界")
+            }
+            assertTrue(draws.distinct().size > 1, "op 92 每次開局都要重新洗牌出生點")
+        } finally {
+            Room.slots.forEachIndexed { i, slot -> slot.isAI = savedAI[i] }
+            spawnRandom = savedRandom
+        }
+    }
+
+    /** 走一次真的 op 92 開局流程, 從 op112 解出逐槽出生點。 */
+    private fun startGameSpawnPositions(): List<Int> {
+        val ch = EmbeddedChannel()
+        val client = ClientSocket()
+        ch.pipeline().addLast(client)
+
+        val req = Unpooled.buffer()
+        val reqPkt = SendPacketBase(req, 3)
+        reqPkt.Encode4(176)   // mapId
+        reqPkt.Encode2(29)    // themeId
+        reqPkt.Encode1(0)     // subType
+        reqPkt.Encode4(176)   // roomSelectedMapId
+        reqPkt.Encode1(0)     // isCustomMap
+        reqPkt.Encode1(1)     // fileCheckType = 1 (無 CRC)
+        reqPkt.Encode4(0)     // eventParam
+        with(StartGameReq) { req.handle(client) }
+
+        ch.readOutbound<PKT>() // 111 PracticeAiLevel
+        val pkt112 = ch.readOutbound<PKT>() ?: error("缺少 op112 GameStartMapInfo")
+        val buf = Unpooled.buffer()
+        pkt112.encode(SendPacketBase(buf, 3))
+
+        buf.Decode4           // randomSeed
+        buf.Decode2           // themeId
+        buf.DecodeCipherStr   // mapName
+        buf.Decode4           // mapId
+        buf.Decode1           // gameOptions
+        buf.Decode1           // flag
+        val slotCount = buf.Decode1
+        val spawns = (0 until slotCount).map {
+            buf.Decode1       // slotIdx
+            val spawn = buf.Decode1
+            repeat(3) { buf.Decode1 } // bomber / team / state
+            repeat(3) { buf.Decode4 } // param1..3
+            spawn
+        }
+        ch.finishAndReleaseAll()
+        return spawns
     }
 }

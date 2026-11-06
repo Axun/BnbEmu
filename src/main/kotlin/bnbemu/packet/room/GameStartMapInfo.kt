@@ -3,6 +3,25 @@ package bnbemu.packet.room
 import bnbemu.netty.PKT
 import bnbemu.server.Room
 import bnbemu.server.bomber
+import kotlin.random.Random
+
+// ============================================================================
+// 開局出生點洗牌
+// ============================================================================
+// 客戶端 (CA.exe 0x0051F29C) 把 op112 每筆紀錄的第 2 個欄位交給
+// 0x687415 SetSlotSpawnPos 存進 CGameContext, 開局時 0x005483... 再以
+// 0x687D80 讀出 8 個槽位的出生點編號交給棋盤初始化 (vtable +416)。
+// 也就是說 op112 的 spawnPos 就是「這局誰站在哪個出生點」的唯一來源。
+//
+// 真實對局不能沿用抓包裡的固定排列 [2,1,6,0,3,4,5,7], 否則每局玩家都在同一個點出生。
+// 這裡每次開局重新洗牌 0..7 (一個排列, 8 個出生點恰好各用一次, 不會有兩人重疊);
+// GameStartMapInfo() 的預設值仍保留抓包原值, 供 replay_test 與單元測試逐位元組比對。
+//
+// spawnRandom 抽成可替換的 RNG, 讓回歸測試能用固定 seed 得到確定性結果。
+internal var spawnRandom: Random = Random.Default
+
+/** 產生本局的隨機出生點排列, 按「真實槽號」索引 (見 [GameStartMapInfo])。 */
+fun randomSpawnPositions(): IntArray = (0..7).shuffled(spawnRandom).toIntArray()
 
 /**
  * S→C op 112: GameStartMapInfo (對局地圖與槽位出生點/角色初始化)
@@ -42,6 +61,9 @@ import bnbemu.server.bomber
  *    若這裡仍固定發 8 筆 (1..7 全 team=8), 開局就會把 7 個 AI 原樣重建回來。
  *    因此由 [StartGameReq] 把 Room.slots 中「有人或 isAI」的真實槽號傳進 activeSlots;
  *    預設值 0..7 保留給抓包重放/單元測試, 與 cap/practice_s2c_op112_167B_0.bin 逐位元組一致。
+ *
+ * ⚠️ spawnPositions 的預設值同樣是抓包裡的固定排列, 只供重放比對;
+ *    正式開局由 [StartGameReq] 傳入 [randomSpawnPositions] 的每局洗牌結果。
  */
 fun GameStartMapInfo(
     randomSeed: Int = 0x7E022E6B,
