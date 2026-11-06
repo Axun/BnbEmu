@@ -4,6 +4,8 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.EnterShopResult
 import bnbemu.packet.EnterShopStage
+import bnbemu.packet.UserDynamicInfo
+import bnbemu.server.lucci
 
 /**
  * C->S op 315: 请求进入商城 (EnterShopReq)
@@ -16,11 +18,13 @@ import bnbemu.packet.EnterShopStage
  * - 服务端响应:
  *   1. 下发 S->C op 259 EnterShopResult(success = true) 解除等待锁
  *   2. 下发 S->C op 17 EnterShopStage() 触发客户端切换至 CShopStageNew (Stage 14)
+ *   3. 下发 S->C op 122 UserDynamicInfo(0, lucci) 同步金币 (商城舞台就绪后补发一次不然会显示0)
  */
 val EnterShopReq = PKTHandler { c ->
     val tab = Decode1
     c send EnterShopResult(success = true)
     c send EnterShopStage()
+    c send UserDynamicInfo(0, c.lucci)
 }
 
 /*
