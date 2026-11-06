@@ -1,9 +1,11 @@
 package bnbemu.handler
 
+import bnbemu.debugMode
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.decodeName
+import bnbemu.server.Room
 
 /**
  * C→S op 18：大廳聊天發言（EN 客戶端在聊天框送出文字）
@@ -36,7 +38,66 @@ val ChatMsg = PKTHandler { c ->
 
     // 目前僅記錄，供後續確定 S→C 顯示 opcode 後接上廣播
     println("[ChatMsg] 收到聊天 type=$chatType 文字=\"$text\"")
+
+    // 调试命令（仅 debugMode，聊天框输入，前缀 / 或 ! 都可以）：
+    //   die  <slot>                -> 广播 S->C op159（单字节 BomberDie，只置状态17/音效0x37，实测无感）
+    //   list <slot> [slot...]      -> 广播 S->C op146 state=5「死亡名单」（实测：当场死亡 + 死亡音 0x2A）
+    //   trap <slot> [x y]          -> op146 state=2「困住」；不给坐标就用该槽最后上报的位置
+    //   free <slot> [saverSlot]    -> op146 state=12「脱困」(不给 saver) 或 state=3「被救」
+    //   shield <slot>              -> op146 state=9「护盾」；被撞时客户端会自己破盾并报 op112 0xA0
+    //   st   <state> <slot> [x y]  -> 广播任意 state 的 op146，用来试每个 state 的语义
+    // 详见 packet/room/SetBomberState.kt 的 state 表。
+    if (debugMode) {
+        // 前缀无关：去掉行首的非字母数字（/ ! . 等）后按命令名匹配
+        val cmd = text.trim().dropWhile { !it.isLetter() }
+
+        val die = DEBUG_DIE.find(cmd)
+        if (die != null) Room.debugBroadcastBomberDie(die.groupValues[1].toInt())
+
+        val list = DEBUG_LIST.find(cmd)
+        if (list != null) {
+            Room.broadcastDeathList(
+                list.groupValues[1].split(Regex("[,\\s]+")).filter { it.isNotEmpty() }.map { it.toInt() },
+                debug = true
+            )
+        }
+
+        val st = DEBUG_ST.find(cmd)
+        if (st != null) {
+            val state = st.groupValues[1].toInt()
+            val slot = st.groupValues[2].toInt()
+            val rest = st.groupValues[3].trim().split(Regex("[,\\s]+")).filter { it.isNotEmpty() }
+            val x = rest.getOrNull(0)?.toInt() ?: -1
+            val y = rest.getOrNull(1)?.toInt() ?: -1
+            // state 2/3/4 会拿这两栏当坐标：能不给就别给 0，否则客户端会把角色瞬移到左上角。
+            Room.setBomberState(slot, state, x, y)
+        }
+
+        val trap = DEBUG_TRAP.find(cmd)
+        if (trap != null) {
+            val slot = trap.groupValues[1].toInt()
+            val rest = trap.groupValues[2].trim().split(Regex("[,\\s]+")).filter { it.isNotEmpty() }
+            val x = rest.getOrNull(0)?.toInt() ?: -1
+            val y = rest.getOrNull(1)?.toInt() ?: -1
+            Room.trapBomber(slot, x, y)
+        }
+
+        val free = DEBUG_FREE.find(cmd)
+        if (free != null) {
+            val slot = free.groupValues[1].toInt()
+            val saver = free.groupValues[2].trim().toIntOrNull() ?: -1
+            Room.freeBomber(slot, saver)
+        }
+    }
 }
+
+// 命令名固定不带前缀（ChatMsg 里已把行首的 / ! 等符号剥掉）
+private val DEBUG_DIE = Regex("^die" + BLANK + "(\\d+)")
+private val DEBUG_LIST = Regex("^list" + BLANK + "([\\d,\\s]+)")
+private val DEBUG_ST = Regex("^st" + BLANK + "(\\d+)" + BLANK + "(\\d+)(.*)")
+private val DEBUG_TRAP = Regex("^trap" + BLANK + "(\\d+)(.*)")
+private val DEBUG_FREE = Regex("^free" + BLANK + "(\\d+)(.*)")
+private const val BLANK = "\\s+"
 
 /*
   在大厅聊天框发送文字（实测文字 "asf"）由客户端发出 **C→S op 18 (0x12)**

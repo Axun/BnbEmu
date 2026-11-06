@@ -1,5 +1,6 @@
 package bnbemu.handler.room
 
+import bnbemu.debugMode
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
@@ -28,6 +29,9 @@ val BoxItemSpawnReport = PKTHandler { c ->
     }
     val first = Decode2
     val action = Decode2
+    // 诊断用: 阵亡音效 / 被困音效都依赖这里的 action (见 docs/agents-notes-battle.md)。
+    // 目前实战只见过 1 / 4 / 0; 2(被困) 3(被救) 5(阵亡) 对 AI 一律不发, 打日志便于验证。
+    if (debugMode) println("[op154] slot=$first action=$action 剩余=${readableBytes()}B")
     when (action) {
         5 -> {
             // 角色死亡上报: first 为 slotId

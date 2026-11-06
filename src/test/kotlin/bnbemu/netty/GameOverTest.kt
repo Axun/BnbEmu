@@ -1,6 +1,7 @@
 package bnbemu.netty
 
 import bnbemu.handler.room.BomberActionReq
+import bnbemu.packet.room.BOMBER_STATE_DEATH_LIST
 import bnbemu.packet.room.ReviveBomber
 import bnbemu.packet.room.GameResult
 import bnbemu.packet.room.InitGameResult
@@ -112,6 +113,7 @@ class GameOverTest {
     fun testPacketClassesAreBoundToOpcodes() {
         assertEquals(169, OpcodeManager.getSendOp(InitGameResult(0, 0, 0)::class.java), "InitGameResult 必须是 op 169")
         assertEquals(150, OpcodeManager.getSendOp(GameResult(0)::class.java), "GameResult 必须是 op 150")
+        assertEquals(160, OpcodeManager.getSendOp(ReviveBomber(0)::class.java), "ReviveBomber 必须是 op 160")
     }
 
     // ---- 兼容路径: C→S op 154 action=5 ----
@@ -365,5 +367,24 @@ class GameOverTest {
         assertTrue(drain().isEmpty(), "空槽的错位上报不得触发结算")
         assertFalse(Room.gameOverSent)
         Room.slots[5].isAI = true
+    }
+
+    @Test
+    fun testBomberDieBroadcastsDeathListToo() {
+        // 阵亡 = op159（状态 17/清队伍桶，实测无音效）+ op146 state5 死亡名单（摘除 + 音效 0x2A）
+        Room.startGame()
+        ch.outboundMessages().clear()
+
+        Room.onBomberDie(1)
+        val sent = drain()
+        val ops = sent.map(::opcodeOf)
+        assertEquals(1, ops.count { it == 159 }, "先发 op 159, ops=$ops")
+        val list = sent.firstOrNull { opcodeOf(it) == 146 }
+        assertNotNull(list, "必须同时下发死亡名单, ops=$ops")
+        val body = bodyOf(list!!)
+        assertEquals(BOMBER_STATE_DEATH_LIST, dec1(body[0]) shr 4, "state 必须是 5")
+        assertEquals(1, dec1(body[5]), "名单里 1 个槽位")
+        assertEquals(1, dec1(body[6]), "槽位 1")
+        assertTrue(ops.indexOf(159) < ops.indexOf(146), "159 必须在名单之前（名单摘掉 bomber 后 159 会提前返回）")
     }
 }

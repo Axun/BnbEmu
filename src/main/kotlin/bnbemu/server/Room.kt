@@ -156,10 +156,9 @@ object Room {
     //   → 「玩家赢」必须靠 [onLastTeamStanding] (op112 action=0x60); 这里保留 action=5 是为了
     //     处理玩家自己阵亡 (以及将来真正的多真人房)。
     //
-    // 结算判定规则 (2026-11-05 修正):
-    //   旧实现只在 slotId == 0 (玩家自己阵亡) 时下发结算, 于是「杀光全部 AI」之后对局永远不会结束 ——
+    // 结算判定规则
     //   客户端只是把每个阵亡的 bomber 转发给服务端, 自身没有任何"敌人清空"判定, 全部依赖服务端下令。
-    //   现在按 Slot.matchState (OUT_OF_MATCH / ALIVE / DEAD) 统计双方存活人数, 任意一方全灭即结束对局:
+    //   于是「杀光全部 AI」之后对局永远不会结束。现在按 Slot.matchState 统计双方存活人数, 任意一方全灭即结束对局:
     //     · 人类全灭            → AI 胜 (与原行为一致, 胜利者取一个仍活着的 AI 槽位)
     //     · AI 全灭 && 人类存活 → 人类胜 (胜利者取玩家槽位, GameResult winnerTeam = 0)
     //   结算包固定 1.5s 延迟下发: 客户端要先播完阵亡动画。
@@ -176,8 +175,16 @@ object Room {
         if (slot.matchState != SlotMatchState.ALIVE) return
         slot.matchState = SlotMatchState.DEAD
 
-        // 广播 S→C op 159 BomberDie 触发客户端播放死亡动画与淘汰状态设置 (CA.exe 0x0054C378)
+        // 阵亡广播 = 两条包配合:
+        //   1) S→C op159 BomberDie(slot) —— 客户端 0x0054C378: 置状态 17、清队伍桶、
+        //      播 0x37（实测这声听不见，所以**光发它等于没声音**）；
+        //   2) S→C op146 state=5「死亡名单」—— 0x54E0B8: 把该 bomber 从场上摘除 + 刷 UI，
+        //      结尾播 0x2A 死亡音。
+        //   顺序必须先 159 再名单：名单会把 bomber 摘掉，之后再发 159 会因 `[bomber+8]==0` 提前返回。
+        //   名单的通用头 slot 不能写死 0：客户端 0x54DDD1 会先按它取 bomber，空槽/已摘除
+        //   会让整个包被跳过（连 0x2A 都不播）。用本次名单里第一个槽——判空发生在摘除之前。
         BC(BomberDie(slotId))
+        BC(BomberDeathList(listOf(slotId), headerSlot = slotId))
         println(
             "[Room] BomberDie slot=$slotId (" + (if (slot.user != null) "人类" else if (slot.isAI) "AI" else "空槽") +
                 ") | 存活人类=${slots.indices.filter { slots[it].user != null && slots[it].isAlive }} " +
@@ -286,6 +293,108 @@ object Room {
             // 结算后停掉对局主循环 (水泡倒计时), 与客户端离开棋盘同步
             endGame()
         }, gameOverDelayMs, TimeUnit.MILLISECONDS)
+    }
+
+    /**
+     * 调试专用：只广播 S→C op159 [BomberDie]，**不改** `matchState`、**不触发**结算。
+     *
+     * 用途：验证"op159 到底会不会让客户端播死亡音效 / 进入状态 17"。
+     * 对局中在聊天框输入 `/die <slot>` 即可触发（见 handler/ChatMsg.kt，仅 debugMode）。
+     */
+    fun debugBroadcastBomberDie(slotId: Int) {
+        if (slotId !in slots.indices) return
+        println("[Room][debug] 手动广播 BomberDie slot=$slotId")
+        BC(BomberDie(slotId))
+    }
+
+    /**
+     * 广播 S→C op 146 [SetBomberState]：局内 bomber 事件伞（详见 packet/room/SetBomberState.kt）。
+     *
+     * 已知 state（全部反汇编 + 实机验证）：
+     *   · 2  = **困住**（气泡），必须带目标当前坐标，见 [trapBomber]
+     *   · 3  = 被救脱困（需要坐标 + saver），见 [freeBomber]
+     *   · 5  = **死亡名单**（官方服务端的同一条消息，见 [broadcastDeathList]）
+     *   · 9  = 护盾/暂时无敌；10 = 护盾被打破（音效 0x87）
+     *   · 12 = 脱困但不改坐标（角色留在原地）
+     *   · 13 = 复活卡特效（对别人使用）
+     *
+     * 调试入口：聊天框 `st <state> <slot> [x y]`（仅 debugMode）。**没有自动调用点**。
+     */
+    fun setBomberState(slotId: Int, state: Int, x: Int = 0, y: Int = 0, saverSlot: Int = -1) {
+        if (slotId !in slots.indices) return
+        if (!slots[slotId].hasSeat()) return
+        BC(SetBomberState(slotId, state, x, y, saverSlot))
+        println("[Room] SetBomberState slot=$slotId state=$state x=$x y=$y" + if (saverSlot >= 0) " saver=$saverSlot" else "")
+    }
+
+    /**
+     * 把某个槽位的 bomber 装进泡泡（op146 state 2，客户端 0x54DEE5）。
+     *
+     * ⚠️ 必须传目标**当前坐标**：state 2 的第一步就是 `vt[0x64](x, y)` 设位置，
+     *    传 0,0 会把角色瞬移到地图左上角（实测"发完 trap 人物就不见了"）。
+     *    坐标来源只有 C→S op112 上报过的 [Slot.posX]/[Slot.posY]（AI 也有，客户端会替它发）。
+     *
+     * ⚠️ 只发 state 2 就够：实测再补 state 9 只会让目标套上护盾（见 [shieldBomber]），
+     *    并不会让"撞上去"变成破泡。客户端的破泡分支判的是 `0x45D15B` = `[+0x2AB8] >= 0`，
+     *    而 `+0x2AB8` 是**护盾计时**（0x45E923 / 0x45E998），不是被困计时。
+     *
+     * @param x/y 显式坐标；不传则用该槽位最后上报的位置，未知时拒绝下发（宁可不动也不能瞬移）。
+     * @return 是否真的发出了包
+     */
+    fun trapBomber(slotId: Int, x: Int = -1, y: Int = -1): Boolean {
+        if (slotId !in slots.indices) return false
+        val slot = slots[slotId]
+        if (!slot.hasSeat()) return false
+        if (x < 0 || y < 0) {
+            println("[Room] 无法困住 slot=$slotId: 没有坐标")
+            return false
+        }
+        BC(SetBomberState(slotId, BOMBER_STATE_TRAPPED, x, y))
+        println("[Room] 困住 slot=$slotId: state=2 x=$x y=$y")
+        return true
+    }
+
+    /**
+     * 让某个槽位从泡泡里出来。两种 state：
+     *   · 12（默认）= 脱困但不改坐标 —— 实测角色留在原地，最安全；
+     *   · 3（传了 saverSlot）= "被某人救下"，会在格子上放特效，但**必须带坐标**，否则瞬移。
+     *
+     * @return 是否真的发出了包
+     */
+    fun freeBomber(slotId: Int, saverSlot: Int = -1, x: Int = -1, y: Int = -1): Boolean {
+        if (slotId !in slots.indices) return false
+        val slot = slots[slotId]
+        if (!slot.hasSeat()) return false
+
+        if (saverSlot < 0) {
+            // 12 = 脱掉气泡但**不改坐标**（角色留在原地）—— 实测最安全。
+            // 不要顺手发 state 10：那是"破盾"，会把 target 的护盾（如果有）一起打掉并播 0x87。
+            BC(SetBomberState(slotId, BOMBER_STATE_FREE))
+            println("[Room] 脱困 slot=$slotId: state=12")
+            return true
+        }
+
+        if (x < 0 || y < 0) {
+            println("[Room] 无法用 state 3 救下 slot=$slotId: 没有坐标, 退回 state 12")
+            BC(SetBomberState(slotId, BOMBER_STATE_FREE))
+            return true
+        }
+        BC(SetBomberState(slotId, BOMBER_STATE_SAVED, x, y, saverSlot))
+        println("[Room] SetBomberState slot=$slotId state=${BOMBER_STATE_SAVED}(被救) x=$x y=$y saver=$saverSlot")
+        return true
+    }
+
+    /**
+     * 广播"死亡名单"（op146 state=5）—— 真正用来通知阵亡的消息。
+     *
+     * 调试入口：聊天框 `/kill <slot>[ <slot>...]`（仅 debugMode）。**没有自动调用点**。
+     */
+    fun broadcastDeathList(slotIds: List<Int>, debug: Boolean = false) {
+        val valid = slotIds.filter { it in slots.indices && slots[it].hasSeat() }
+        if (valid.isEmpty()) return
+        // 通用头指向名单第一个槽：客户端判空在 case5 摘除之前，此刻它一定还在。
+        BC(BomberDeathList(valid, headerSlot = valid.first()))
+        println("[Room] BomberDeathList slots=$valid" + (if (debug) " (debug)" else ""))
     }
 
     /**
@@ -404,7 +513,9 @@ object Room {
      */
     fun resetMatchState() {
         gameOverSent = false
-        slots.forEach { it.matchState = if (it.hasSeat()) SlotMatchState.ALIVE else SlotMatchState.OUT_OF_MATCH }
+        slots.forEach {
+            it.matchState = if (it.hasSeat()) SlotMatchState.ALIVE else SlotMatchState.OUT_OF_MATCH
+        }
     }
 
     fun reset() {

@@ -1,7 +1,9 @@
 package bnbemu.handler.room
 
+import bnbemu.debugMode
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
+import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
 import bnbemu.server.Room
 
@@ -34,21 +36,38 @@ val BomberActionReq = PKTHandler { c ->
     val posX = Decode2
     val posY = Decode2
 
+    if (debugMode) println("[op112] slot=$slotId action=0x${action.toString(16)} x=$posX y=$posY 剩余=${readableBytes()}B")
+
     when (action) {
         // "只剩一支队伍" 上报 → 结算。slotId 是存活方, 决定玩家胜还是 AI 胜。
         // 客户端每帧重发, Room 内部用 gameOverSent 去重。
         0x60 -> Room.onLastTeamStanding(slotId)
 
         0x40 -> if (readableBytes() >= 2) {
+            // E1(param) + E1(count) + count × [E1 gridY, E1 gridX, E2 bombId]
+            // 实测样本 (AI slot 7)：1D A4 C1 A4 DE 5A 5B 5A 5D A5 61
+            //   → action 0x40 / slot 7, x=424 y=439, param=0, count=1,
+            //     gridY=0 gridX=7 bombId=8  ← "AI 7 碰到了 8 号水泡"
             val param = Decode1
             val count = Decode1
+            val hits = mutableListOf<String>()
             repeat(count.coerceIn(0, 16)) {
                 if (readableBytes() >= 4) {
                     val gridY = Decode1
                     val gridX = Decode1
                     val bombId = Decode2
+                    hits += "bomb#$bombId@($gridX,$gridY)"
                 }
             }
+            if (debugMode) println("[op112] slot=$slotId 碰到水泡 param=$param count=$count ${hits.joinToString(" ")}")
+        }
+
+        // 13 字节变体: E1(action|slot) + E2 x + E2 y + E4 + E4（两个 32 位 id，语义未定，
+        // 大概率是"道具/攻击目标"的两个令牌）。每个 AI 每局大约只发一次，诊断用。
+        0x20 -> if (readableBytes() >= 8) {
+            val id1 = Decode4
+            val id2 = Decode4
+            if (debugMode) println("[op112] slot=$slotId action=0x20 id1=$id1 id2=$id2")
         }
     }
     // 消费所有剩余字节，防止未预期的扩展导致越界
