@@ -65,7 +65,7 @@
   293(E1(0))/78 QuestConfigTable（任务配置表，E4(count)+条目列表，空为 E4(0)）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、
   81 JoinSessionResult（**大厅名册**，已结构化 `packet/JoinSessionResult.kt` 的 `RosterEntry`，
   `E4(人数)+N×[E1槽位+E4账号数值+E2名长+令牌]`，账号数值=passport 0x2E 同值）、
-  413 UserInventoryInfo（**玩家背包全量槽位初始化**，614B 50槽，CUserInventoryMan）/ 198 / 200 FxStockInit / 274 UserItemUpdate×2（**道具槽位更新**，CUserItemMan）/ 212 FxConfig（**特效与角色可用性配置**，CFxContext）/ 210 DynamicMapInfo / 65 ShopCatalog(50KB) / 204 / 66 / 14(9B 变体) / 20 / 261 ShopVersion（**商城目录版本校验与开关**，CShopItemMan，不一致触发客户端发 276）/ 247
+  413 UserInventoryInfo（**玩家背包槽位/容量初始化**，614B 50槽，CUserInventoryMan/ 198 / 200 FxStockInit / 274 UserItemUpdate×2（**道具槽位更新**，CUserItemMan）/ 212 FxConfig（**特效与角色可用性配置**，CFxContext）/ 210 DynamicMapInfo / 65 ShopCatalog(50KB) / 204 / 66 / 14(9B 变体) / 20 / 261 ShopVersion（**商城目录版本校验与开关**，CShopItemMan，不一致触发客户端发 276）/ 247
   （进频道握手推送，多为原样重放；其中 210 已改由 `src/main/resources/data/fxdynmapinfo.json` 实时生成，顺序与触发见 JoinSessionReq.kt）
 - 尚无 handler/packet（yaml 里 Unk_* 占位）：
   S→C 86（大厅期周期推送，⚠️ 非"进房后"）

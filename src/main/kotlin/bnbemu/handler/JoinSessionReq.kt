@@ -4,6 +4,7 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.ChannelsGameState
 import bnbemu.packet.DynamicMapInfo
 import bnbemu.packet.FxConfig
+import bnbemu.packet.ItemDef
 import bnbemu.packet.JoinSessionResult
 import bnbemu.packet.RoomList
 import bnbemu.packet.SessionList
@@ -48,12 +49,21 @@ val JoinSessionReq = PKTHandler { c ->
     val user = c.users.firstOrNull()
     val lucci = user?.lucci ?: 1234567
     c.send(
-        UserInventoryInfo(), UserInventory(), FxStockInit(),
+        // ⚠️ 进频道推送顺序里 413 必须排在 198 之后:
+        //    op 413 的 50 个 10007 槽位是"背包等级 +50"（见 UserInventoryInfo.kt），
+        //    但紧跟其后的 op 198 走 ApplyEquippedInventory (0x6757A6 → 0x673CF4)，
+        //    会把这个等级覆盖回 0 → 容量 = 8×0 = 0 → IsBagFull (0x659520, 已用 >= 容量) 恒真
+        //    → 商城点购买恒弹 "Your item bag is full. Purchase an item bag?"。
+        //    把 413 挪到 198 之后，运行时直读 dyn+0x1EC = 50 → 容量 400，购买可正常进入流程。
+        //    另: op 60 (ItemDef) 仍需在 413 之前，客户端按 itemId 查定义表，查不到整条丢弃。
+        ItemDef(),
+        UserInventory(), FxStockInit(),
         UserItemUpdate(), UserItemUpdate(1),
         UserDynamicInfo(0, lucci), FxConfig(), DynamicMapInfo(),
         RoomList(), ShopCatalog(),
         Unk204(), Unk66(), ChannelsGameState(tailOnes = 2),
         Unk20(), ShopVersion(), Unk247(), Unk423(),
+        UserInventoryInfo(),
         JoinSessionResult(), SessionList(),
     )
 }
