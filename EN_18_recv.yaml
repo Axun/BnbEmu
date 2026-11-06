@@ -108,8 +108,11 @@ MyPageReq: 301
 WatchUserInfoReq: 74
 ChangeEquipReq: 273
 SweetieInfoReq: 288
+
+# ----- shop -----
 EnterShopReq: 315
 ShopSyncReq: 317
 ShopUserSyncReq: 37
 ShopPackageMapReq: 258
 ShopStringTableReq: 278
+ChargeNxReq: 277
