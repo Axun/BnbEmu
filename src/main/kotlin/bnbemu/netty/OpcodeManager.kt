@@ -4,6 +4,7 @@ import io.github.classgraph.ClassGraph
 import bnbemu.Ver
 import bnbemu.loadYaml
 import bnbemu.locale
+import org.tinylog.kotlin.Logger
 import java.util.IdentityHashMap
 
 object OpcodeManager {
@@ -61,8 +62,7 @@ object OpcodeManager {
         recvOps = recvYaml.entries.associate { (k, v) -> v to k }
         sendOps = sendYaml
 
-//        println("初始化完成: 綁定 ${handlerArray.count { it != null }} 個 Handler")
-        println("初始化完成: 綁定 ${handlerArray.count { it != null }} 個 Handler, 註冊 ${sendOpCache.size} 個發送包")
+        Logger.info("初始化完成: 綁定 ${handlerArray.count { it != null }} 個 Handler, 註冊 ${sendOpCache.size} 個發送包")
     }
 
     // 獲取 Opcode (含快取)

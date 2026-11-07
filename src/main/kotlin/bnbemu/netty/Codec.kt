@@ -5,6 +5,7 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.handler.codec.ByteToMessageDecoder
 import io.netty.handler.codec.MessageToByteEncoder
 import bnbemu.*
+import org.tinylog.kotlin.Logger
 
 // ReceivedPacketBase可以省略CipherDegree狀態 所以可以直接用這個
 // EN 真實伺服器 (66.135.19.7, PopTag 英文客戶端) 幀格式, 由 cap/*.pcap 逆向並以 CRC8 oracle 全量驗證 (188/188):
@@ -234,7 +235,7 @@ class Encoder : MessageToByteEncoder<PKT>() {
 }
 
 fun PKT.logPacket(opcode: Int) {
-    println(
+    Logger.debug(
         "[" + "${
             javaClass.name.substringAfter('$').substringBefore('$')
         }] " + "$opcode | 0x${opcode.toString(16).uppercase()} | 發送"

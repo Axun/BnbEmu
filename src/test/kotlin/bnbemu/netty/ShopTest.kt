@@ -88,7 +88,7 @@ class ShopTest {
         // 背包物品必须并进 S→C op 198 下发，否则客户端 ReadEquippedInventory (0x67601D)
         // 清空重建时会把「商城里刚买的东西」抹掉；槽位必须是 0xFF（BAG_ONLY_SLOT），
         // 客户端 sub_65D55F 才会只塞进背包向量、不占装备槽。
-        val bag = listOf(bnbemu.packet.UserItemEntry(itemId = 710418))
+        val bag = listOf(bnbemu.server.UserItemEntry(itemId = 710418))
         val entries = bnbemu.packet.bagInventoryEntries(bag)
         assertEquals(1, entries.size)
         assertEquals(710418, entries[0].itemId)

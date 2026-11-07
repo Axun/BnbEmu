@@ -19,6 +19,7 @@ import io.netty.channel.socket.nio.NioDatagramChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import bnbemu.*
 import bnbemu.packet.ConnEstablished
+import org.tinylog.kotlin.Logger
 import java.net.InetSocketAddress
 
 object NettyServer {
@@ -72,9 +73,9 @@ object NettyServer {
         TCP_PORTS.forEach { port ->
             tcpBoot.bind(port).addListener { future ->
                 if (future.isSuccess) {
-                    println("Bind to TCP port: $port")
+                    Logger.info("Bind to TCP port: $port")
                 } else {
-                    println("Failed to bind TCP port: $port")
+                    Logger.error("Failed to bind TCP port: $port")
                 }
             }
         }
@@ -93,9 +94,9 @@ object NettyServer {
             handler(handler)
         }.bind(port).addListener { future ->
             if (future.isSuccess) {
-                println("Bind to UDP port: $port")
+                Logger.info("Bind to UDP port: $port")
             } else {
-                println("Failed to bind UDP port: $port")
+                Logger.error("Failed to bind UDP port: $port")
             }
         }
     }

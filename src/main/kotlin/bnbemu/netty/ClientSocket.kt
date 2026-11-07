@@ -7,6 +7,7 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.SimpleChannelInboundHandler
 import bnbemu.debugMode
 import bnbemu.server.User
+import org.tinylog.kotlin.Logger
 import java.io.IOException
 
 const val MAX_DUMP_LEN = 99
@@ -68,14 +69,13 @@ class ClientSocket : SimpleChannelInboundHandler<ByteBuf>() {
     }
 
     private fun logPacket(opcode: Int, opName: String?, handler: PKTHandler?, pkt: ByteBuf) {
-        val hexOp = "0x${opcode.toString(16).uppercase()}"
         val status = if (handler != null) "接收" else "找不到 Handler"
 
-        println("[${opName ?: "UNKNOWN"}] $opcode | $hexOp | $status | ${ch.remoteAddress()}")
+        Logger.debug("[${opName ?: "UNKNOWN"}] $opcode | $status | ${ch.remoteAddress()}")
 
         val hexDump = pkt.hexDumpTruncated()
         if (hexDump.isNotEmpty()) {
-            println(hexDump)
+            Logger.debug(hexDump)
         }
     }
 

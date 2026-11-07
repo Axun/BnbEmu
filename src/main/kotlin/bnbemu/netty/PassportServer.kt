@@ -16,6 +16,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.ByteToMessageDecoder
 import bnbemu.debugMode
 import bnbemu.isEN
+import org.tinylog.kotlin.Logger
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentHashMap
@@ -333,9 +334,9 @@ object PassportServer {
             })
         }.bind(PORT).addListener { future ->
             if (future.isSuccess) {
-                println("Bind to TCP port: $PORT (passport)")
+                Logger.info("Bind to TCP port: $PORT (passport)")
             } else {
-                println("Failed to bind TCP port: $PORT (passport)")
+                Logger.error("Failed to bind TCP port: $PORT (passport)")
             }
         }
     }
@@ -361,10 +362,10 @@ private object PassportHandler : SimpleChannelInboundHandler<PassportFrame>() {
     override fun channelRead0(ctx: ChannelHandlerContext, frame: PassportFrame) {
         val hexOp = "0x${frame.cmd.toString(16).padStart(4, '0').uppercase()}"
         if (debugMode) {
-            println("[Passport] $hexOp | 接收 | ${ctx.channel().remoteAddress()}")
+            Logger.debug("[Passport] $hexOp | 接收 | ${ctx.channel().remoteAddress()}")
             val hexDump = frame.payload.hexDumpTruncated()
             if (hexDump.isNotEmpty()) {
-                println(hexDump)
+                Logger.debug(hexDump)
             }
         }
 
