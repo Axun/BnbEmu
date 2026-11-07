@@ -13,9 +13,7 @@ fun ChannelsState() = PKT {
     //   整包 = Encode4(塊長) + SSD 資料塊 (op13 無 Encode1Bool 開頭)
     //   塊明文 = [0x18][(塊長-5)&0xFF][u32 0][u16 頻道數 LE] + N × 條目, 經 ssdEncode 變換下發
     //            (塊頭規律、SSD 變換見 ChannelsExtraInfo.kt 頂部註釋)
-    //   條目 = [u16 LE state][u8 enabled][u8 0] + 2B 續讀標記
-    //   續讀標記: 末條 = Encode2(0) 原樣 a5 69 (解碼 0 → 列表結束),
-    //             非末條 = 00 00 (解碼 0xA569 ≠ 0 → 繼續) — op11 條目尾同款, 僅 E2 無 E1
+//   條目 = [u16 LE state][u8 enabled][u8 0] + 2B 續讀標記
     val blob = ssdEncode(channelsStateBlock(EN_CHANNELS))
     Encode4(blob.size)
     EncodeBuffer(blob)
@@ -28,15 +26,12 @@ private fun channelsStateBlock(entries: List<ChannelEntry>): ByteArray {
     out.u8(0) // (塊長-5)&0xFF, 組裝完回填
     out.u32le(0)
     out.u16le(entries.size)
-    entries.forEachIndexed { i, e ->
+    for (e in entries) {
         out.u16le(e.state)
         out.u8(if (e.enabled) 1 else 0)
         out.u8(0)
-        if (i == entries.lastIndex) {
-            out.u8(0xA5); out.u8(0x69)
-        } else {
-            out.u8(0x00); out.u8(0x00)
-        }
+        // 尾標記明文一律 0
+        out.u8(0x00); out.u8(0x00)
     }
     val ba = out.toByteArray()
     ba[1] = ((ba.size - 5) and 0xFF).toByte()

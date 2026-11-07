@@ -15,8 +15,10 @@ fun ChannelsExtraInfo() = PKT {
     //   op2 1854B → 0x39 可驗); op1 條目數為 u8, op11/12/13 為 u16 LE
     //   條目 = u32 名長 + 名 + u32 人數上限 + u8 當前人數 + u8 mapNo + u32 IPv4(BE)
     //          + 14B 恆定欄位 + 3B 續讀標記 (欄位語義見 ChannelEntry)
-    //   續讀標記: 末條 = Encode2(0)+Encode1(0) 原樣 a5 69 5a (客戶端解碼 0 = 列表結束),
-    //             非末條 = 00 00 00 (解碼 ≠ 0 繼續讀) — 此前誤判為「塊尾 3B 對齊尾巴」
+//   條目尾 3B 標記: builder 明文恆為 00 00 00, 尾部編碼一律交給 ssdEncode;
+//   末條標記恰好是塊尾 3B 餘數, 經 Encode2(0)+Encode1(0) 變成線上 a5 69 5a,
+//   非末條落在 dword 組內變成線上 53 95 96 之類 — 線上形態不同, 明文都是 0
+//   (客戶端 sub_75DAF0 解出的各條目標記全為 0, 舊註記「非末條解碼 ≠0 繼續讀」是誤讀)
     //   Town / SquareCompat 為特殊大地圖頻道 (bigMap=1), 與普通頻道欄位值不同, 並非被關閉
     // 改頻道名單/上限改 EN_CHANNELS 即可; 改 IP 須與 tools/patch_ip.py 同步
     val blob = ssdEncode(channelsExtraBlock(EN_CHANNELS))
@@ -58,7 +60,7 @@ class ChannelEntry(
     val state: Int = 0,
     val enabled: Boolean = true,
 ) {
-    fun Encode(out: ByteArrayOutputStream, isLast: Boolean) {
+    fun Encode(out: ByteArrayOutputStream) {
         out.ss(name)
         out.u32le(maxCount)
         out.u8(curCount)
@@ -79,13 +81,8 @@ class ChannelEntry(
         out.u8(0x01)
         out.u8(0x00)
         out.u8(0x00)
-        // 條目尾續讀標記: 末條 = Encode2(0)+Encode1(0) 原樣 a5 69 5a (客戶端解碼為 0 → 列表結束),
-        // 非末條 = 00 00 00 (解碼 0xA569/0x5A ≠ 0 → 繼續讀下一條)
-        if (isLast) {
-            out.u8(0xA5); out.u8(0x69); out.u8(0x5A)
-        } else {
-            out.u8(0x00); out.u8(0x00); out.u8(0x00)
-        }
+        // 條目尾 3B 標記: 明文一律 0
+        out.u8(0x00); out.u8(0x00); out.u8(0x00)
     }
 }
 
@@ -96,14 +93,17 @@ private fun channelsExtraBlock(entries: List<ChannelEntry>): ByteArray {
     out.u8(0) // (塊長-5)&0xFF, 組裝完回填
     out.u32le(0)
     out.u16le(entries.size)
-    entries.forEachIndexed { i, e -> e.Encode(out, isLast = i == entries.lastIndex) }
+    entries.forEach { e -> e.Encode(out) }
     val ba = out.toByteArray()
     ba[1] = ((ba.size - 5) and 0xFF).toByte()
     return ba
 }
 
-// SSD 資料塊變換: 每 dword 以 LE 讀明文、^0x96CA5395、按 BE 寫回; 尾部不足 4B 原樣
-// (= tools/extract_first_push.py 的 ssd_encode, 客戶端 ssd_decode 為其逆變換; op13 共用)
+// SSD 資料塊變換 = 客戶端 sub_75DAF0 (reference/CA.exe.c:744227) 的逆變換, 全塊一次性套用:
+//   4B 一組: LE 讀明文 ^0x96CA5395 按 BE 寫回; 餘 2B: LE ^0xA569 按 BE 寫; 餘 1B: ^0x5A
+// 所有 builder 只產出「純明文」塊, 尾部不足 4B 的餘數一律由本函式統一編碼, 呼叫方不需也不得預寫線上字節。
+// 線上的 a5 69 5a / a5 69 / 5a 都是明文 0 經尾部編碼的結果 (op11/op13/op12 三塊已逐位元組驗過)。
+// 例外: op1/op2/op51 是硬編碼回放塊, 不走這裡; tools/extract_first_push.py 仍是尾部原樣的舊約定。
 internal fun ssdEncode(plain: ByteArray): ByteArray {
     val out = ByteArray(plain.size)
     var i = 0
@@ -119,9 +119,16 @@ internal fun ssdEncode(plain: ByteArray): ByteArray {
         out[i + 3] = enc.toByte()
         i += 4
     }
-    while (i < plain.size) {
-        out[i] = plain[i]
-        i += 1
+    // 尾部餘數: 餘 2B/3B 先 Encode2 頭 2B, 再 Encode1 最後 1B; 餘 1B 只 Encode1
+    if (plain.size - i >= 2) {
+        val w = (plain[i].toInt() and 0xFF) or ((plain[i + 1].toInt() and 0xFF) shl 8)
+        val enc = w xor 0xA569
+        out[i] = (enc ushr 8).toByte()
+        out[i + 1] = enc.toByte()
+        i += 2
+    }
+    if (i < plain.size) {
+        out[i] = ((plain[i].toInt() and 0xFF) xor 0x5A).toByte()
     }
     return out
 }

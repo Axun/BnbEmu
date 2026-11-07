@@ -38,8 +38,18 @@ def collect(s: socket.socket, seconds: float = 1.5):
     return data, saw_eof
 
 
+def op112_random_mask(p: bytes) -> set:
+    """op112 每局會變動的欄位: Encode4(randomSeed) 4B + 每筆 17B 紀錄的第 2 欄 spawnPos。
+
+    CA.exe 0x0051F29C 用 spawnPos 呼叫 SetSlotSpawnPos; 開局棋盤初始化再逐槽讀出。
+    這兩個欄位由伺服器每局重新產生, 其餘欄位仍須與抓包逐位元組一致。
+    """
+    slot_count = p[26] ^ 0x5A  # Encode1(slotCount)
+    return set(range(2, 6)) | {28 + 17 * n for n in range(slot_count)}
+
+
 def replay(name: str, blob: bytes, expect_ops: set, expect_payloads: dict = None,
-           expect_all: dict = None):
+           expect_all: dict = None, expect_payload_masks: dict = None):
     s = socket.create_connection(("127.0.0.1", PORT), timeout=5)
 
     # 1) banner: [0x00][len:2 BE 明文][payload 明文], 內容須與真實伺服器逐位元組一致
@@ -71,9 +81,27 @@ def replay(name: str, blob: bytes, expect_ops: set, expect_payloads: dict = None
             got = [p["p"] for p in good
                    if len(p["p"]) >= 2 and struct.unpack(">H", p["p"][:2])[0] ^ 0xA569 == op]
             assert got, f"[{name}] 沒收到 op {op} 回應"
-            assert got[0].hex() == hx, \
-                f"[{name}] op {op} 載荷與抓包不一致:\n  got {got[0].hex(' ')}\n  exp {hx}"
-            print(f"[{name}] op {op} 載荷逐位元組與抓包一致 ✓ ({len(got[0])}B)")
+            mask = (expect_payload_masks or {}).get(op)
+            if mask is None:
+                assert got[0].hex() == hx, \
+                    f"[{name}] op {op} 載荷與抓包不一致:\n  got {got[0].hex(' ')}\n  exp {hx}"
+                print(f"[{name}] op {op} 載荷逐位元組與抓包一致 ✓ ({len(got[0])}B)")
+            else:
+                masked = mask(got[0]) if callable(mask) else mask
+                exp = bytes.fromhex(hx)
+                assert len(got[0]) == len(exp), f"[{name}] op {op} 長度不符: {len(got[0])} vs {len(exp)}"
+                diff = [i for i, (a, b) in enumerate(zip(got[0], exp)) if a != b]
+                bad = [i for i in diff if i not in masked]
+                assert not bad, \
+                    f"[{name}] op {op} 非隨機欄位與抓包不一致 (offsets={bad}):\n  got {got[0].hex(' ')}\n  exp {hx}"
+                if op == 112:
+                    slot_count = got[0][26] ^ 0x5A
+                    spawns = [got[0][28 + 17 * n] ^ 0x5A for n in range(slot_count)]
+                    assert all(0 <= s <= 7 for s in spawns) and len(set(spawns)) == slot_count, \
+                        f"[{name}] op112 spawnPos 必須是 0..7 的不重複排列: {spawns}"
+                    print(f"[{name}] op112 出生點排列 = {spawns}")
+                print(f"[{name}] op {op} 固定欄位逐位元組與抓包一致 ✓ "
+                      f"(忽略 {len(masked)} 個隨機欄位位元組, 實際變動 {len(diff)}B)")
         for op, hxs in (expect_all or {}).items():
             got = [p["p"].hex() for p in good
                    if len(p["p"]) >= 2 and struct.unpack(">H", p["p"][:2])[0] ^ 0xA569 == op]
@@ -134,7 +162,9 @@ if __name__ == "__main__":
     #   + op 92 開始遊戲 (重封裝至 seq=46)。
     # → EN 回整套房間設置 (87, 83, 4×2, 113, 100, 108, 106×8, 每槽 114/104/105/103, 198, 423);
     #   op 92 觸發遊戲開始 [111, 112, 100(77B), 136]。
-    #   各 blob 包 (83/113/100/108/112/136/198/423) 載荷逐位元組與抓包一致
+    #   各 blob 包 (83/113/100/108/136/198/423) 載荷逐位元組與抓包一致;
+    #   op 112 的 randomSeed 與每槽 spawnPos 每局重新產生, 只比對其餘固定欄位
+    #   (詳見 op112_random_mask), 並額外驗證 spawnPos 是 0..7 的不重複排列。
     #   (op 139 只在收到 C→S op 106 後回顯, 見 tools/test_ai_sync.py)
     #   ⚠️ 真實伺服器另有 op 172 (MapEventSync 地圖事件時間軸同步, 驅動 "Wave/Game/AirPlane1"),
     #      模擬器不主動週期廣播, 故 expect_ops 不含 172 (逆向見 tools/rev_op172.py)
@@ -146,5 +176,6 @@ if __name__ == "__main__":
             112: open(os.path.join(base, "cap/practice_s2c_op112_167B_0.bin"), "rb").read().hex(),
             136: open(os.path.join(base, "cap/practice_s2c_op136_180B_0.bin"), "rb").read().hex(),
             198: open(os.path.join(base, "cap/practice_s2c_op198_poshevie.bin"), "rb").read().hex(),
-            423: open(os.path.join(base, "cap/practice_s2c_op423_26B_0.bin"), "rb").read().hex()})
+            423: open(os.path.join(base, "cap/practice_s2c_op423_26B_0.bin"), "rb").read().hex()},
+           expect_payload_masks={112: op112_random_mask})
     print("ALL PASS")
