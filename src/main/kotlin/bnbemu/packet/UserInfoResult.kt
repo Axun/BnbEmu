@@ -2,6 +2,7 @@ package bnbemu.packet
 
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
+import bnbemu.server.EquipSlot
 
 /**
  * 字符串 Token 编码 (与 SessionList.kt 令牌算法同款):
@@ -20,15 +21,15 @@ private fun SendPacketBase.EncodeTokenStr(s: String) {
 
 data class UserEquipEntry(
     val itemId: Int = 1,
-    val slot: Int = 15,
+    val slot: Int = EquipSlot.CHARACTER,
     val param1: Int = 20,
     val param2: Int = 0
 )
 
 val DEFAULT_USER_EQUIPS = listOf(
-    UserEquipEntry(itemId = 1, slot = 15, param1 = 20, param2 = 0),
-    UserEquipEntry(itemId = 10006, slot = 13, param1 = 1, param2 = 0),
-    UserEquipEntry(itemId = 2082, slot = 4, param1 = 1, param2 = 0)
+    UserEquipEntry(itemId = 1, slot = EquipSlot.CHARACTER, param1 = 20, param2 = 0),
+    UserEquipEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param1 = 1, param2 = 0),
+    UserEquipEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param1 = 1, param2 = 0)
 )
 
 /**

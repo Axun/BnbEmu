@@ -11,7 +11,6 @@ import bnbemu.packet.PracticeSlot103
 import bnbemu.packet.PracticeSlot104
 import bnbemu.packet.PracticeSlot114
 import bnbemu.packet.PracticeSlotReady
-import bnbemu.packet.PracticeUserInventory
 import bnbemu.packet.PracticeUnk423
 import bnbemu.packet.RoomList
 import bnbemu.packet.SessionInfoResult
@@ -23,12 +22,12 @@ import bnbemu.server.*
 // ============================================================================
 // 进练习房 (C→S op 75) — 在练习房界面点"开始"时发出
 // ============================================================================
-// 载体 (tst.pcap stream4 sq=79, 14B) = E2(0) E2(0) E1(0) E1(1) E1(5) E1(15) E4(66)
+// 载体 (tst.pcap stream4 sq=79, 14B) = E2(0) E2(0) E1(0) E1(1) E1(bomber) E1(15) E4(66)
 //   E2(0)           房号/练习房标识
 //   E2(0)           模式/地图? (练习房固定 0)
 //   E1(0)           ?
 //   E1(1)           ?
-//   E1(5)           bomber (角色, 与默认一致)
+//   E1(bomber)      bomber (客户端当前选中的角色)
 //   E1(15)          ?
 //   E4(66)          地图 id? (练习房地图, 待钉死)
 // 服务器连发整套房间设置回应 (seq 顺序, 见 Practice.kt 注释):
@@ -42,17 +41,21 @@ val CreatePracticeSessionReq = PKTHandler { c ->
     Decode2 // 0
     Decode1 // 0
     Decode1 // 1
-    Decode1 // 5 bomber
+    val reqBomber = Decode1 // 客户端当前选中的 bomber (如 0=Dao, 5=Bazzi, 4=Marid)
     Decode1 // 15
     Decode4 // 66 地图 id
 
     // 玩家 (op 7 已把 c.users[0] 填好) 放 slot 0, 其余 7 槽为 AI
     val player = c.users.firstOrNull()
     if (player != null) {
+        val chosenBomber = if (reqBomber in 0..15) reqBomber else player.bomber
+        val effectiveBomber = if (chosenBomber == 4) 10 else chosenBomber
+        player.bomber = effectiveBomber
+
         Room.slots[0].apply {
             this.user = player
             state = FLAG_CHIEF
-            bomber = 5
+            bomber = effectiveBomber
             color = 0
         }
         for (i in 1..7) {
@@ -86,6 +89,7 @@ val CreatePracticeSessionReq = PKTHandler { c ->
         )
         if (slot < 7) c.send(PracticeSlot103(slot = slot + 1, isAI = true, aiLevel = slot + 1, flag = 1))
     }
-    c.send(PracticeUserInventory())
+    // 以前抓包有发送背包内容，但是实验去掉也没事
+//    c.send(UserInventory())
     c.send(PracticeUnk423())
 }

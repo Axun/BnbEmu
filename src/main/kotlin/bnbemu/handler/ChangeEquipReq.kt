@@ -5,6 +5,7 @@ import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
 import bnbemu.server.UserItemEntry
+import bnbemu.server.EquipSlot
 
 /**
  * C->S op 273: 玩家换装/装备穿戴变更同步请求 (ChangeEquipReq)
@@ -54,7 +55,7 @@ object EquipAction {
 }
 
 /** 客户端用来表示「这件物品只在背包里, 没有装备槽」的伪槽位 */
-const val BAG_SLOT = 0xFF
+const val BAG_SLOT = EquipSlot.BAG
 
 /** 一条装备变更记录的线上长度: E1(slot) + E4(itemId) */
 private const val EQUIP_ITEM_LEN = 5

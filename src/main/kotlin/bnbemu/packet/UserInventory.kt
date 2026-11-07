@@ -3,6 +3,7 @@ package bnbemu.packet
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
 import bnbemu.server.UserItemEntry
+import bnbemu.server.EquipSlot
 
 // ============================================================================
 // 用户穿戴装备与选角判定机制 (S→C op 198) — CA.exe 0x00502F37 分发至 0x004F9416
@@ -51,7 +52,7 @@ val DEFAULT_PRACTICE_EXPIRE_DATE: ByteArray = byteArrayOf(
 
 class UserInventoryEntry(
     val itemId: Int,
-    val slot: Int = 15,
+    val slot: Int = EquipSlot.CHARACTER,
     val param: Int = 1,
     val token: String = "",
     val expireDate: ByteArray = DEFAULT_EXPIRE_DATE,
@@ -75,16 +76,9 @@ class UserInventoryEntry(
 
 // 进频道大厅默认生效/穿戴道具列表 (包含蓝妹妹进阶卡 itemId 2083)
 val DEFAULT_USER_INVENTORY_ITEMS = listOf(
-    UserInventoryEntry(itemId = 1, slot = 15, param = 20, token = "Dao", status = 192),
-    UserInventoryEntry(itemId = 10006, slot = 13, param = 1, token = "Item/ItemBag", status = 255),
-    UserInventoryEntry(itemId = 2082, slot = 4, param = 1, token = "Item/CharDeco", status = 255), // 蓝妹妹 (LuxuryMarid / Posh Evie) 进阶卡
-)
-
-// 练习房默认生效/穿戴道具列表
-val DEFAULT_PRACTICE_INVENTORY_ITEMS = listOf(
-    UserInventoryEntry(itemId = 5, slot = 15, param = 20, token = "Boz", expireDate = DEFAULT_PRACTICE_EXPIRE_DATE, status = 192),
-    UserInventoryEntry(itemId = 10006, slot = 13, param = 1, token = "Item/ItemBag", expireDate = DEFAULT_PRACTICE_EXPIRE_DATE, status = 255),
-    UserInventoryEntry(itemId = 2082, slot = 4, param = 1, token = "Item/CharDeco", expireDate = DEFAULT_PRACTICE_EXPIRE_DATE, status = 255), // 蓝妹妹 (LuxuryMarid / Posh Evie) 进阶卡
+    UserInventoryEntry(itemId = 1, slot = EquipSlot.CHARACTER, param = 20, token = "Dao", status = 192),
+    UserInventoryEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param = 1, token = "Item/ItemBag", status = 255),
+    UserInventoryEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param = 1, token = "Item/CharDeco", status = 255), // 蓝妹妹 (LuxuryMarid / Posh Evie) 进阶卡
 )
 
 fun UserInventory(
@@ -106,7 +100,7 @@ fun UserInventory(
  *   且映射类型不在 {4,6,7,12} 时才 **只 push 进背包向量 `[inv+8]`**，不占装备槽。
  * 这正是客户端在 C→S op 273 里对新入包物品上报的槽位值。
  */
-const val BAG_ONLY_SLOT = 0xFF
+const val BAG_ONLY_SLOT = EquipSlot.BAG
 
 /**
  * 把服务端背包（[bnbemu.packet.UserItemEntry]）拼成 S→C op 198 的条目。

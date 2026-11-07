@@ -1,5 +1,6 @@
 package bnbemu.server
 
+import bnbemu.constants.CharacterType
 import bnbemu.netty.ClientSocket
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -86,6 +87,8 @@ class User(
     val lose: Int = 0,
     val motto: String = "PopTag Forever!",
     val favorite: String = "Bazzi",
+    /** 玩家当前选中的角色  */
+    var bomber: Int = CharacterType.Dao.value,
 ) {
     /**
      * 玩家背包（S→C op 320 的数据源），进程级保存，换连线不丢。

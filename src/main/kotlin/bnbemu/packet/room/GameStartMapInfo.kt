@@ -94,7 +94,12 @@ fun GameStartMapInfo(
 
     for (i in roster) {
         val slot = Room.slots.getOrNull(i)
-        val bomberId = slot?.bomber?.toInt()?.let { if (it == 0) 5 else it } ?: 5
+        val bomberId = if (i == 0) {
+            slot?.bomber?.toInt() ?: 0
+        } else {
+            val b = slot?.bomber?.toInt() ?: 5
+            if (b == 0) 5 else b
+        }
         val team = if (i == 0) 0 else 8
         val spawn = if (i < spawnPositions.size) spawnPositions[i] else i
 

@@ -1,6 +1,5 @@
 AskMultiServer: 1
 AskFirstInfo: 2
-LoginReq: 3
 NewUserConfirmId: 4
 NewUser: 5
 ReqConnectToSvr: 6

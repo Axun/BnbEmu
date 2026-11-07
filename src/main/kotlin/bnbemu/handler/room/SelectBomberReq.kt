@@ -35,6 +35,10 @@ val SelectBomberReq = PKTHandler { c ->
 
     val effectiveBomber = if (bomberIdx == 4) 10 else bomberIdx
 
+    val user = c.users.firstOrNull()
+    if (user != null && slotIdx == 0) {
+        user.bomber = effectiveBomber
+    }
     Room.slots.getOrNull(slotIdx)?.bomber = effectiveBomber
 
     val pkt = SlotBomber(slotIdx, effectiveBomber)

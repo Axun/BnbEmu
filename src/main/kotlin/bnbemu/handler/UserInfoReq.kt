@@ -10,6 +10,7 @@ import bnbemu.packet.UserEquipEntry
 import bnbemu.packet.UserInfoResult
 import bnbemu.server.Room
 import bnbemu.server.bomber
+import bnbemu.server.EquipSlot
 
 private val LAST_USER_INFO_SEND_TIME = AttributeKey.valueOf<Long>("LAST_USER_INFO_SEND_TIME")
 
@@ -37,16 +38,16 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
 
     // 根据当前槽位选中的角色动态配置角色卡与装扮
     val userSlot = Room.slots.find { it.user?.c == c }
-    val currentBomber = userSlot?.bomber?.toInt() ?: 0
+    val currentBomber = userSlot?.bomber?.toInt() ?: user?.bomber ?: 0
     val charItemId = when (currentBomber) {
         5 -> 5 // Boz
         4, 10, 2 -> 2082 // Marid
         else -> 1 // Dao / Bazzi
     }
     val equips = listOf(
-        UserEquipEntry(itemId = charItemId, slot = 15, param1 = 20, param2 = 0),
-        UserEquipEntry(itemId = 10006, slot = 13, param1 = 1, param2 = 0),
-        UserEquipEntry(itemId = 2082, slot = 4, param1 = 1, param2 = 0)
+        UserEquipEntry(itemId = charItemId, slot = EquipSlot.CHARACTER, param1 = 20, param2 = 0),
+        UserEquipEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param1 = 1, param2 = 0),
+        UserEquipEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param1 = 1, param2 = 0)
     )
 
     c send UserInfoResult(
@@ -85,9 +86,9 @@ fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
         else -> 1 // Dao / Bazzi
     }
     val equips = listOf(
-        UserEquipEntry(itemId = charItemId, slot = 15, param1 = 20, param2 = 0),
-        UserEquipEntry(itemId = 10006, slot = 13, param1 = 1, param2 = 0),
-        UserEquipEntry(itemId = 2082, slot = 4, param1 = 1, param2 = 0)
+        UserEquipEntry(itemId = charItemId, slot = EquipSlot.CHARACTER, param1 = 20, param2 = 0),
+        UserEquipEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param1 = 1, param2 = 0),
+        UserEquipEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param1 = 1, param2 = 0)
     )
 
     val win = targetUser?.win ?: 10
@@ -144,6 +145,11 @@ val UserInfoReq = PKTHandler { c ->
     val count = Decode1
     val bomberIds = (0 until count).map { Decode1 }
 
+//    val user = c.users.firstOrNull()
+//    if (user != null && bomberIds.isNotEmpty()) {
+//        user.bomber = bomberIds[0]
+//    }
+
     // 客户端上报的是各槽位已选角色 ID (bomberIds), 同步更新对应槽位角色
     val userSlot = Room.slots.find { it.user?.c == c }
     if (userSlot != null && bomberIds.isNotEmpty()) {
@@ -165,7 +171,7 @@ val UserInfoReq = PKTHandler { c ->
       - `errCode` (E4, 0)、`isSelf` (E4, 1) + if (isSelf) `slotIndex` (E1, 0)
       - `+0x44`: Nickname (角色名, `EncodeTokenStr`)
       - `+0x74`: Gender (性别: 0=男, 1=女, `Encode1`)
-      - `+0x180`: Profile (个性签名, `EncodeTokenStr`)
+      - `+0x180`: Profile (个性签名, Tab 1)
       - `+0x168`: Guild (公会名, `EncodeTokenStr`)
       - `+0x164`: GuildRank (`Encode1`)
       - `+0x78`: Wins (`Encode4`)
