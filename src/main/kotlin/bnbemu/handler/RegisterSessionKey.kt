@@ -2,8 +2,8 @@ package bnbemu.handler
 
 import bnbemu.debugMode
 import bnbemu.netty.Decode1
-import bnbemu.netty.Decode2
 import bnbemu.netty.PKTHandler
+import bnbemu.netty.readTokenBytes
 import bnbemu.packet.decodeName
 
 /**
@@ -41,11 +41,8 @@ import bnbemu.packet.decodeName
  * 服务端无需回包、也无需校验（真实服务器同样沉默），此处只解析 + 调试日志。
  */
 val RegisterSessionKey = PKTHandler { _ ->
-    // ⚠️ 不用 DecodeStr / DecodeCipherStr：两者都先按 ACP 转字串，windows-1252 对
-    // 0x81/0x8D/0x8F/0x90/0x9D 有损会把密钥令牌弄坏。这里取原始字节再用 decodeName 逆变换。
     // 防御式消费：残包不允许抛异常（断线），读不到就按空处理。
-    val len = if (readableBytes() >= 2) Decode2 else 0
-    val token = if (len in 1..readableBytes()) ByteArray(len).also { readBytes(it) } else ByteArray(0)
+    val token = readTokenBytes()
     val key = if (token.isEmpty()) "" else decodeName(token)
     val kind = if (readableBytes() >= 1) Decode1 else 0
 

@@ -1,9 +1,8 @@
 package bnbemu.handler
 
 import bnbemu.netty.Decode1
-import bnbemu.netty.Decode2
+import bnbemu.netty.DecodeTokenStr
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.decodeName
 
 /**
  * C->S op 66: 用户受限状态校验 / 资料查询请求 (UserRestrictReq)
@@ -28,12 +27,7 @@ import bnbemu.packet.decodeName
  *      客户端 CStage::OnUserInfoResult (0x004FBB6F) 收到后唤起 COtherUserPageDialog (0x005E58E4) 展示他人名片。
  */
 val UserRestrictReq = PKTHandler { c ->
-    // ⚠️ 长度与 Token 读取：
-    // 必须用 Decode2 读取长度后直接 readBytes，再调用 decodeName 解出明文；
-    // 不能直接用 DecodeStr（经操作系统字符集转码会有损破坏 Token 原始字节）。
-    val len = Decode2
-    val token = ByteArray(len).also { readBytes(it) }
-    val charName = decodeName(token)
+    val charName = DecodeTokenStr
     val isMe = Decode1
 
     if (isMe == 1) {

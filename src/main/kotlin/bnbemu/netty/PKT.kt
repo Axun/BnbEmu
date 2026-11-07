@@ -6,6 +6,7 @@ import bnbemu.ACP
 import bnbemu.debugMode
 import bnbemu.isEN
 import bnbemu.showDecValue
+import bnbemu.packet.decodeName
 
 fun interface PKTHandler {
     fun ReceivedPacketBase.handle(c: ClientSocket)
@@ -32,6 +33,24 @@ val ReceivedPacketBase.DecodeStr
     get() = DecodeStrAt()
 val ReceivedPacketBase.DecodeCipherStr
     get() = DecodeCipherStrAt()
+val ReceivedPacketBase.DecodeTokenStr
+    get() = DecodeTokenStrAt()
+
+/**
+ * 读取经客户端 0x75daf0 / CSendPacket::EncodeStr 令牌加密的原始字节数组（含 2B 长度与越界防御）。
+ */
+fun ReceivedPacketBase.readTokenBytes(): ByteArray {
+    val len = if (readableBytes() >= 2) Decode2 else 0
+    return if (len in 1..readableBytes()) ByteArray(len).also { readBytes(it) } else ByteArray(0)
+}
+
+/**
+ * 解码经客户端 0x75daf0 令牌变换的字符串（角色名 / 聊天文本 / 会话密钥等）。
+ */
+private fun ReceivedPacketBase.DecodeTokenStrAt(): String {
+    val token = readTokenBytes()
+    return if (token.isNotEmpty()) decodeName(token) else ""
+}
 
 fun ReceivedPacketBase.DecodeEncryptedStr(key: Int) =
     DecodeEncryptedStrAt(key)

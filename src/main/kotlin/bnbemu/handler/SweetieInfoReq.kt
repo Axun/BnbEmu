@@ -1,8 +1,7 @@
 package bnbemu.handler
 
-import bnbemu.netty.Decode2
+import bnbemu.netty.DecodeTokenStr
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.decodeName
 
 /**
  * C->S op 288 (0x120): 情侣/伴侣信息查询请求 (SweetieInfoReq / CoupleInfoReq)
@@ -18,10 +17,6 @@ import bnbemu.packet.decodeName
  *   - 若目标玩家没有伴侣 (sweetieName 为空)，客户端发送 Encode2(0)，即十六进制 A5 69
  */
 val SweetieInfoReq = PKTHandler { c ->
-    val len = Decode2
-    if (len > 0) {
-        val token = ByteArray(len).also { readBytes(it) }
-        val sweetieName = decodeName(token)
-        // 当前伴侣系统尚未启用，先空消费；后续可下发伴侣情侣戒指与纪念日等信息
-    }
+    val sweetieName = DecodeTokenStr
+    // 当前伴侣系统尚未启用，先空消费；后续可下发伴侣情侣戒指与纪念日等信息
 }

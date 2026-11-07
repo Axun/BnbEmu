@@ -2,9 +2,8 @@ package bnbemu.handler
 
 import bnbemu.debugMode
 import bnbemu.netty.Decode1
-import bnbemu.netty.Decode2
+import bnbemu.netty.DecodeTokenStr
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.decodeName
 import bnbemu.server.Room
 
 /**
@@ -30,11 +29,7 @@ import bnbemu.server.Room
 val ChatMsg = PKTHandler { c ->
     val chatType = Decode1
     Decode1 // 觀測恆為 1，語義未定
-    // ⚠️ 不能用 DecodeStr：它會先按 ACP 轉成字串，windows-1252 對 0x81/0x8D/0x8F/0x90/0x9D
-    // 等位元組是有損的，令牌會壞掉。這裡直接取原始位元組再解令牌。
-    val len = Decode2
-    val token = ByteArray(len).also { readBytes(it) }
-    val text = decodeName(token)
+    val text = DecodeTokenStr
 
     // 目前僅記錄，供後續確定 S→C 顯示 opcode 後接上廣播
     println("[ChatMsg] 收到聊天 type=$chatType 文字=\"$text\"")
