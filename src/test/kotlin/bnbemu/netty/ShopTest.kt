@@ -59,6 +59,67 @@ class ShopTest {
     }
 
     @Test
+    fun testChangeEquipAfterPurchase() {
+        // 商城购买 Bomb 655 后客户端回的 C→S op 273 (action=2):
+        //   E1(2) E1(0) E2(2) [E1(0x94) E4(2082)] [E1(0xFF) E4(930000655)]
+        // 注意该变体**没有**尾部 E1(在线玩家数)+E1(1)，旧实现硬读尾部会越界。
+        val raw = "58 5A A5 6B CE 96 CA 5B B7 A5 A1 A4 FC 9A"
+            .split(" ")
+            .map { it.toInt(16).toByte() }
+            .toByteArray()
+
+        val handler = handlerArray[273]
+        assertNotNull(handler, "Handler 273 must be registered")
+
+        val socket = ClientSocket()
+        val user = bnbemu.server.User(socket, 0, "tester")
+        socket.users += user
+
+        val buf = Unpooled.wrappedBuffer(raw)
+        with(handler!!) { buf.handle(socket) }
+
+        assertEquals(0, buf.readableBytes(), "273 应被完整解析，不能因缺尾部字段抛异常")
+        assertEquals(listOf(930000655), user.items.map { it.itemId }, "新买的物品应记入服务端背包")
+        assertEquals(2082, user.equips[0x94], "装备槽 0x94 应记录为 2082")
+    }
+
+    @Test
+    fun testBagItemsRideOnOp198() {
+        // 背包物品必须并进 S→C op 198 下发，否则客户端 ReadEquippedInventory (0x67601D)
+        // 清空重建时会把「商城里刚买的东西」抹掉；槽位必须是 0xFF（BAG_ONLY_SLOT），
+        // 客户端 sub_65D55F 才会只塞进背包向量、不占装备槽。
+        val bag = listOf(bnbemu.packet.UserItemEntry(itemId = 710418))
+        val entries = bnbemu.packet.bagInventoryEntries(bag)
+        assertEquals(1, entries.size)
+        assertEquals(710418, entries[0].itemId)
+        assertEquals(bnbemu.packet.BAG_ONLY_SLOT, entries[0].slot)
+        assertEquals("Item/ShopDeco", entries[0].token, "令牌应取自 op 60 定义表")
+
+        val inventory = bnbemu.packet.DEFAULT_USER_INVENTORY_ITEMS + entries
+        val pkt = bnbemu.packet.UserInventory(listOf(inventory, inventory))
+        val buf = Unpooled.buffer()
+        pkt.encode(SendPacketBase(buf, 3))
+
+        val inBuf = Unpooled.wrappedBuffer(buf.array(), 0, buf.writerIndex())
+        assertEquals(2, inBuf.Decode1, "两位玩家各一份清单")
+        repeat(2) {
+            val count = inBuf.Decode4
+            assertEquals(inventory.size, count)
+            repeat(count) {
+                inBuf.Decode4   // itemId
+                inBuf.Decode1   // slot
+                inBuf.Decode4   // param
+                val tokLen = inBuf.Decode2
+                inBuf.skipBytes(tokLen)  // 名字令牌
+                inBuf.skipBytes(8)       // 到期时间
+                inBuf.Decode4            // duration
+                inBuf.Decode1            // status
+            }
+        }
+        assertEquals(0, inBuf.readableBytes(), "op 198 包体应被完整消费")
+    }
+
+    @Test
     fun testEnterShopStagePacket() {
         val pkt = EnterShopStage()
         val buf = Unpooled.buffer()

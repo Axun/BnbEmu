@@ -193,6 +193,14 @@ object ItemDef {
     val CACHED_BLOB: ByteArray by lazy {
         encode(DEFAULT_ITEMS)
     }
+
+    /**
+     * itemId → 定义 的查询表（按需构建一次）。
+     * 用途：把「背包里的物品」拼成 S→C op 198 的条目时需要拿 name 令牌（如 "Item/ShopDeco"）。
+     */
+    private val byId: Map<Int, ItemDefEntry> by lazy { DEFAULT_ITEMS.associateBy { it.itemId } }
+
+    fun find(itemId: Int): ItemDefEntry? = byId[itemId]
 }
 
 /**

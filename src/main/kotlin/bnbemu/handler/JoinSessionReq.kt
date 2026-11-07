@@ -17,6 +17,8 @@ import bnbemu.packet.Unk423
 import bnbemu.packet.Unk66
 import bnbemu.packet.UserDynamicInfo
 import bnbemu.packet.UserInventory
+import bnbemu.packet.DEFAULT_USER_INVENTORY_ITEMS
+import bnbemu.packet.bagInventoryEntries
 import bnbemu.packet.UserInventoryInfo
 import bnbemu.packet.UserItemUpdate
 import bnbemu.packet.shop.FxStockInit
@@ -48,6 +50,27 @@ import bnbemu.packet.shop.FxStockInit
 val JoinSessionReq = PKTHandler { c ->
     val user = c.users.firstOrNull()
     val lucci = user?.lucci ?: 1234567
+
+    // op 60 (ItemDef) 必须最先: 198 里的物品要靠它查定义表
+    c send ItemDef()
+
+    // 服务端认账的背包（商城购买 + 273 上报）必须并入 op 198 的清单里下发：
+    //   客户端 CUserInventoryMan::ReadEquippedInventory (0x67601D) 会先清空两位玩家的
+    //   背包/装备，再由 ApplyEquippedInventory (0x6757A6) 逐条 sub_65D55F 重建 —— 也就是说
+    //   op 198 是「全量真相」，没写进这份清单的物品一律被清掉。
+    //   背包物品用伪槽位 0xFF（BAG_ONLY_SLOT），客户端只塞进背包向量、不占装备槽。
+    val bag = user?.items.orEmpty()
+    val inventory = DEFAULT_USER_INVENTORY_ITEMS + bagInventoryEntries(bag)
+    if (bag.isNotEmpty()) {
+        println("[JoinSessionReq] op 198 携带背包物品: ${bag.map { it.itemId }}")
+    }
+
+    // 先补一发 413 把背包容量抬到 8×50=400：
+    //   op 198 重建背包时会先清空库存，随后 push 物品要过 IsBagFull (0x659520) 检查；
+    //   容量为 0 时（= 8×等级 0）物品会被当成「背包满」直接丢掉。
+    //   批次末尾还会再发一次 413 —— 因为 198 会把等级重置，必须在其之后重新抬高。
+    c send UserInventoryInfo()
+
     c.send(
         // ⚠️ 进频道推送顺序里 413 必须排在 198 之后:
         //    op 413 的 50 个 10007 槽位是"背包等级 +50"（见 UserInventoryInfo.kt），
@@ -56,8 +79,7 @@ val JoinSessionReq = PKTHandler { c ->
         //    → 商城点购买恒弹 "Your item bag is full. Purchase an item bag?"。
         //    把 413 挪到 198 之后，运行时直读 dyn+0x1EC = 50 → 容量 400，购买可正常进入流程。
         //    另: op 60 (ItemDef) 仍需在 413 之前，客户端按 itemId 查定义表，查不到整条丢弃。
-        ItemDef(),
-        UserInventory(), FxStockInit(),
+        UserInventory(listOf(inventory, inventory)), FxStockInit(),
         UserItemUpdate(), UserItemUpdate(1),
         UserDynamicInfo(0, lucci), FxConfig(), DynamicMapInfo(),
         RoomList(), ShopCatalog(),

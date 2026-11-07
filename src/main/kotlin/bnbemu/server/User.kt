@@ -44,16 +44,58 @@ val ClientSocket.lucci: Int
 val ClientSocket.cash: Int
     get() = PlayerWallet.cash
 
+
+data class UserItemEntry(
+    val itemId: Int,
+    val arg1: Int = 0,
+    val count: Int = 1,
+    val expireTime: Int = 0,
+)
+/**
+ * 进程级背包仓库（按账号/玩家 id 归档）。
+ *
+ * 和 [PlayerWallet] 同理：进频道、进商城会各自新开连线，`ClientSocket.users` 只属于单条连线，
+ * 如果把背包挂在 User 实例上，商城连线里买的东西换回频道连线就没了。
+ * 因此这里用进程级 Map 按 id 保存，`User.items` 只是它的视图。
+ */
+object PlayerBag {
+    private val bags = java.util.concurrent.ConcurrentHashMap<Int, MutableList<UserItemEntry>>()
+
+    fun of(userId: Int): MutableList<UserItemEntry> =
+        bags.computeIfAbsent(userId) { mutableListOf() }
+}
+
+/** 进程级装备槽仓库（C→S op 273 上报的穿脱结果），按玩家 id 归档。 */
+object PlayerEquips {
+    private val equips = java.util.concurrent.ConcurrentHashMap<Int, MutableMap<Int, Int>>()
+
+    fun of(userId: Int): MutableMap<Int, Int> =
+        equips.computeIfAbsent(userId) { mutableMapOf() }
+}
+
 class User(
     val c: ClientSocket,
     val id: Int,
     val name: String,
     val level: Int = 5,
-    val lucci: Int = DEFAULT_LUCCI,
+    /** 金币余额（可变：商城购买扣款，见 handler/shop/BuyItemReq.kt） */
+    var lucci: Int = DEFAULT_LUCCI,
     val exp: Int = 0,
     val win: Int = 0,
     val draw: Int = 0,
     val lose: Int = 0,
     val motto: String = "PopTag Forever!",
-    val favorite: String = "Bazzi"
-)
+    val favorite: String = "Bazzi",
+) {
+    /**
+     * 玩家背包（S→C op 320 的数据源），进程级保存，换连线不丢。
+     *
+     * 初始为空：默认装备（DEFAULT_USER_ITEMS 里的 2083 进阶卡）是通过 S→C op 198
+     * 直接穿在身上的，不属于背包内容；若这里也带上，客户端会在背包里多出一条重复卡。
+     * 商城买到的东西由 `BuyItemReq` 与 C→S op 273 (action=2, equipSlot=0xFF) 记入这里。
+     */
+    val items: MutableList<UserItemEntry> get() = PlayerBag.of(id)
+
+    /** 装备槽 → itemId 映射（C→S op 273 上报的穿脱结果），进程级保存。 */
+    val equips: MutableMap<Int, Int> get() = PlayerEquips.of(id)
+}

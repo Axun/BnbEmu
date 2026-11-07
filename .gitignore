@@ -16,3 +16,9 @@ __pycache__/
 *.ipr
 
 .vscode/
+
+### 逆向/调试产物（体积大/由工具生成，仅本地保留） ###
+/cap/
+/reference/
+dispatch_tables.txt
+tools/*.bin

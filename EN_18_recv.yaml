@@ -117,3 +117,6 @@ ShopUserSyncReq: 37
 ShopPackageMapReq: 258
 ShopStringTableReq: 278
 ChargeNxReq: 277
+BuyItemReq: 267
+ShopInvenSyncReq: 294
+ShopConnStateReq: 316

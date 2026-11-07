@@ -72,7 +72,7 @@ AirplaneItemProb: 375
 FirstSessionNotify: 193
 FxStockInit: 200
 UserInventory: 198
-UserItemList: 202
+UserItemList: 320
 StringTableInit: 205
 DigiQAuthorizationResult: 209
 DynamicMapInfo: 210
@@ -94,7 +94,6 @@ Unk_86: 86
 RoomList: 87
 ChangeStage: 97
 UserDynamicInfo: 122
-Unk198: 198
 Unk204: 204
 FxConfig: 212
 MyPageInfo: 227
@@ -131,3 +130,4 @@ Unk113: 113
 # ----- shop -----
 CashBalance: 201
 EnterShopResult: 259
+BuyItemResult: 202

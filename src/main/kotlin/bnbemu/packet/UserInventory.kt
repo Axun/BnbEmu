@@ -2,6 +2,7 @@ package bnbemu.packet
 
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
+import bnbemu.server.UserItemEntry
 
 // ============================================================================
 // 用户穿戴装备与选角判定机制 (S→C op 198) — CA.exe 0x00502F37 分发至 0x004F9416
@@ -96,5 +97,36 @@ fun UserInventory(
     }
 }
 
-// 兼容别名
-fun Unk198() = UserInventory()
+/**
+ * 背包专属伪槽位。
+ *
+ * `CUserInventory::AddItem` = `sub_65D55F` (`0x0065D55F`) 的判定：
+ * - 物品分类属于可穿戴集合 {17,13,16,2,33,9,20,36,41,42} → 走装备槽（`sub_65C81A`）；
+ * - 其余分类（如 10 = Item/ShopDeco 装扮背景、14 = 水泡）：只有 `slot == -1`(0xFF)
+ *   且映射类型不在 {4,6,7,12} 时才 **只 push 进背包向量 `[inv+8]`**，不占装备槽。
+ * 这正是客户端在 C→S op 273 里对新入包物品上报的槽位值。
+ */
+const val BAG_ONLY_SLOT = 0xFF
+
+/**
+ * 把服务端背包（[bnbemu.packet.UserItemEntry]）拼成 S→C op 198 的条目。
+ *
+ * ⚠️ op 198 是客户端**唯一**会整体重建背包的入口：
+ *   `CUserInventoryMan::ReadEquippedInventory` (`0x67601D`) 先把两位玩家的背包/装备清空，
+ *   再由 `ApplyEquippedInventory` (`0x6757A6`) 逐条 `sub_65D55F` 重建。
+ *   所以服务端认账的背包必须放进这份清单，否则：
+ *   商城里买完客户端自己塞进背包 → 一进频道被 op 198 清空 → 物品丢失。
+ *   （S→C op 320 是商城专用的「单件商品入包」，且定义查的是商城商品管理器，
+ *     在频道/大厅里查不到，不能用来持久化背包。）
+ */
+fun bagInventoryEntries(items: List<UserItemEntry>): List<UserInventoryEntry> = items.map { item ->
+    val def = ItemDef.find(item.itemId)
+    UserInventoryEntry(
+        itemId = item.itemId,
+        slot = BAG_ONLY_SLOT,
+        param = 1,
+        token = def?.name ?: "",
+        duration = 240000,
+        status = 255,
+    )
+}
