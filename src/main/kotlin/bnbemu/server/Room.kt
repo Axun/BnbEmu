@@ -317,7 +317,12 @@ object Room {
         executor.schedule({
             BC(
                 InitGameResult(mode = 0, mapId = 0),
-                GameResult(winnerTeam = if (humanWin) 0 else 1, delayMs = 2000)
+                GameResult(
+                    winnerTeam = if (humanWin) 0 else 1,
+                    delayMs = 2000,
+                    expAfter = if (humanWin) winExpAfter else loseExpAfter,
+                    lucciGained = if (humanWin) winLucci else loseLucci
+                )
             )
             // 结算后停掉对局主循环 (水泡倒计时), 与客户端离开棋盘同步
             endGame()
@@ -455,6 +460,16 @@ object Room {
 
     // 结算结果包的下发延迟。测试可置 0 以便同步断言。
     internal var gameOverDelayMs = 1500L
+
+    // ---- 结算奖励（op 150 GameResult） ----
+    // EXP 是「等级进度千分比」：1000 = 100.0%，结果页会从 0.0% 涨到这个值
+    // （客户端 0x53E617 = min(+124 + 涨条动画, +128)，见 packet/room/GameResult.kt）。
+    // LUCCI 是本局获得金币（+152，有符号）。
+    // 输的一档按胜利的 1/3 给：输局也要有收益，但不能和赢一样多。
+    internal var winExpAfter = 60   // 胜利 6.0%
+    internal var loseExpAfter = 20  // 失败 2.0%
+    internal var winLucci = 120
+    internal var loseLucci = 40
 
     // 是否已经下发过本局结算 (防止重复结算)
     internal var gameOverSent = false

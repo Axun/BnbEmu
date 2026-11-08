@@ -81,6 +81,30 @@
         - 顺序 `op 169 InitGameResult → op 150 GameResult`，缺 169/150 不弹结算窗。
     4. ⚠️ **走 action=0x60 路径时不要补发 op 159**：AI 的阵亡动画是客户端本地播的（OnDie 本地调用，
        只是发包被 m_selfidx 卡住），服务端再发 159 会让死亡动作重播。`onLastTeamStanding` 只补记状态。
+    4.1 **结果页字段语义（2026-11-08 逆向定案，`packet/room/GameResult.kt`）**——此前这两个字段都是按布尔量猜的，全都猜错：
+       - `op150` 头第 1 字节 `gameType`（doc+6612）**必须为 0**。结果页装配函数 `0x558EE1` 开头即
+         `if (*(dword *)sub_53E1B4(doc) != 0) → new CGOMissionGlyph + 贴图 "Game/Mission"`（`0x44DAE3/0x44DB94`），
+         于是普通练习房的结果页顶部会盖一枚 **"MISSION PERFECT!!" 通关印章**。旧实现写死 `Encode1(1)`，这就是它的来源。
+       - 每个槽记录的 `+68`（Human 第 2 个字段 / AI 第 1 个字段）**不是 win/loss 布尔，而是"结果标签贴图帧索引"（0..4）**：
+         列 2 绘制 `0x46F544 → 0x53E7CF(target, x, y, slot+68)`，实测帧 **0 = "YOU WIN!!"、1 = "PERFECT!!"**。
+         旧实现（真人 `winnerTeam==0?1:0`、AI 恒 0）导致真人显示 PERFECT!!、AI 显示 YOU WIN!! —— **两行都是"赢"的帧**，
+         这就是"杀死电脑对手后电脑对手仍显示胜利"的原因。输的一方要写 `LOSE` 帧（当前取 2，待实机复核）。
+       - 僵尸模式 `0x5B574B` 把 `slot+68` 与 `header.winnerTeam` 按 `(0,0)/(1,2)` 配对比较 → 该字段同时承担"阵营/结果编号"语义，
+         绝不可当 0/1 布尔复用。
+       - 列内容：`doc+6624`（头第 4 字节）== 0 → 第 4 列画 `slot+72/+76`（KILLS/SAVES）；非 0 → 画 `slot+84/+92`（EXP/LUCCI）。
+       - **EXP% / LUCCI 两列的数据源（2026-11-08 补充）**：列绘制在 `0x46F544` 的 case 5 / case 6，
+         且**只对 `slotType==1` 的真人槽生效**（AI 行这两格天生是空的）：
+         · case 5 → `0x53E617(doc, slot)` = `min(槽+124 + doc+6251, 槽+128)`，单位千分比
+           （`0x53F998` 按 `/10` + `%10` 拆成 "xx.x" 再配一个 "%" 字形，1000 特判成 "100"）。
+           **`+128` 是总闸**：它为 0 则这一列永远 `00.0%`。`+124` = 战前进度，`+128` = 战后进度，
+           `+124 > +128` 时按升级回卷（+1000 取模）处理。`doc+6251` 不是包字段，是结果窗计时器
+           （`0x46F38F` 每帧写 `count-66`）驱动的涨条动画，所以看起来是从战前 % 涨到战后 %。
+           `+148`（E2）只在 feature 36 分支里作为"带正负号的 EXP"读，正常不生效。
+         · case 6 → `0x53E880(..., 槽+152, ...)`，**`+152`（E4，有符号）= LUCCI 数字**，负值会画减号。
+         · 旧实现把 50/100 写进 `+84/+92`，而默认列布局（头第 4 字节 == 0）根本不看这两个字段，
+           所以结果页恒显示 `00.0%` / `000000`。现在 `+124/+128/+152` 才是显示源。
+         · 回归测试：`GameOverTest.testGameResultResultScreenFields` / `testGameResultAiWinSwapsFrames`
+           （包长 119B、gameType==0、胜负帧、`+124/+128/+152` 偏移全部钉死）。
     5. **op 160 = `ReviveBomber`（复活某个 bomber）：
        分发表 `0x55A6A2`（`sub eax,0x90` / `cmp 0x1A` / `movzx byte[0x55AA48+..]` / `jmp [0x55AA08+idx*4]`）
        里 `0xA0 → 0x55A719 → call 0x55345D`。处理器：
@@ -99,3 +123,33 @@
        实测样本 `3A A5 39 A7 6E` 端到端结算 / 不重播 159 / 洪水去重 / 结算后迟到包忽略 / 空槽忽略 /
        结算不含 op160 / `reviveBomber` 复活 DEAD 槽位并下发 op160、拒绝 ALIVE·空槽·越界·已结算）；
        端到端脚本 `tools/test_game_win.py`（启动模拟器后跑）。
+- **C→S op 107 是「水泡移动（抛掷/踢出）请求」，不是 ChangeTitleReq（2026-11-06 逆向，`tools/rev_op107.py`）**：
+    1. **发包点**：全 `.text` 只有 `0x00539DF6` 一处 `push 0x6b` + `COutPacket::Init(0x64EE5D)`，
+       所在函数 `0x00539DC8` 由 `CGameMsgCache::OnTick`(`0x0053A700`) 的 `0x0053A7DD` 调用 ——
+       和 op109 推箱子同一套「待确认队列 + 每帧 flush」机制（队列数组 `[cache+0x80] + idx*0x20`，idx 0..7，
+       队列填充函数 `0x00539494`，发完 `and [entry],0` 清 active）。
+    2. **载荷 9B = `E1((kind<<4)|slot) E2(bombId) E1(fromX) E1(fromY) E1(toX) E1(toY) E2(ms)`**
+       宽度由 COutPacket 虚表 `0x8B66F4` 交叉验证：`+0x20`/`+0x24` 写 1B、`+0x28` 写 2B、`+0x2C` 写 4B（共 9B，与实测 dump 长度吻合）。
+       `bombId` 就是服务端在 op139 里回填的 `bomb->m_nBombId (+0x90)`（== 我们的 bombToken）。
+    3. **唯一两个入队调用点都在「水泡滑行」逻辑里**：`0x0054CDEB`（`0x0054CCBC`，由帧循环
+       `0x0054EC0D → 0x0054CDF8` 驱动，先 `0x005635FB` 沿朝向 trace 出目标格，`kind = 方向+4`）与
+       `0x0046E6D7`（bomber 帧更新里对 `bomb+0x9c/+0xa8`（格子坐标）的同类处理，`kind = bomber->vtable[0xb4]`）。
+       两处都是 `from = 水泡当前格`、`to = trace 出的目标格`。
+    4. **实测解码**（`tools/rev_op107.py` 第 6 节）：
+       | dump | kind | bombId | from → to | ms |
+       |---|---|---|---|---|
+       | `6A A5 77 50 50 50 50 A2 B6`（拳套抛泡，服务端未处理） | 3 | 30 | (10,10)→(10,10) | 2015 |
+       | `1A A5 C3 52 5D 52 5F A6 81` | 4 | 170 | (8,7)→(8,5) | 1000 |
+       | `5A A5 93 5D 53 5D 51 A3 97` | 0 | 250 | (7,9)→(7,11) | 1790 |
+       | `7A A5 3C 5F 5F 5F 58 A3 EF` | 2 | 85 | (5,5)→(5,2) | 1670 |
+       | `1A A5 5D 5F 5E 5F 58 A6 81` | 4 | 52 | (5,4)→(5,2) | 1000 |
+       ⚠️ 拳套那次 `from == to`（trace 出零位移），所以**即使服务端支持，气泡也不会飞** —— 先查客户端为什么算出 0 位移。
+       `kind` 目前只确认「`0x54CCBC` 路径写 `方向+4`」，其它路径（0/2/3）的语义未钉死；`ms` 在两处已知调用点写死 `1000`
+       （另有一条写死 `300` 的兄弟分支发 C→S op108），实测 1670/1790/2015 说明还有别的来源，含义待定。
+    5. **服务端不要回 op107**：全 `.text` 没有任何 `cmp/sub …, 0x6b`，EN 局内 S→C 分发表 `0x0055A4D8`
+       也没有 `0x6B` 分支 → 回显会被静默丢弃。所以本包的定位是「上报/仲裁请求」，位移要么客户端本地预测，
+       要么由别的 S→C 包驱动（待定，候选：op138 SetBombState 的状态位、op145 的 14 分支 action 表）。
+       下一步实测方案：先只绑定一个「解字段 + 打日志、不回包」的 handler，观察气泡是否本地飞出去。
+    6. **附带结论（顺带证伪旧表）**：EN 客户端**从不发送** C→S `0x8C/0x8D/0x8E`(140/141/142)，
+       yaml 里的 `BombIgniteReq`/`BombKickThrowReq`/`SetBombTimerReq` 是 TW 表遗留，
+       `handler/room/BombKickThrowReq.kt` 与 `packet/room/BombKickThrow.kt` 是**死代码**（不会被触发）。

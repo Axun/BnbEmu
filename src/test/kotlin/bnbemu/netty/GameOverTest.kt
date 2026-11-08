@@ -370,8 +370,7 @@ class GameOverTest {
     }
 
     @Test
-    fun testBomberDieBroadcastsDeathListToo() {
-        // 阵亡 = op159（状态 17/清队伍桶，实测无音效）+ op146 state5 死亡名单（摘除 + 音效 0x2A）
+    fun testBomberDieBroadcastsDeathListToo() {        // 阵亡 = op159（状态 17/清队伍桶，实测无音效）+ op146 state5 死亡名单（摘除 + 音效 0x2A）
         Room.startGame()
         ch.outboundMessages().clear()
 
@@ -386,5 +385,76 @@ class GameOverTest {
         assertEquals(1, dec1(body[5]), "名单里 1 个槽位")
         assertEquals(1, dec1(body[6]), "槽位 1")
         assertTrue(ops.indexOf(159) < ops.indexOf(146), "159 必须在名单之前（名单摘掉 bomber 后 159 会提前返回）")
+    }
+
+    // ---- 结果页字段（2026-11-08 逆向定案，见 packet/room/GameResult.kt 注释） ----
+
+    private fun dec2(b: ByteArray, off: Int): Int =
+        (((b[off].toInt() and 0xFF) shl 8) or (b[off + 1].toInt() and 0xFF)) xor 0xA569
+
+    private fun dec4(b: ByteArray, off: Int): Int {
+        var v = 0
+        for (i in 0 until 4) v = (v shl 8) or (b[off + i].toInt() and 0xFF)
+        return v xor 0x96CA5395.toInt()
+    }
+
+    @Test
+    fun testGameResultResultScreenFields() {
+        // 玩家胜：真人 = WIN 帧、AI = LOSE 帧；gameType 必须 0
+        val body = bodyOf(GameResult(winnerTeam = 0, delayMs = 2000))
+        assertEquals(119, body.size, "op150 包体长度必须仍是 119B")
+        assertEquals(0, dec1(body[0]), "header.gameType 必须 0 —— 非 0 会多盖一个 MISSION PERFECT!! 印章")
+        assertEquals(0, dec1(body[1]), "header.winnerTeam = 0 (玩家胜)")
+
+        // Human 槽从 body[11] 开始，各字段偏移与 0x00541205 的读取顺序一致
+        val human = 11
+        assertEquals(1, dec1(body[human]), "slotType = 1 (Human)")
+        assertEquals(0, dec1(body[human + 5]), "胜方 +68 = YOU WIN 帧(0)")
+        assertEquals(0, dec2(body, human + 31), "+124 战前 EXP 进度")
+        assertEquals(50, dec2(body, human + 33), "+128 战后 EXP 进度 (=EXP% 列数据源)")
+        assertEquals(100, dec4(body, human + 49), "+152 LUCCI 列")
+
+        // 第一个 AI 槽：输的一方必须是 LOSE 帧，写 0 会显示成 "YOU WIN!!"
+        val ai = human + 64
+        assertEquals(2, dec1(body[ai]), "slotType = 2 (AI)")
+        assertEquals(2, dec1(body[ai + 1]), "败方 +68 = LOSE 帧(2)")
+    }
+
+    @Test
+    fun testGameResultAiWinSwapsFrames() {
+        // AI 胜：真人 = LOSE 帧、AI = WIN 帧
+        val body = bodyOf(GameResult(winnerTeam = 1))
+        assertEquals(2, dec1(body[11 + 5]), "玩家阵亡 → 真人 +68 = LOSE 帧(2)")
+        assertEquals(0, dec1(body[11 + 64 + 1]), "AI 胜 → AI 槽 +68 = WIN 帧(0)")
+        assertEquals(1, dec1(body[1]), "header.winnerTeam = 1 (AI 胜)")
+    }
+
+    // ---- 结算奖励: 输的一档必须低于赢的一档 ----
+
+    @Test
+    fun testWinRewards() {
+        Room.startGame()
+        ch.outboundMessages().clear()
+        Room.onLastTeamStanding(0)
+
+        val sent = collectSent()
+        val body = bodyOf(sent.first { opcodeOf(it) == 150 })
+        assertEquals(Room.winExpAfter, dec2(body, 11 + 33), "玩家胜 → +128 EXP = winExpAfter")
+        assertEquals(Room.winLucci, dec4(body, 11 + 49), "玩家胜 → +152 LUCCI = winLucci")
+        assertTrue(Room.loseExpAfter < Room.winExpAfter, "失败 EXP 必须低于胜利")
+        assertTrue(Room.loseLucci < Room.winLucci, "失败 LUCCI 必须低于胜利")
+    }
+
+    @Test
+    fun testLoseRewardsAreLower() {
+        Room.startGame()
+        ch.outboundMessages().clear()
+        Room.onBomberDie(0) // 玩家阵亡 → AI 胜
+
+        val sent = collectSent()
+        val body = bodyOf(sent.first { opcodeOf(it) == 150 })
+        assertEquals(1, dec1(body[1]), "AI 胜")
+        assertEquals(Room.loseExpAfter, dec2(body, 11 + 33), "AI 胜 → 玩家 +128 EXP = loseExpAfter")
+        assertEquals(Room.loseLucci, dec4(body, 11 + 49), "AI 胜 → 玩家 +152 LUCCI = loseLucci")
     }
 }
