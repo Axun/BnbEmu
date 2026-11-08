@@ -9,7 +9,6 @@ OUT = os.path.join(BASE, "cap")
 
 # 需要嵌入 Kotlin 的 blob: (Kotlin 常量名, 文件名) — 文件为含 2B opcode 的完整 payload
 BLOBS = [
-    ("EN_OP83", "practice_s2c_op83_8B_0.bin"),
     ("EN_OP113", "practice_s2c_op113_4B_0.bin"),
     ("EN_OP100_ROOM", "practice_s2c_op100_80B_0.bin"),
     ("EN_OP100_START", "practice_s2c_op100_79B_1.bin"),
@@ -19,8 +18,6 @@ BLOBS = [
     ("EN_OP136", "practice_s2c_op136_180B_0.bin"),
     # op 172 不再作為原樣重放的 blob 內嵌: 逆向確認為 MapEventSync (地圖事件時間軸同步),
     # 且其前 4 字節是必須匹配的會話校驗值, 硬編碼抓包值無意義 (見 tools/rev_op172.py)。
-    ("EN_OP198_PRACTICE", "practice_s2c_op198_137B_0.bin"),
-    ("EN_OP423_PRACTICE", "practice_s2c_op423_26B_0.bin"),
 ]
 
 

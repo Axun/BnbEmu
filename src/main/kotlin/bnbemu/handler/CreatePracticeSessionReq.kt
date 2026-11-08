@@ -11,14 +11,18 @@ import bnbemu.packet.PracticeSlot103
 import bnbemu.packet.PracticeSlot104
 import bnbemu.packet.PracticeSlot114
 import bnbemu.packet.PracticeSlotReady
-import bnbemu.packet.PracticeUnk423
+import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.RoomList
 import bnbemu.packet.SessionInfoResult
 import bnbemu.packet.SESSION_TYPE_PRACTICE
 import bnbemu.packet.EnterSessionResult
 import bnbemu.packet.Unk113
+import bnbemu.packet.UserInventory
 import bnbemu.packet.UserSimpleInfoResult
+import bnbemu.packet.defaultUserInventoryItems
+import bnbemu.packet.inventoryEntries
 import bnbemu.server.*
+import kotlin.collections.orEmpty
 
 // ============================================================================
 // 进练习房 (C→S op 75) — 在练习房界面点"开始"时发出
@@ -99,5 +103,5 @@ val CreatePracticeSessionReq = PKTHandler { c ->
     }
     // 以前抓包有发送背包内容，但是实验去掉也没事
 //    c.send(UserInventory())
-    c.send(PracticeUnk423())
+    c.send(WelcomeNotice())
 }

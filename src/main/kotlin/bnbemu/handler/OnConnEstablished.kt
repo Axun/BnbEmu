@@ -9,7 +9,7 @@ import bnbemu.packet.ChannelsGameState
 import bnbemu.packet.ChannelsState
 import bnbemu.packet.RoomList
 import bnbemu.packet.UserDynamicInfoValue
-import bnbemu.packet.Unk423
+import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.PermissionInfo
 import bnbemu.packet.ChangeStage
 import bnbemu.server.User
@@ -64,7 +64,7 @@ val OnConnEstablished = PKTHandler { c ->
             ChangeStage(),
             UserDynamicInfoValue(),
             RoomList(),
-            Unk423(),
+            WelcomeNotice(),
         )
     }
 }

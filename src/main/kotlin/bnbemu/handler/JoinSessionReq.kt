@@ -12,7 +12,7 @@ import bnbemu.packet.ShopCatalog
 import bnbemu.packet.ShopVersion
 import bnbemu.packet.Unk204
 import bnbemu.packet.Unk247
-import bnbemu.packet.Unk423
+import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.Unk66
 import bnbemu.packet.UserDynamicInfo
 import bnbemu.packet.UserDynamicInfoValue
@@ -108,7 +108,7 @@ val JoinSessionReq = PKTHandler { c ->
         RoomList(), ShopCatalog(),
         Unk204(), Unk66(), ChannelsGameState(tailOnes = 2),
         // ⚠️ op 20 (UserDynamicInfo) 是本機玩家動態檔案快照, 第 12 欄 = 角色 ID, 必須按當前角色生成!
-        UserDynamicInfo(bomber), ShopVersion(), Unk247(), Unk423(),
+        UserDynamicInfo(bomber), ShopVersion(), Unk247(), WelcomeNotice(),
         UserInventoryInfo(),
         JoinSessionResult(), SessionList(),
     )

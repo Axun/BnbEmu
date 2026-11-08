@@ -161,7 +161,7 @@
   （cap/login_s2c_op*.bin）、改写 op11 内 5 处 IP 并生成 Kotlin hex 常量
   （op11 已结构化，该基准现仅作 replay_test 的 IP 改写版断言源 login_s2c_op11_ip127.bin）
 - `tools/extract_channel_flow.py`：从 enter-channel.pcap stream1 按 TCP 线序提取进频道整套 S→C 回应
-  （cap/chan_s2c_op*.bin），Unk423/Unk254/Unk227/ItemDef/SessionInfoResult 的
+  （cap/chan_s2c_op*.bin），Unk254/Unk227/ItemDef/SessionInfoResult 的
   Kotlin blob 常量源（blob = 载荷去 2B opcode 前缀，已验证重编码逐字节一致）；
   op 87/op 72 载荷现为 RoomList/SessionList 结构化编码的逐字节断言基准
 - `tools/dump_flow.py <pcap> <stream>`：按时间戳交错输出指定 TCP 流的 C→S/S→C 解码包（对齐请求→回应）

@@ -17,7 +17,25 @@ import bnbemu.server.bomber
 // 工具: tools/extract_op75.py / tools/gen_practice_kotlin.py; 基准 cap/practice_s2c_op*.bin
 
 
-// ---- op 113 (2B): E2(0) ----
+// ---- op 113 (2B body): E2(0) 空字符串 —— S→C「房间名 / 会话名同步」(2026-11-08 反编译钉死) ----
+// EN_OP113 = a5 69 不是「数值 0」: 它是 EncodeStr(房名) 的 2B 长度前缀 = 0 加 0B 内容
+// （完整包 cap/practice_s2c_op113_4B_0.bin = a5 18 a5 69, 前 2B 是 Encode2(113) 的 opcode）。
+// 客户端三份逐字节相同的 handler 副本, 说明这是各房间阶段都能收的通用包:
+//   CSlotStage::OnPacket     0x004F480C  case 113 → 0x004F0B07
+//   CPrepareStage::OnPacket  0x0052A949  case 113 → 0x0051F86F
+//   对局阶段 OnPacket        0x00616D59  case 113 → 0x0061273B
+// handler 内部:
+//   sub_78FDF0 → sub_78F910  读 [E2 长度][内容] 到 std::string（长度恒 Encode2）
+//   长度 > 0x16 时 sub_421EE6(begin+21, end) 截到 21 字符（房名长度上限）
+//   sub_68872B(g_Session, str) → sub_44886E(this+113, str) 把名字赋给全局会话对象 +0x1C4 的字符串
+// 同一字段的其它写入源反证语义:
+//   0x005147B9 建房: 先把玩家输入的房名存进去, 再用同一字符串发 C→S op 75 第 1 字段（房名）;
+//   0x00506513 (S→C op 83 进房结果): 用房号到房间缓存取条目的名字写进去;
+//   0x004EC7F8 case 3: 用空串清空该字段并切场景（byte_88AF4F = '\0'）。
+// ⇒ op 113 = 服务端权威回显 / 变更当前房间名（可覆盖客户端输入, 例如敏感词过滤后的房名）。
+//   练习房不带房名（op 75 第 1 字段也是 E2(0)）, 所以抓包为空串; 做普通房时应发真实房名。
+//   等价结构化写法 EncodeStr(name), 空串即本 blob; 现保留原样重放以对齐抓包基准。
+//   函数名沿用 Unk113（EN_18_send.yaml 绑定名）, 语义已确认, 勿再当未知数值字段。
 fun Unk113() = PKT {
     EncodeBuffer(EN_OP113)
 }
@@ -43,11 +61,4 @@ fun PracticeAiLevel() = PKT {
 // ---- op 136 棋盘/开局数据块 (178B) — 原样重放 ----
 fun PracticeBoard() = PKT {
     EncodeBuffer(EN_OP136)
-}
-
-// ---- op 139 已改为按 C→S op 106 字段动态生成 (见 packet/room/SetBomberEvent.kt) ----
-
-// ---- 练习房专用 423 变体 (与进频道握手推送的 423 略异) ----
-fun PracticeUnk423() = PKT {
-    EncodeBuffer(EN_OP423_PRACTICE)
 }

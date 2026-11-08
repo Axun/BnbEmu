@@ -2,7 +2,9 @@
 """
 進頻道連線回應提取: 從 enter-channel.pcap stream1 (60248) 按 TCP 線序解出 S→C 載荷,
 存 cap/chan_s2c_op<op>_<len>B_<n>.bin (含 2B opcode 前綴), 供 Kotlin blob 常量生成
-(Unk423 / Unk254 / Unk227 / ItemDef / SessionInfoResult; RoomList 與 SessionList 已結構化,
+(Unk254 / Unk227 / ItemDef / SessionInfoResult; RoomList 與 SessionList 已結構化,
+op 423 = WelcomeNotice 廣告/公告文案亦已結構化 (文案可自定義, 其 .bin 為原廠
+"Welcome to PopTag!" 基準, 僅供對照; replay_test 按 Kotlin 預設文案動態生成期望值);
 op 87 與 op 72 載荷分別作為兩者的 replay_test 逐字節斷言基準)。
 
 注意: 線序 = 解碼位置順序 (seq 步進 3); dump_flow.py 按時間戳排序會因 TCP 合包失真。

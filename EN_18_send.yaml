@@ -106,7 +106,7 @@ Unk293: 293
 UserMarketMyItemList: 302
 UserMarketItemList: 310
 UserInventoryInfo: 413
-Unk423: 423
+WelcomeNotice: 423
 # 进练习房 (op 75) 回应链的 send 包 (tst.pcap 逆向; 同 op 多包名可并存, OpcodeManager 按函数名查表)
 PracticeSlotReady: 106
 PracticeSlot104: 104
@@ -123,7 +123,6 @@ GameStartMapInfo: 112
 PracticeBoard: 136
 # 局内 AI/角色事件回显 (S→C op 139): 对每个 C→S op 106 回一个, 载荷由 op 106 字段生成
 SetBomberEvent: 139
-PracticeUnk423: 423
 Unk113: 113
 
 # ----- shop -----

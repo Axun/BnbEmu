@@ -47,20 +47,3 @@ internal val EN_OP136 = """
     5a 5a
 """.toBA()
 
-internal val EN_OP198_PRACTICE = """
-    58 96 ca 53 97 96 ca 53 90 55 96 ca 53 81 a5 6a
-    ca 2b 20 3b a6 4a 48 d6 2c c4 a4 96 c9 fa 15 9a
-    96 ca 74 83 57 96 ca 53 94 a5 65 fb af 27 dc f3
-    be 1a ba f1 ab 11 f8 3b a6 4a 48 d6 2c c4 a4 96
-    c9 fa 15 a5 96 ca 53 97 96 ca 53 90 55 96 ca 53
-    81 a5 6a ca 2b 20 3b a6 4a 48 d6 2c c4 a4 96 c9
-    fa 15 9a 96 ca 74 83 57 96 ca 53 94 a5 65 fb af
-    27 dc f3 be 1a ba f1 ab 11 f8 3b a6 4a 48 d6 2c
-    c4 a4 96 c9 fa 15 a5
-""".toBA()
-
-internal val EN_OP423_PRACTICE = """
-    a5 7b f5 a6 36 c2 b6 af 3e fa c6 ea 3c e1 f7 9e
-    23 fa 84 0e 96 ca db 2d
-""".toBA()
-
