@@ -123,7 +123,7 @@
        实测样本 `3A A5 39 A7 6E` 端到端结算 / 不重播 159 / 洪水去重 / 结算后迟到包忽略 / 空槽忽略 /
        结算不含 op160 / `reviveBomber` 复活 DEAD 槽位并下发 op160、拒绝 ALIVE·空槽·越界·已结算）；
        端到端脚本 `tools/test_game_win.py`（启动模拟器后跑）。
-- **C→S op 107 是「水泡移动（抛掷/踢出）请求」，不是 ChangeTitleReq（2026-11-06 逆向，`tools/rev_op107.py`）**：
+- **C→S op 107 是「水泡移动（抛掷/踢出）请求」，回应 S→C op 141，见第 5 条）**：
     1. **发包点**：全 `.text` 只有 `0x00539DF6` 一处 `push 0x6b` + `COutPacket::Init(0x64EE5D)`，
        所在函数 `0x00539DC8` 由 `CGameMsgCache::OnTick`(`0x0053A700`) 的 `0x0053A7DD` 调用 ——
        和 op109 推箱子同一套「待确认队列 + 每帧 flush」机制（队列数组 `[cache+0x80] + idx*0x20`，idx 0..7，
@@ -136,20 +136,23 @@
        `0x0046E6D7`（bomber 帧更新里对 `bomb+0x9c/+0xa8`（格子坐标）的同类处理，`kind = bomber->vtable[0xb4]`）。
        两处都是 `from = 水泡当前格`、`to = trace 出的目标格`。
     4. **实测解码**（`tools/rev_op107.py` 第 6 节）：
-       | dump | kind | bombId | from → to | ms |
-       |---|---|---|---|---|
-       | `6A A5 77 50 50 50 50 A2 B6`（拳套抛泡，服务端未处理） | 3 | 30 | (10,10)→(10,10) | 2015 |
-       | `1A A5 C3 52 5D 52 5F A6 81` | 4 | 170 | (8,7)→(8,5) | 1000 |
-       | `5A A5 93 5D 53 5D 51 A3 97` | 0 | 250 | (7,9)→(7,11) | 1790 |
-       | `7A A5 3C 5F 5F 5F 58 A3 EF` | 2 | 85 | (5,5)→(5,2) | 1670 |
-       | `1A A5 5D 5F 5E 5F 58 A6 81` | 4 | 52 | (5,4)→(5,2) | 1000 |
-       ⚠️ 拳套那次 `from == to`（trace 出零位移），所以**即使服务端支持，气泡也不会飞** —— 先查客户端为什么算出 0 位移。
-       `kind` 目前只确认「`0x54CCBC` 路径写 `方向+4`」，其它路径（0/2/3）的语义未钉死；`ms` 在两处已知调用点写死 `1000`
-       （另有一条写死 `300` 的兄弟分支发 C→S op108），实测 1670/1790/2015 说明还有别的来源，含义待定。
-    5. **服务端不要回 op107**：全 `.text` 没有任何 `cmp/sub …, 0x6b`，EN 局内 S→C 分发表 `0x0055A4D8`
-       也没有 `0x6B` 分支 → 回显会被静默丢弃。所以本包的定位是「上报/仲裁请求」，位移要么客户端本地预测，
-       要么由别的 S→C 包驱动（待定，候选：op138 SetBombState 的状态位、op145 的 14 分支 action 表）。
-       下一步实测方案：先只绑定一个「解字段 + 打日志、不回包」的 handler，观察气泡是否本地飞出去。
-    6. **附带结论（顺带证伪旧表）**：EN 客户端**从不发送** C→S `0x8C/0x8D/0x8E`(140/141/142)，
-       yaml 里的 `BombIgniteReq`/`BombKickThrowReq`/`SetBombTimerReq` 是 TW 表遗留，
-       `handler/room/BombKickThrowReq.kt` 与 `packet/room/BombKickThrow.kt` 是**死代码**（不会被触发）。
+    5. **服务端必须回 S→C op 141 BombKickThrow**：
+       水泡位移的唯一驱动是 **S→C op 141 (BombKickThrow, `0x54BD14`)**
+       的 action 分支（反汇编逐指令核实，0x78F030=ReadUInt8×5 + 0x78F090=ReadUInt16×1，共 **7 字节**）：
+       - 载荷 = `E1((action<<4)|slot) E2(bombId) E1(oldX) E1(oldY) E1(x) E1(y)`
+         （oldX 仅与 bomb+0x9C 校验、oldY 读取丢弃；x/y 即目标格 = op107 的 to 字段）
+       - `action > 3` → `sub_4598AB(bomb, x, y, action-4)`：置 moving(+292)=1、方向(+304)=action-4，
+         帧更新 `sub_459C69` 逐帧把精灵滑到目标格；`action 0..3` → `sub_459935`：重定位/抛掷落地
+         （+280=1，帧更新 `sub_459EEB` 播弧线）。两函数全 exe 只有 op141 处理器与 op139 确认链
+         （`sub_534C3D`）两个调用者 —— **客户端没有任何本地位移预测，不回 op141 水泡纹丝不动**。
+       - **action 高 4 位与 op107 的 kind 一一对应**（kind=方向+4 踢出 / 0..3 触碰推行）；
+         回显载荷 = op107 9B 去掉末尾 E2(ms) 的**前 7 字节原样**，广播给所有人含踢泡者本人
+         （与 op109→op142 推箱子同构）。
+       - 坐标字段序全链一致：`(gridX 行 0..12, gridY 列 0..14)`；方向增量表
+         `dword_9886E4/9886E8[2*dir] = (-1,0,1,0)/(0,-1,0,1)` 交叉验证（kind=6→dir=2 走 gridY+1，
+         与用户实测样本 (2,3)→(2,4) 吻合）。
+       - 旧候选已证伪：op138 SetBombState 状态机只有 0 引爆/1 激活，无移动状态；
+         笔记里的"op145 14 分支 action 表"实为 **op 146**（`sub_54DDD1`）的 bomber 动作同步
+         （case 0..13），驱动的是角色不是水泡。
+       - 实现：`handler/room/BombKickThrowReq.kt` → `Room.onBombMove`（400ms 同动作去重 + 更新水泡位置/倒计时
+         + 广播 op141）；`packet/room/BombKickThrow.kt` 。回归测试 `BombMoveTest.kt` 10 项

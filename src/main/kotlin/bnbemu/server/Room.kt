@@ -174,6 +174,73 @@ object Room {
 
     fun movableBoxState(boxSeq: Int): MovableBoxState? = movableBoxes[boxSeq]
 
+    // ---- C→S op 107 水泡移动 (抛掷/踢出) → S→C op 141 BombIgnite 回显 (2026-11-09 定案) ----
+    //
+    // 客户端发包链只做滑行 trace + 入队 (0x0054CCBC / 0x0046E6D7), 没有任何本地位移预测;
+    // 水泡位移的唯一驱动是 S→C op 141 的 action=kind 分支 (0x54BD14 -> 0x4598AB 滑行 /
+    // 0x459935 抛掷落地), 两个函数全 .text 只有 op141 处理器与 op139 确认链两个调用者。
+    // 所以服务端必须把 op 107 前 7 字节 (kind|slot, bombId, from, to) 以 op 141 原样广播,
+    // 含踢泡者本人 (他也靠这一包看到球飞)。不要回 op 107 —— EN 局内分发器没有 0x6B 分支。
+    //
+    // 与 op 109 推箱子同理做去重: 踢/推是 CGameMsgCache 待确认队列 + 每帧 flush 机制,
+    // 同一动作可能在帧级重复上报; 而 0x4598AB 会把目标格写进 bomb+0x9C/0xA8 并置 moving,
+    // 重复广播同一动作虽无致命后果 (精灵会重新滑向同格), 但会抖动动画与 moving 状态。
+    // 窗口 400ms: 远大于帧级重发周期, 又短于玩家把球踢回同一位置的连击间隔。
+    internal var bombMoveDedupeWindowMs = 400L
+    data class BombMoveState(
+        val kind: Int, val bombId: Int,
+        val fromX: Int, val fromY: Int, val toX: Int, val toY: Int
+    )
+
+    private val bombMoves = ConcurrentHashMap<Int, BombMoveState>()
+    private val bombMoveSentAt = ConcurrentHashMap<Int, Long>()
+
+    // 返回是否真的广播了 (重复上报不广播, 便于测试/调试)。
+    fun onBombMove(
+        slotId: Int,
+        kind: Int,
+        bombId: Int,
+        fromX: Int,
+        fromY: Int,
+        toX: Int,
+        toY: Int,
+        moveDuration: Int
+    ): Boolean {
+        val now = System.currentTimeMillis()
+        val next = BombMoveState(kind, bombId, fromX, fromY, toX, toY)
+        val prev = bombMoves[bombId]
+        if (prev == next && now - (bombMoveSentAt[bombId] ?: 0L) < bombMoveDedupeWindowMs) {
+            return false
+        }
+        bombMoves[bombId] = next
+        bombMoveSentAt[bombId] = now
+
+        // 更新服务端水泡状态: 滑行期间暂停倒计时, 到点后由 Bomb.updateState 续 2s 再引爆
+        getBomb(bombId)?.apply {
+            gridX = toX
+            gridY = toY
+            isMoving = true
+            expireAt = now + moveDuration.coerceIn(0, 10_000)
+        }
+
+        // 回显 = op 107 前 7 字节原样 (action = kind, 4..7 滑行 / 0..3 抛掷)。
+        // oldX/oldY 传 from: 客户端 0x54BDEA 只用 oldX 与 bomb+0x9C 做校验, 不符也照常执行。
+        BC(
+            BombKickThrow(
+                slotId = slotId,
+                bombId = bombId,
+                x = toX,
+                y = toY,
+                oldX = fromX,
+                oldY = fromY,
+                action = kind
+            )
+        )
+        return true
+    }
+
+    fun bombMoveState(bombId: Int): BombMoveState? = bombMoves[bombId]
+
     // 角色死亡上报处理 (C→S op 154 action=5 -> CA.exe 0x0046DB1D CGOGameBomber::OnDie)
     //
     //   这条上报只对**真人玩家**成立 —— 0x46DB01 处先调 0x45FBD3,
@@ -567,6 +634,8 @@ object Room {
         bombs.clear()
         movableBoxes.clear()
         movableBoxSentAt.clear()
+        bombMoves.clear()
+        bombMoveSentAt.clear()
         nextBombId = 0
         lastAirplaneTime = 0L
         resetMatchState()

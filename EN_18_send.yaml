@@ -47,10 +47,9 @@ LaunchGameStage: 170
 DoStartGame: 171
 SetBombState: 138
 SetBombStateBatch: 138
-BombIgnite: 141
 DetonateBomb: 141
 TileBombExplode: 148
-BombKickThrow: 356
+BombKickThrow: 141
 MovableBoxMove: 142
 EatItemResult: 143
 EatObstacleResult: 144
