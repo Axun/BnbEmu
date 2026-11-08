@@ -92,8 +92,8 @@ Unk_293: 293
 #   0x4AFD1C 是 Nexon Messenger (TSingleton<CSmsDlg>) 的应答版, kind 恒 0; 姊妹包 op 299 只发密钥
 #   线上密钥经角色名令牌变换: F0 AE 35 F3 -> 明文 "ffdf" (同 op 4/op 7/op 254); 服务端不回包
 RegisterSessionKey: 297
-Unk_302: 302
-Unk_310: 310
+UserStageSyncReq: 302
+UserMapListReq: 310
 CreatePracticeSessionReq: 75
 # 大廳聊天發言 (CA.exe 0x4EB856 push 0x12; body = E1(chatType) E1(1) DecodeStr(令牌化文字))
 # 原 TW/CN/JP 表把聊天放在 op 25, 真實 EN 客戶端發的是 op 18

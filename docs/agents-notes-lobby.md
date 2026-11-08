@@ -31,3 +31,22 @@
   ResConnectToSvr 已注册为 S→C op 7（EN_18_send.yaml；TW 客户端仍预期 op 6，TW_5_send.yaml 未动）
 - 与旧 TW_5 表冲突处：进频道请求真实是 **op 11**（旧表 EnterChannelStageReq=9）；
   C 发 2 后服务器回 **op 4**（旧表把 FirstInfoInit 当 2 的回应；实际 1861B 的 op 2 是服务器主动推送）
+
+- **Opcode 310 & 302 逆向确凿结论 (2026-11-08)**：
+  - **S→C Op 310 UserMarketItemList (个人交易市场物品列表)**:
+    - 客户端处理入口：`CUserMarketStage::OnPacket` (0x00631C78)，分发至 `0x0062EA8C` -> `0x0062E1B7`。
+    - 数据包解码格式：
+      - `Decode2` -> count (物品条目数)
+      - if (count == 0): 弹出对话框 `UMItemNotFound` (0x008B4184, "UserMarket Item Not Found")。
+      - if (count > 0): 循环 `count` 次，每项结构：`Decode4(itemId) + Decode4(price/count) + DecodeStr(itemName) + Decode4(duration/expire) + Decode2(statusFlags)` (若开启特性 0x20 则追加 Decode1)。
+    - 抓包中 20B (如 `enter-channel.pcap seq=64/94`) 真实内容为：`count=1, itemId=0, price=0, itemName="", duration=0, status=0`（18 字节载荷 + 2 字节 opcode），作为全 0 空条目占位下发，以防触发未找到提示。
+  - **S→C Op 302 UserMarketMyItemList (个人寄售物品列表)**:
+    - 客户端处理入口：`CUserMarketStage` (0x0062E02F / 0x0062F4A0)，数据结构与 Op 310 完全同构。
+    - 在练习房抓包 (`practice_s2c_op302_24B_0.bin`) 中曾携带 1 条 Camo 道具记录 (`itemId=19888, price=2004, name="Camo", duration=240000, status=0`)。
+  - **C→S Op 310 UserMapListReq (频道在线用户列表/地图请求)**:
+    - 发送入口：`TSingleton<CUserMap>::RequestUserMap` (`0x004E02E3`, 单例位于 `0x00998414`, 虚表 `0x0089DE24`)。
+    - 触发源：`CLobbyStage::InitStage` (`0x00512F6F`) 与 `CUserMap::UpdateGuildInfo` (`0x0063F1D5`)。
+    - 行为：空载荷包，发包后设置等待锁 `[this + 0x2ABC] = 1`。当收到服务器 S→C Op 72 (`SessionList`) 时，分发至 `0x004E086B` 并在 `0x004E0854` 将等待锁清零恢复。
+  - **C→S Op 302 UserStageSyncReq (玩家舞台/特性状态同步请求)**:
+    - 发送入口：`CStage::vtable[+0xA8]` (`0x004FA1AE`) 及 `CMyPageDialog` (`0x005F1AEA`)。
+    - 行为：客户端在进入 Lobby(11) / Room(12) / Square(20) 以及个人资料主页时发送，载荷为 `Encode1(flag)`。

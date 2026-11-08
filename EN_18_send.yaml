@@ -102,8 +102,8 @@ UserMapInfo: 254
 ShopVersion: 261
 UserItemUpdate: 274
 Unk293: 293
-Unk302: 302
-Unk310: 310
+UserMarketMyItemList: 302
+UserMarketItemList: 310
 UserInventoryInfo: 413
 Unk423: 423
 # 进练习房 (op 75) 回应链的 send 包 (tst.pcap 逆向; 同 op 多包名可并存, OpcodeManager 按函数名查表)

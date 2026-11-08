@@ -1,12 +1,10 @@
 # BnBEmu
 
-尝试适配泡泡堂老版本服务端模拟器的项目。
+泡泡堂美服老版本服务端模拟器。
 
-游戏路径：F:\Games\PopTag
-主程序：CA.exe
+游戏路径：F:\Games\PopTag （主程序CA.exe）
+反编译C代码：reference\CA.exe.c
 
-## 工具
-- E:\Softwares\Wireshark\tshark.exe
 
 ---
 
@@ -47,8 +45,7 @@
 - 已实现绑定（原名 Unk_* 占位）：C→S 0 AskFirstSession（首连打开）、
   55 StringTableRevisionReq（登录后上报本地 3 份 SSD 版本号 [StringTable, QuestString, CurseFilter]，触发回频道列表）、
   11 EnterChannelReq（进频道）、15 ChannelsStateReq（频道状态轮询，回 op 13）、
-  64 UserSimpleInfoReq（空消费，回应在 StageInitReq 链内）、297/39/302/310/293（空消费/部分消费，
-  整套回应由 StageInitReq 触发）、78 StageInitReq（批次收齐触发点，回整套进频道回应链）、
+  64 UserSimpleInfoReq（空消费，回应在 StageInitReq 链内）、297 RegisterSessionKey / 39 / 302 UserStageSyncReq（玩家舞台/特性状态同步请求，回 S→C 310 与 302）/ 310 UserMapListReq（频道在线地图与用户列表请求，回 S→C 254 与 72）/ 293（空消费）、78 StageInitReq（阶段就绪触发点，回 293/78/4×2/227/60/310/302 核心配置链）、
   81 JoinSessionReq（进频道自动空包，⚠️ 非"进房"；2026-08-31 起回应=整条**进频道握手推送**，
   客户端发 81 后会等这条推送才继续发 274/281/276，缺它卡"正在连接"对话框，见 JoinSessionReq.kt）、
   274（13B×2）/281（空）/276（空）（握手后续，空消费，无逐包回应）；
@@ -59,8 +56,7 @@
   12 ChannelsNotice（**公告与PPL广告信息**，已结构化可动态生成）、48 PermissionInfo（**玩家权限设定与功能开关**，空体或 E4(id)+16×E1(flag) 列表，CPermissionMan）、97 ChangeStage（**切换游戏阶段**，E2(11) 大厅 / E2(20) 广场，CMainSystem::SetStage，触发客户端自动发 op 78 StageInitReq）、
   7 ResConnectToSvr（op 6 ReqConnectToSvr 的回应，见下方关键观察）、
   122 UserDynamicInfo（**用户动态数据同步**，如 Lucci 金币同步，详见 `packet/UserDynamicInfo.kt` ）、423（op 7 回应后的推送，原样重放）、87 RoomList（**房间列表**，已结构化可动态生成，见关键观察）、
-  310/302（进频道批次回应，E2(1)+E4(0)×2+E2(0)+E4(0)+E2(0)，
-  各发两次）、254 UserMapInfo（**频道在线用户地图/占位同步**，CUserMap）、227 MyPageInfo（**个人资料摘要与商城版本**，CMyPageDialog）、72 SessionList（**频道在线用户列表**，已结构化可动态
+  310 UserMarketItemList（**个人交易市场物品列表**）/ 302 UserMarketMyItemList（**个人在市场寄售物品列表**）、254 UserMapInfo（**频道在线用户地图/占位同步**，CUserMap）、227 MyPageInfo（**个人资料摘要与商城版本**，CMyPageDialog）、72 SessionList（**频道在线用户列表**，已结构化可动态
   生成，见关键观察）、
   293(E1(0))/78 QuestConfigTable（任务配置表，E4(count)+条目列表，空为 E4(0)）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、
   81 JoinSessionResult（**大厅名册**，已结构化 `packet/JoinSessionResult.kt` 的 `RosterEntry`，
@@ -79,6 +75,7 @@
 - 大厅中参见 `docs/agents-notes-lobby.md`
 - 房间中参见 `docs/agents-notes-room.md`
 - 对局中参见 `docs/agents-notes-battle.md`
+- 商城参见 `docs/agents-notes-shop.md`
 - 实现见 `handler/CreatePracticeSessionReq.kt`（op 75，⚠️ 原误绑 op 86）、`handler/Unk_92.kt`（游戏开始）、
   `handler/room/BomberActionAckReq.kt`（C→S op 172 角色动作切换确认空包）、`packet/Practice*.kt` / `packet/room/MapEventSync.kt`；
   工具 `tools/extract_op75.py`（提取回放+blob）、`tools/gen_practice_kotlin.py`（生成 blob 常量）；
@@ -87,13 +84,12 @@
 - **玩家换装/装备穿戴变更同步请求（C→S op 273 **：参见ChangeEquipReq.kt
 - 注意：**带下划线的 Kotlin 函数名无法注册发送包**（OpcodeManager 的 filteredName 会
   substringBefore('_') 截断），新 Packet 类名不能含下划线；handler 顶层 val 名可含下划线（精确匹配字段名）
-- **进入游戏商城流程（C→S op 315）**：参见EnterShopReq.kt
 - **大厅聊天 C→S （op 18）**：参见ChatMsg.kt
 
-## SSD 资料块编码（op1/op2/op51/op11/op13/op12 内嵌子块，2026-08-30/2026-09-10 逆向）
+## SSD 资料块编码（op1/op2/op51/op11/op13/op12 内嵌子块）
 - 结构：`Encode1Bool(true) + Encode4(len) + len 字节资料块`（op13/op12 无开头的 Encode1Bool）；
   资料块变换：**每 dword 以 BE 读取、XOR 0x96CA5395、按 LE 写回**（即 Encode4 的字节序交换形式）
-- 块头规律（op1/op2/op11/op12/op13 五块吻合）：`[0x18][(块长-5)&0xFF][u32 0]`
+- 块头规律（op1/op2/op11/op12/op13 五块吻合）：`[0x18][(块长-5)&0xFF][u32 0]`（参见ssdEncode函数）
 - **op11 = 频道列表、op13 = 各频道开关/状态、op12 = 公告与PPL广告信息，均已结构化**：频道表 `EN_CHANNELS` 定义在
   `packet/ChannelsExtraInfo.kt`（`ChannelEntry`，op13 用其 `state`/`enabled` 栏，
   生成逻辑在 `ChannelsState.kt`；条目逐字节结构、续读标记等细节见两文件顶部注释；

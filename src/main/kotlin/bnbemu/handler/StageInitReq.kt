@@ -2,14 +2,12 @@ package bnbemu.handler
 
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ItemDef
+import bnbemu.packet.MyPageInfo
 import bnbemu.packet.QuestConfigTable
 import bnbemu.packet.SessionInfoResult
-import bnbemu.packet.SessionList
-import bnbemu.packet.MyPageInfo
-import bnbemu.packet.UserMapInfo
 import bnbemu.packet.Unk293
-import bnbemu.packet.Unk302
-import bnbemu.packet.Unk310
+import bnbemu.packet.UserMarketItemList
+import bnbemu.packet.UserMarketMyItemList
 import bnbemu.packet.UserSimpleInfoResult
 
 /**
@@ -18,18 +16,17 @@ import bnbemu.packet.UserSimpleInfoResult
  * 逆向确认 (CA.exe, 2026-11-01):
  * 1. 客户端在切换至频道/大厅阶段 (State 11) 时，于 CMainSystem::RequestStageInit (0x0068D80F) 发出此包。
  * 2. 发包前调用 CFxContext::Clear() (0x0068919D) 重置上下文，发包内容为空载荷。
- * 3. 真实服务器在此触发点按线序 (enter-channel.pcap seq=64~97) 下发进频道批次的整套核心数据:
- *    [Unk310, Unk302, UserMapInfo, SessionList, Unk293, QuestConfigTable,
- *     UserSimpleInfoResult, SessionInfoResult, MyPageInfo, ItemDef, Unk310, Unk302]
+ * 3. 进频道批次中由各请求分别触发回包:
+ *    - op 302 (UserStageSyncReq) -> op 310 (UserMarketItemList), op 302 (UserMarketMyItemList)
+ *    - op 310 (UserMapListReq) -> op 254 (UserMapInfo), op 72 (SessionList)
+ *    - op 78 (StageInitReq) -> [Unk293, QuestConfigTable, UserSimpleInfoResult, SessionInfoResult,
+ *                               MyPageInfo, ItemDef, UserMarketItemList, UserMarketMyItemList]
  */
 val StageInitReq = PKTHandler { c ->
     c.send(
-        Unk310(), Unk302(),
-        UserMapInfo(),
-        SessionList(),
         Unk293(), QuestConfigTable(),
         UserSimpleInfoResult(), SessionInfoResult(),
         MyPageInfo(), ItemDef(),
-        Unk310(), Unk302(),
+        UserMarketItemList(), UserMarketMyItemList(),
     )
 }
