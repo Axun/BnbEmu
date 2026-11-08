@@ -23,6 +23,19 @@ object Room {
     val bombs = mutableListOf<Bomb>()
     var lastAirplaneTime = 0L
 
+    /**
+     * 房间号 / 会话 id —— S→C op 83 [bnbemu.packet.EnterSessionResult] 的第 3 栏位。
+     *
+     * 客户端 (CA.exe 0x00506513) 拿这个 id 去 CLobbyStage 的房屋缓存数组 (由 op 87 房间列表填充)
+     * 里找同一间房, **找不到就整段跳过**: 房间名/等级/人数不会写进 CFxContext, 只有
+     * 「进房成功 + 切房间场景」这一步照常发生。所以它只影响 UI 的会话信息刷新, 不影响进房本身。
+     *
+     * 默认 75 = tst.pcap stream4 里真实服务器给练习房发的房号 (op 87 房间列表条目里同一个号),
+     * 保持与抓包逐字节一致 (replay_test 的 practice 用例对 op 83 载荷做逐字节断言)。
+     */
+    var sessionId = DEFAULT_SESSION_ID
+    const val DEFAULT_SESSION_ID = 75
+
     val activeSlotCount: Int
         get() = slots.count { it.user != null || it.isAI }
 

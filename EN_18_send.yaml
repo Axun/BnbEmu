@@ -27,7 +27,7 @@ UserSimpleInfo: 70
 CreateSessionResult: 80
 JoinSessionResult: 81
 AutoJoinSessionResult: 82
-SessionSimpleInfo: 83
+EnterSessionResult: 83
 SessionDetailInfo: 84
 CreatePracticeSessionResult: 89
 SetPlayer: 105

@@ -19,6 +19,14 @@ fun RoomList(rooms: List<RoomEntry> = EN_SAMPLE_ROOMS) = PKT {
 }
 
 // 單一房間條目 (對齊 SessionEntry 的模式); f1~f4/t1~t3 語義未明, 動態生成時先沿用樣本值
+// ⚠️ 2026-11-08 補: f1 (33 / tst 那筆 31) 其實等於「後續整段的長度」——
+//   客戶端 op 87 處理器 0x0050FF27 先用 E2 讀筆數, 再用 0x0078F1E0 讀
+//   「E4 長度 + 該長度的子流」(子流內容是 SSD 變換後的位元組, 由 0x0078BE30/0x0078BE60 以
+//   原生 WORD/DWORD 讀出房號與會話句柄)。所以 f1 不是房間欄位, 而是整個條目的長度前綴,
+//   一旦這裡要做多房/改名, 必須按「E4(剩餘長度) + 剩餘」重算, 不能沿用 33。
+//   另: 條目裡的房號 (f3 >> 16, rd = 61 / tst 練習房 = 75) 就是 S→C op 83 的 sessionId,
+//   客戶端靠它把房間資訊填進 CFxContext; 目前 op 83 用 Room.sessionId (=75) 而這份樣本房號是 61,
+//   所以客戶端找不到房、只走「進房成功」分支 (不影響流程) —— 兩者要在 op 87 結構化時統一。
 class RoomEntry(
     val name: String,           // 房名明文 (客戶端 UI 顯示)
     val f1: Int,

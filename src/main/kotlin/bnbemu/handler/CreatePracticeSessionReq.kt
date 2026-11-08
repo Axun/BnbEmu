@@ -14,7 +14,8 @@ import bnbemu.packet.PracticeSlotReady
 import bnbemu.packet.PracticeUnk423
 import bnbemu.packet.RoomList
 import bnbemu.packet.SessionInfoResult
-import bnbemu.packet.SessionSimpleInfo
+import bnbemu.packet.SESSION_TYPE_PRACTICE
+import bnbemu.packet.EnterSessionResult
 import bnbemu.packet.Unk113
 import bnbemu.packet.UserSimpleInfoResult
 import bnbemu.server.*
@@ -23,27 +24,29 @@ import bnbemu.server.*
 // 进练习房 (C→S op 75) — 在练习房界面点"开始"时发出
 // ============================================================================
 // 载体 (tst.pcap stream4 sq=79, 14B) = E2(0) E2(0) E1(0) E1(1) E1(bomber) E1(15) E4(66)
-//   E2(0)           房号/练习房标识
-//   E2(0)           模式/地图? (练习房固定 0)
-//   E1(0)           ?
-//   E1(1)           ?
-//   E1(bomber)      bomber (客户端当前选中的角色)
-//   E1(15)          ?
-//   E4(66)          地图 id? (练习房地图, 待钉死)
+// 字段由客户端发包函数 CA.exe 0x00517233 (CNormalLobbyStrategy::? → sub_517233) 逐条对出:
+//   E2(0)           房间名 (sub_78D0F0 写字符串, 练习房为空)
+//   E2(0)           房间密码 (同上, 空)
+//   E1(0)           CFxContext[?] (sub_687C18 的取值; 抓包 0)
+//   E1(1)           玩家数 (GetLocalPlayerCount)
+//   E1(bomber)      逐个bomber id (E1 × 玩家数; 抓包 5 = 当前选中的 bomber)
+//   E1(15)          房间类型 (CFxContext[0x570], 与 S→C op 83 第 4 栏位同源; 15 = 练习房)
+//   E4(66)          游戏规则 id (sub_516C5A 把房间类型映射成规则后算出的值; 抓包 66)
 // 服务器连发整套房间设置回应 (seq 顺序, 见 Practice.kt 注释):
-//   [87 RoomList, 83 SessionSimpleInfo, 4(13B), 4(65B), 113, 100(78B), 108,
+//   [87 RoomList, 83 EnterSessionResult, 4(13B), 4(65B), 113, 100(78B), 108,
 //    106×8, 每槽(114,104,105,103), 198, 423]
+// 其中 op 83 是「进房结果」, 房里申请的房型必须原样回填 (见 packet/EnterSessionResult.kt)。
 // 之后客户端自动跟发 297/302, 并再发 op 92 触发游戏开始 (见 StartGameReq.kt)。
 // 玩家注册进 Room slot 0 (leader), 其余 7 槽设为 AI, 以便 AI 自动行动广播 (Room.BC) 能送达。
 // server = C???::OnCreatePracticeSession (原始名称未知, 绑定见 EN_18_recv.yaml)
 val CreatePracticeSessionReq = PKTHandler { c ->
-    Decode2 // 0 房号
-    Decode2 // 0
-    Decode1 // 0
-    Decode1 // 1
-    val reqBomber = Decode1 // 客户端当前选中的 bomber (如 0=Dao, 5=Bazzi, 4=Marid)
-    Decode1 // 15
-    Decode4 // 66 地图 id
+    Decode2 // 房间名 (空)
+    Decode2 // 房间密码 (空)
+    Decode1 // CFxContext 取值 (抓包 0)
+    Decode1 // 玩家数 (抓包 1)
+    val reqBomber = Decode1 // 当前选中的 bomber (如 0=Dao, 5=Bazzi, 4=Marid)
+    val reqSessionType = Decode1 // 房间类型 (15 = 练习房, 见 SESSION_TYPE_PRACTICE)
+    Decode4 // 66 游戏规则 id (由房间类型算出)
 
     // 玩家 (op 7 已把 c.users[0] 填好) 放 slot 0, 其余 7 槽为 AI
     val player = c.users.firstOrNull()
@@ -70,7 +73,12 @@ val CreatePracticeSessionReq = PKTHandler { c ->
 
     c.send(
         RoomList(),
-        SessionSimpleInfo(),
+        // 进房结果 (op 83): 房型原样回显请求里的值, 客户端 0x0068626F 会把它存成
+        // CFxContext[0x570] (房间类型); 越界值退回练习房常量, 避免把 0 当"无类型"写进 UI。
+        EnterSessionResult(
+            sessionId = Room.sessionId,                 // 房号: 客户端拿它到 op 87 的房屋缓存里找房
+            sessionType = reqSessionType.takeIf { it in 1..31 } ?: SESSION_TYPE_PRACTICE,
+        ),
         UserSimpleInfoResult(), SessionInfoResult(),
         Unk113(),
         PracticeRoomInfo(),

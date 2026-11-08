@@ -16,10 +16,6 @@ import bnbemu.server.bomber
 //    它既不是 "ItemThrow" 也与 AI 行动无关, 见 packet/room/MapEventSync.kt 与 tools/rev_op172.py。
 // 工具: tools/extract_op75.py / tools/gen_practice_kotlin.py; 基准 cap/practice_s2c_op*.bin
 
-// ---- op 83 SessionSimpleInfo (6B): E1(0) E1(0) E2(75) E1(15) E1(0) ----
-fun SessionSimpleInfo() = PKT {
-    EncodeBuffer(EN_OP83)
-}
 
 // ---- op 113 (2B): E2(0) ----
 fun Unk113() = PKT {

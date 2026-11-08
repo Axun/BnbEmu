@@ -50,3 +50,29 @@
   - **C→S Op 302 UserStageSyncReq (玩家舞台/特性状态同步请求)**:
     - 发送入口：`CStage::vtable[+0xA8]` (`0x004FA1AE`) 及 `CMyPageDialog` (`0x005F1AEA`)。
     - 行为：客户端在进入 Lobby(11) / Room(12) / Square(20) 以及个人资料主页时发送，载荷为 `Encode1(flag)`。
+
+- **S→C op 83 = `EnterSessionResult`「进房结果」(2026-11-08 反编译钉死；旧名 SessionSimpleInfo 已废弃)**：
+  - 分发：`CLobbyStage::OnPacket` (0x00510287) 的 jump-switch `case 'S' (0x53)` → `0x00507113`。
+    同组 82/84/85 (`case 'R'/'T'/'U'`) 也是会话操作：`0x0050BB9D` / `0x00507CC7` / `0x0050702E`。
+  - `0x00507113` 流程：`[stage->vtable+0x110](0)` 清等待锁 → `Decode1` 结果码 → 跳表 `0x00507C93`：
+    - `case 0` 成功 → 特性 80 检查 → 大廳策略虚表 `+0x18` → `0x00506513`
+    - `case 1..12` 失败 → **只弹对话框，不再读字段**（所以失败包只需 1 字节）：
+      1 WrongPassword / 2 CantJoinRoom / 3 InvalidGrade / 4 InvalidLucci / 5 InvalidGachapon /
+      6 DontHaveTMItemJoin / 7 UserRejectJoinSession / 8 InvalidLevel / 9 DeferShutdown /
+      10 InvalidWinRate / 11 InvalidGradeSeason / 12 HordeEvent_RecommendBuyHordeTicket
+  - 成功分支的字段：
+    - `E1` flag → 大廳策略虚表 `+0x18`（普通 `0x00516C0F` / 任务 `0x00515FE1` / 通关 `0x005187CA`
+      都只是 `Decode1` 存进 `CFxContext+0x5A4`，**全 .text 无 +0x5A4 读取指令**；兑换 `0x005146AD`
+      当 bool 用选 stage 16/17；阶梯 `0x00515080`、特殊赛 `0x00517E0E` 干脆不读）
+    - `E2` **房号** → `0x00506513` 调 `0x00505123` 在 `CLobbyStage+0x6968` 的房间快取数组
+      （每笔 204B，笔数 `+0x6964`，由 op 87 房间列表填充）里按 id 找房；**找不到整段跳过**
+      → 房名/等级/人数不会写进 `CFxContext`，但「进房成功 + 切 stage 12」照常发生
+    - `E1` **房间类型** → `0x0068626F` → `CFxContext+0x570`；与 C→S op 75（`0x00517233`）
+      第 6 字段同源，抓包两边都是 15。`0x00516C5A` 把类型映射成规则索引：14→3 / 15→1 / 0→0 / 其他→2
+    - `E1` 会话状态 → `0x00687393` → `CFxContext+0x1AC`（抓包 0，建房路径 `0x44FA…` 也置 0）
+  - 同族包：`CNormalLobbyStrategy` 虚表 `+0x10` = `0x00516CEF` 是**带完整房信息**的变体
+    （`E2` 房号 + `E4` + `E1` + `E1` + `E1`，末尾 `sub_68DC53(stage,12)` 切房间场景）；
+    op 83 则是「最小版」：只给房号 + 房型 + 状态，其余从 op 87 的房快取补齐。
+  - 结论：body 固定 6B = `E1(result) E1(flag) E2(房号) E1(房型) E1(state)`，
+    抓包 `5a 5a a5 22 55 5a` = 0/0/75/15/0。实现见 `packet/EnterSessionResult.kt`，
+    回归见 `src/test/kotlin/bnbemu/netty/EnterSessionResultTest.kt`。

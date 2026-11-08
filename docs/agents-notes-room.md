@@ -71,3 +71,13 @@
      = 选图/选色/换角色/开关槽位），EN 版重编号为 85/86/87/89，不适用于 EN。
      S→C 方向另有 op 86（大厅期周期推送，25B，见 `tst_flow4.txt:62`），与 C→S 的选色请求互不冲突。
   实现见 `handler/room/SelectColorReq.kt` + `packet/room/SelectColor.kt`；单元测试见 `SelectColorTest.kt`。
+- **S→C op 83 = `EnterSessionResult`「进房结果」(2026-11-08 反编译钉死；旧表名 SessionSimpleInfo 已废弃)**：客户端
+  `CLobbyStage::OnPacket` 0x00510287 的 `case 'S'(0x53)` → 0x00507113，先 `Decode1` 取**结果码**
+  （0=成功；1..12 = WrongPassword / CantJoinRoom / InvalidGrade / … 各弹一个对话框且**不再读任何字段**），
+  成功分支才继续：`E1` flag（大廳策略 0x00516C0F 消費，存入 CFxContext+0x5A4，本區無讀取點）+
+  `E2` **房号**（0x00506513 用它到 CLobbyStage 的房间缓存数组找房，**找不到整段跳过**）+
+  `E1` **房间类型**（与 C→S op 75 第 6 字段同源，原样回填）+ `E1` 会话状态。
+  即 body = `E1(result) E1(flag) E2(房号) E1(房型) E1(state)`，抓包 = `5a 5a a5 22 55 5a`（0,0,75,15,0）。
+  已改由 `packet/EnterSessionResult.kt` 程序化生成（常量 `SESSION_ENTER_*` / `SESSION_TYPE_PRACTICE`，
+  房号取 `Room.sessionId`，房型回显 op 75 请求值），`PracticeBlobs.EN_OP83` 已删除，
+  `tools/gen_practice_kotlin.py` 不再生成该 blob；回归基准 `src/test/kotlin/bnbemu/netty/EnterSessionResultTest.kt`。
