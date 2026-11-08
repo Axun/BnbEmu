@@ -2,6 +2,7 @@ package bnbemu.handler
 
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ItemDef
+import bnbemu.packet.bomberCharCard
 import bnbemu.packet.MyPageInfo
 import bnbemu.packet.QuestConfigTable
 import bnbemu.packet.SessionInfoResult
@@ -23,10 +24,14 @@ import bnbemu.packet.UserSimpleInfoResult
  *                               MyPageInfo, ItemDef, UserMarketItemList, UserMarketMyItemList]
  */
 val StageInitReq = PKTHandler { c ->
+    // op 60 先按当前角色生成 (角色卡 itemId/skinId + 所有 cat=3 模型名都在里面),
+    val bomber = c.users.firstOrNull()?.bomber ?: 0
+    val (charItemId, charToken) = bomberCharCard(bomber)
+    println("[StageInitReq] op 60 物品定义表: bomber=$bomber → 角色卡 item $charItemId ($charToken), cat=3 模型同步")
     c.send(
         Unk293(), QuestConfigTable(),
         UserSimpleInfoResult(), SessionInfoResult(),
-        MyPageInfo(), ItemDef(),
+        MyPageInfo(), ItemDef(bomber),
         UserMarketItemList(), UserMarketMyItemList(),
     )
 }

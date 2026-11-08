@@ -4,7 +4,7 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.EnterShopResult
 import bnbemu.packet.EnterShopStage
-import bnbemu.packet.UserDynamicInfo
+import bnbemu.packet.UserDynamicInfoValue
 import bnbemu.packet.shop.CashBalance
 import bnbemu.server.cash
 import bnbemu.server.lucci
@@ -20,7 +20,7 @@ import bnbemu.server.lucci
  * - 服务端响应:
  *   1. 下发 S->C op 259 EnterShopResult(success = true) 解除等待锁
  *   2. 下发 S->C op 17 EnterShopStage() 触发客户端切换至 CShopStageNew (Stage 14)
- *   3. 下发 S->C op 122 UserDynamicInfo(0, lucci) 同步金币 (商城舞台就绪后补发一次不然会显示0)
+ *   3. 下发 S->C op 122 UserDynamicInfoValue(0, lucci) 同步金币 (商城舞台就绪后补发一次不然会显示0)
  *   4. 下发 S->C op 201 CashBalance(cash) 同步 NX Cash 点券余额 (正规通道, 见
  *      packet/shop/CashBalance.kt)。钱包在进程级, 重开连线/重进商城时补发,
  *      避免充值后余额显示回 0; 见 handler/shop/ChargeNxReq.kt。
@@ -30,7 +30,7 @@ val EnterShopReq = PKTHandler { c ->
     val tab = Decode1
     c send EnterShopResult(success = true)
     c send EnterShopStage()
-    c send UserDynamicInfo(0, c.lucci)
+    c send UserDynamicInfoValue(0, c.lucci)
     c send CashBalance(c.cash)
 }
 

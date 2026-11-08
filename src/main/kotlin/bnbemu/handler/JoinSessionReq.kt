@@ -10,13 +10,14 @@ import bnbemu.packet.RoomList
 import bnbemu.packet.SessionList
 import bnbemu.packet.ShopCatalog
 import bnbemu.packet.ShopVersion
-import bnbemu.packet.Unk20
 import bnbemu.packet.Unk204
 import bnbemu.packet.Unk247
 import bnbemu.packet.Unk423
 import bnbemu.packet.Unk66
 import bnbemu.packet.UserDynamicInfo
+import bnbemu.packet.UserDynamicInfoValue
 import bnbemu.packet.UserInventory
+import bnbemu.packet.bomberCharCard
 import bnbemu.packet.defaultUserInventoryItems
 import bnbemu.packet.inventoryEntries
 import bnbemu.packet.UserInventoryInfo
@@ -52,7 +53,8 @@ val JoinSessionReq = PKTHandler { c ->
     val lucci = user?.lucci ?: 1234567
 
     // op 60 (ItemDef) 必须最先: 198 里的物品要靠它查定义表
-    c send ItemDef()
+    // 先按当前角色生成: 角色卡 itemId/skinId 与所有 cat=3 表情/动作模型名都在里面。不匹配也不会更改当前选中的角色类型
+    c send ItemDef(user?.bomber ?: 0)
 
     // 服务端认账的背包（商城购买 + 273 上报）必须并入 op 198 的清单里下发：
     //   客户端 CUserInventoryMan::ReadEquippedInventory (0x67601D) 会先清空两位玩家的
@@ -63,11 +65,17 @@ val JoinSessionReq = PKTHandler { c ->
     //   否则回大厅时会被这次清空重建抹掉（表现为「背景自动取消装备」）。
     val bag = user?.items.orEmpty()
     val equips = user?.equips.orEmpty()
-    val defaults = defaultUserInventoryItems(user?.bomber ?: 0)
+    val bomber = user?.bomber ?: 0
+    val defaults = defaultUserInventoryItems(bomber)
     val inventory = inventoryEntries(defaults, bag, equips)
     println(
         "[JoinSessionReq] op 198 清单: 默认 ${defaults.size} 条 + 背包 ${bag.size} 件" +
             " + 装备 ${equips.size} 件 → 共 ${inventory.size} 条"
+    )
+    val (charItemId, charToken) = bomberCharCard(bomber)
+    println(
+        "[JoinSessionReq] 角色: bomber=$bomber → item $charItemId ($charToken)" +
+            " [op 198 角色卡 + op 274 玩家槽 0/1 + op 20 玩家槽 0]"
     )
     if (bag.isNotEmpty()) {
         println("[JoinSessionReq] op 198 携带背包物品: ${bag.map { it.itemId }}")
@@ -95,11 +103,12 @@ val JoinSessionReq = PKTHandler { c ->
         //    把 413 挪到 198 之后，运行时直读 dyn+0x1EC = 50 → 容量 400，购买可正常进入流程。
         //    另: op 60 (ItemDef) 仍需在 413 之前，客户端按 itemId 查定义表，查不到整条丢弃。
         UserInventory(listOf(inventory, inventory)), FxStockInit(),
-        UserItemUpdate(), UserItemUpdate(1),
-        UserDynamicInfo(0, lucci), FxConfig(), DynamicMapInfo(),
+        UserItemUpdate(0, charItemId), UserItemUpdate(1, charItemId),
+        UserDynamicInfoValue(0, lucci), FxConfig(), DynamicMapInfo(),
         RoomList(), ShopCatalog(),
         Unk204(), Unk66(), ChannelsGameState(tailOnes = 2),
-        Unk20(), ShopVersion(), Unk247(), Unk423(),
+        // ⚠️ op 20 (UserDynamicInfo) 是本機玩家動態檔案快照, 第 12 欄 = 角色 ID, 必須按當前角色生成!
+        UserDynamicInfo(bomber), ShopVersion(), Unk247(), Unk423(),
         UserInventoryInfo(),
         JoinSessionResult(), SessionList(),
     )

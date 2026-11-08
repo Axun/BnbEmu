@@ -84,22 +84,32 @@ val DEFAULT_USER_INVENTORY_ITEMS = defaultUserInventoryItems(0)
  * 重建回皮蛋, `SendUserInfo` 的名片也跟着错。
  */
 fun defaultUserInventoryItems(bomber: Int = 0): List<UserInventoryEntry> {
-    val (charItemId, charToken) = when (bomber) {
-        0 -> 1 to "Dao"
-        1 -> 2 to "Diz"
-        2 -> 3 to "Moss"
-        3 -> 4 to "Melvin"
-        4, 10 -> 2082 to "Marid"
-        5 -> 5 to "Boz"
-        6 -> 6 to "Ike"
-        7 -> 7 to "Plunk"
-        else -> 1 to "Dao"
-    }
+    val (charItemId, charToken) = bomberCharCard(bomber)
     return listOf(
         UserInventoryEntry(itemId = charItemId, slot = EquipSlot.CHARACTER, param = 20, token = charToken, status = 192),
         UserInventoryEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param = 1, token = "Item/ItemBag", status = 255),
         UserInventoryEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param = 1, token = "Item/CharDeco", status = 255), // 蓝妹妹 (LuxuryMarid / Posh Evie) 进阶卡
     )
+}
+
+/**
+ * 角色 (bomber id) → 角色卡 (itemId, 模型令牌)。
+ *
+ * 全工程**唯一**一份映射: op 198 的默认穿戴 (本文件) 和 op 73 名片 (`handler/UserInfoReq.kt`) 都必须走这里
+ *
+ * 实证 (S→C op 198 抓包): bomber 0 → item 1 "Dao" (`cap/chan_s2c_op198_137B_0.bin`),
+ * bomber 5 → item 5 "Boz" (`cap/practice_s2c_op198_137B_0.bin`)。
+ * 蓝蓝 (4) 与蓝妹妹 (10) 走进阶卡 2082 (category 16 / skinId 10 / targetCharId 4)。
+ */
+fun bomberCharCard(bomber: Int): Pair<Int, String> = when (bomber) {
+    1 -> 2 to "Diz"
+    2 -> 3 to "Moss"
+    3 -> 4 to "Melvin"
+    4, 10 -> 2082 to "Marid"
+    5 -> 5 to "Boz"
+    6 -> 6 to "Ike"
+    7 -> 7 to "Plunk"
+    else -> 1 to "Dao"
 }
 
 fun UserInventory(

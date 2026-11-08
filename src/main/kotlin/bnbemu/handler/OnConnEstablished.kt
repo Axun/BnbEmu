@@ -8,7 +8,7 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.ChannelsGameState
 import bnbemu.packet.ChannelsState
 import bnbemu.packet.RoomList
-import bnbemu.packet.UserDynamicInfo
+import bnbemu.packet.UserDynamicInfoValue
 import bnbemu.packet.Unk423
 import bnbemu.packet.PermissionInfo
 import bnbemu.packet.ChangeStage
@@ -52,7 +52,7 @@ val OnConnEstablished = PKTHandler { c ->
         // EN 單埠拓撲: op 6 ReqConnectToSvr 回 3838 後, 客戶端新開連線並以 op 7 為首包
         // (enter-channel.pcap stream 1, uid=230)
         // 回應批次 (enter-channel.pcap 線序 seq=43~61): [48 PermissionInfo 空體, 13 ChannelsState,
-        //   14 ChannelsGameState, 97 ChangeStage] + [122 UserDynamicInfo (金幣同步), 87 RoomList, 423 週期推送]
+        //   14 ChannelsGameState, 97 ChangeStage] + [122 UserDynamicInfoValue (金幣同步), 87 RoomList, 423 週期推送]
         // 之後客戶端跟發 297 / 302 / 310 / 64 / 293 / 78 批次, 整套回應由 StageInitReq (op 78) 觸發
         // 批次後還有自動空包 81 (⚠️ 非進房, 見 JoinSessionReq.kt 註釋) 與 274/281/276;
         // 大廳期 S 週期推送 [413 UserInventoryInfo, 198, 200, 274 UserItemUpdate×2, 212 FxConfig, 210, 87, 65, 204, 66, 14, 20, 261 ShopVersion, 247, 423]
@@ -62,7 +62,7 @@ val OnConnEstablished = PKTHandler { c ->
             ChannelsState(),
             ChannelsGameState(),
             ChangeStage(),
-            UserDynamicInfo(),
+            UserDynamicInfoValue(),
             RoomList(),
             Unk423(),
         )

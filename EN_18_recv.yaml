@@ -7,7 +7,6 @@ OnConnEstablished: 7
 CrashInfo: 8
 EnterChannelStageReq: 9
 ChannelsStateReq: 15
-EstimateRTT: 20
 # ⚠️ 舊 TW/CN/JP 表把聊天放在 op 25, 真實 EN 客戶端發的是 op 18 (綁定見檔尾 ChatMsg)
 Unk_25: 25
 AdminNotifyMsg: 26

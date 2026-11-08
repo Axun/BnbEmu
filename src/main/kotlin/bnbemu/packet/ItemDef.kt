@@ -170,10 +170,66 @@ object ItemDef {
     }
 
     /**
-     * 默认下发物品定义目录：基础 882 条物品 + 蓝妹妹 (Posh Evie / LuxuryMarid, ID 10) 角色进阶卡定义
+     * 基准定义表 (882 条) —— 与 `cap/chan_s2c_op60_46885B_0.bin` 解码后逐字节一致。
+     * ⚠️ 这份是**皮蛋 (Dao) 变体**: 角色卡是 itemId 1 / name "Dao" / skinId 0,
+     *    所有 category=3 (表情/动作) 定义也是 name "Dao" / skinId 0。
+     *    真实服务器会按玩家当前角色重建整张表 (见 [itemsFor])。
      */
-    val DEFAULT_ITEMS: List<ItemDefEntry> by lazy {
-        val list = loadBaseItems().toMutableList()
+    private val BASE_ITEMS: List<ItemDefEntry> by lazy { loadBaseItems() }
+
+    /**
+     * 角色卡定义模板。
+     * 取自 `cap/practice_s2c_op60_46883B_0.bin` (宝宝会话) 的 itemId 5:
+     *   category 15 / name "Boz" / **skinId 5** / targetCharId 0 / param 0 / flags 1 / status 0
+     */
+    private fun charCardDef(bomber: Int): ItemDefEntry {
+        val (itemId, model) = bomberCharCard(bomber)
+        return ItemDefEntry(
+            itemId = itemId,
+            category = 15,
+            name = model,
+            skinId = bomber,
+            targetCharId = 0,
+            param = 0,
+            desc = "",
+            flags = 1,
+            status = 0,
+        )
+    }
+
+    /**
+     * 按角色生成 S→C op 60 的物品定义表。
+     *
+     * 逆向/抓包证据 (chan 皮蛋 46885B vs practice 宝宝 46883B, 同 882 条同长度):
+     *   - 角色卡: 皮蛋 = itemId **1** / name "Dao" / skinId **0**
+     *             宝宝 = itemId **5** / name "Boz" / skinId **5**
+     *   - 所有 category=3 (表情/动作, itemId 30000~37555):
+     *             皮蛋 = name "Dao" / skinId 0；宝宝 = name "Boz" / skinId 5
+     *   ⇒ **op 60 是按玩家当前角色重建的**, 角色模型名与 skinId 都在这里。
+     *     必要性待确认。发错也不会把当前选中角色改成别的
+     *
+     * 做法: 把基准表的皮蛋卡换成当前角色的卡, 并把所有 cat=3 定义的 name/skinId 换成当前角色。
+     */
+    fun itemsFor(bomber: Int): List<ItemDefEntry> {
+        val (charItemId, model) = bomberCharCard(bomber)
+        val hasOwnCard = charItemId != 1 && BASE_ITEMS.any { it.itemId == charItemId && it.category == 15 }
+
+        val list = ArrayList<ItemDefEntry>(BASE_ITEMS.size)
+        BASE_ITEMS.forEach { e ->
+            when {
+                // 基准表里的皮蛋卡
+                e.itemId == 1 -> when {
+                    charItemId == 1 -> list += e.copy(name = model, skinId = bomber)
+                    // 目标角色有独立定义 (如蓝妹妹 2082 进阶卡) 时, 只把皮蛋卡去掉
+                    hasOwnCard -> Unit
+                    else -> list += charCardDef(bomber)
+                }
+                // 表情/动作模型跟角色走: name = 角色模型目录, skinId = 角色 ID
+                e.category == 3 -> list += e.copy(name = model, skinId = bomber)
+                else -> list += e
+            }
+        }
+
         // 激活蓝妹妹 (Posh Evie / LuxuryMarid, ID 10) 角色进阶卡:
         // 对应 Item 2082: Category = 16 (0x10), skinId = 10, targetCharId = 4 (Marid)
         val idx2082 = list.indexOfFirst { it.itemId == 2082 }
@@ -184,29 +240,54 @@ object ItemDef {
                 targetCharId = 4,
             )
         }
-        list
+        return list
     }
 
-    /**
-     * 缓存的默认已加密数据块 (避免进频道时重复计算 46KB)
-     */
-    val CACHED_BLOB: ByteArray by lazy {
-        encode(DEFAULT_ITEMS)
-    }
+    /** 按角色缓存的已加密 op 60 数据块 (46KB, 每位角色只算一次) */
+    private val blobs = java.util.concurrent.ConcurrentHashMap<Int, ByteArray>()
+
+    fun blobFor(bomber: Int): ByteArray = blobs.computeIfAbsent(bomber) { encode(itemsFor(it)) }
+
+    /** 默认 (皮蛋) 定义表, 供不关心角色的调用方使用 */
+    val DEFAULT_ITEMS: List<ItemDefEntry> by lazy { itemsFor(0) }
+
+    /** 默认 (皮蛋) 的已加密数据块 */
+    val CACHED_BLOB: ByteArray by lazy { blobFor(0) }
 
     /**
-     * itemId → 定义 的查询表（按需构建一次）。
-     * 用途：把「背包里的物品」拼成 S→C op 198 的条目时需要拿 name 令牌（如 "Item/ShopDeco"）。
+     * 玩家可见的 op 60 定义表 (当前角色版本)。JoinSessionReq / StageInitReq 必须用这个。
      */
-    private val byId: Map<Int, ItemDefEntry> by lazy { DEFAULT_ITEMS.associateBy { it.itemId } }
+    fun itemsForPacket(bomber: Int): ByteArray = blobFor(bomber)
+
+    /**
+     * itemId → 定义 的查询表（服务端内部用: 背包条目取 name 令牌、装备槽分组等）。
+     * 以皮蛋基准表为准, 另外补齐 1..7 角色卡 (客户端那张表里同一时刻只存在一个角色卡,
+     * 但服务端要能解析任意角色卡 itemId)。
+     */
+    private val byId: Map<Int, ItemDefEntry> by lazy {
+        val m = HashMap<Int, ItemDefEntry>(DEFAULT_ITEMS.size + 8)
+        DEFAULT_ITEMS.forEach { m[it.itemId] = it }
+        for (b in 0..7) {
+            val def = charCardDef(b)
+            if (!m.containsKey(def.itemId) || m[def.itemId]!!.category != 15) m[def.itemId] = def
+        }
+        m
+    }
 
     fun find(itemId: Int): ItemDefEntry? = byId[itemId]
 }
 
 /**
  * 进频道批次回应: 物品唯一定义表 (Opcode 60, S→C)
+ *
+ * 先传玩家当前角色，按角色重建 (角色卡 itemId/skinId + 所有 cat=3
+ * 表情/动作定义的模型名)。传错不会更改当前选中的角色类型。
  */
-fun ItemDef(): PKT = ItemDef(null)
+fun ItemDef(bomber: Int = 0): PKT = PKT {
+    val blob = ItemDef.itemsForPacket(bomber)
+    Encode4(blob.size)
+    EncodeBuffer(blob)
+}
 
 fun ItemDef(items: List<ItemDefEntry>?) = PKT {
     val blob = if (items == null) ItemDef.CACHED_BLOB else ItemDef.encode(items)

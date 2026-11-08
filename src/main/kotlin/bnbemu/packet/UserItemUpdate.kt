@@ -9,8 +9,8 @@ import bnbemu.netty.PKT
 //   CA.exe 0x00503761 (CStage::OnPacket) -> 0x004FCCBF.
 //   處理類: TSingleton<CUserItemMan> (0x00993D58) 與 TSingleton<CUserInventoryMan> (0x00993E68).
 //   欄位結構:
-//     Encode1: slotType (0=槽位0, 1=槽位1)
-//     Encode4: itemId (道具 ID, 在 CUserItemMan::FindItem 中檢索)
+//     Encode1: slotType (0=玩家槽位 0, 1=玩家槽位 1)
+//     Encode4: itemId —— **角色卡 itemId** (1=Dao 皮蛋, 5=Boz 宝宝, …), 不是固定 1
 //     Encode4: quantity / count (數量)
 //     Encode4: expireDays / hours (有效期天數/小時: 0x004FCDA2 imul eax, 24)
 //     Encode1: flag1

@@ -40,7 +40,7 @@
 ## opcode（已补全进 EN_18_recv/send.yaml）
 - 可信命名（抓包时序验证）：C→S 2 AskFirstInfo、7 OnConnEstablished、15 ChannelsStateReq、
   64 UserSimpleInfoReq、81 JoinSessionReq；S→C 1 MultiServerInit、2 FirstInfoInit、7 ResConnectToSvr、
-  11 ChannelsExtraInfo、13 ChannelsState、14 ChannelsGameState、20 ResEstimateRTT、
+  11 ChannelsExtraInfo、13 ChannelsState、14 ChannelsGameState、20 UserDynamicInfo、
   81 JoinSessionResult、200 FxStockInit、210 DynamicMapInfo
 - 已实现绑定（原名 Unk_* 占位）：C→S 0 AskFirstSession（首连打开）、
   55 StringTableRevisionReq（登录后上报本地 3 份 SSD 版本号 [StringTable, QuestString, CurseFilter]，触发回频道列表）、
@@ -55,7 +55,7 @@
   f0ae35f3 等账号值暂用抓包常量 CAPTURE_USER_ID/SESSION_STRING）、
   12 ChannelsNotice（**公告与PPL广告信息**，已结构化可动态生成）、48 PermissionInfo（**玩家权限设定与功能开关**，空体或 E4(id)+16×E1(flag) 列表，CPermissionMan）、97 ChangeStage（**切换游戏阶段**，E2(11) 大厅 / E2(20) 广场，CMainSystem::SetStage，触发客户端自动发 op 78 StageInitReq）、
   7 ResConnectToSvr（op 6 ReqConnectToSvr 的回应，见下方关键观察）、
-  122 UserDynamicInfo（**用户动态数据同步**，如 Lucci 金币同步，详见 `packet/UserDynamicInfo.kt` ）、423（op 7 回应后的推送，原样重放）、87 RoomList（**房间列表**，已结构化可动态生成，见关键观察）、
+  122 UserDynamicInfoValue（**CUserDynamicInfo 单Lucci同步**）、423（op 7 回应后的推送，原样重放）、87 RoomList（**房间列表**，已结构化可动态生成，见关键观察）、
   310 UserMarketItemList（**个人交易市场物品列表**）/ 302 UserMarketMyItemList（**个人在市场寄售物品列表**）、254 UserMapInfo（**频道在线用户地图/占位同步**，CUserMap）、227 MyPageInfo（**个人资料摘要与商城版本**，CMyPageDialog）、72 SessionList（**频道在线用户列表**，已结构化可动态
   生成，见关键观察）、
   293(E1(0))/78 QuestConfigTable（任务配置表，E4(count)+条目列表，空为 E4(0)）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、

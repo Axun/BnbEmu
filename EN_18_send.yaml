@@ -16,9 +16,9 @@ ChannelsState: 13
 ChannelsGameState: 14
 EnterLobbyStage: 15
 EnterShopStage: 17
-ResEstimateRTT: 20
-# op 20 大廳推送版 (44B, 與 ResEstimateRTT 同 op 異構, 見 packet/Unk20.kt)
-Unk20: 20
+# op 20 = 本機玩家動態檔案快照 (CUserDynamicInfo::OnPacket 0x006E6109, 44B, count×43B 記錄),
+# 不是 RTT。EN 客戶端沒有任何以 op 20 發包的位置, 純 S→C。詳見 packet/UserDynamicInfo.kt
+UserDynamicInfo: 20
 Whisper: 27
 SystemMsg: 30
 MultiServerTail: 51
@@ -93,7 +93,8 @@ Unk78Result: 78
 Unk_86: 86
 RoomList: 87
 ChangeStage: 97
-UserDynamicInfo: 122
+# op 122 = CUserDynamicInfo 的單值同步 (CUserDynamicInfo::Set 0x006E4E23, key = 本機玩家槽 0/1)
+UserDynamicInfoValue: 122
 Unk204: 204
 FxConfig: 212
 MyPageInfo: 227

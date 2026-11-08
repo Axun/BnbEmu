@@ -4,7 +4,7 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ShopCatalog
-import bnbemu.packet.UserDynamicInfo
+import bnbemu.packet.UserDynamicInfoValue
 import bnbemu.packet.shop.BuyItemResult
 import bnbemu.server.UserItemEntry
 import bnbemu.server.lucci
@@ -57,5 +57,5 @@ val BuyItemReq = PKTHandler { c ->
     }
 
     // 商城界面余额走 CUserDynamicInfo (op 122)，购买后补发一次避免显示漂移
-    c send UserDynamicInfo(0, c.lucci)
+    c send UserDynamicInfoValue(0, c.lucci)
 }
