@@ -65,17 +65,10 @@
   （进频道握手推送，多为原样重放；其中 210 已改由 `src/main/resources/data/fxdynmapinfo.json` 实时生成，顺序与触发见 JoinSessionReq.kt）
 - 尚无 handler/packet（yaml 里 Unk_* 占位）：
   S→C 86（大厅期周期推送，⚠️ 非"进房后"）
-- **进练习房（op 75，2026-09-01 已实现，tst.pcap stream4 逆向）**：大厅界面点"练习"→ 客户端
-  在练习房界面点"开始"发出 **op 75**，body = `E2(0) E2(0) E1(0) E1(1) E1(5) E1(15) E4(66)`
-  （E1(5)=bomber，E4(66)=练习房地图 id，语义待钉死）。服务器连发整套房间设置回应（线序 seq=187~328）：
-  `[87 RoomList, 83 SessionSimpleInfo, 4(13B), 4(65B), 113, 100(78B), 108, 106×8,
-  每槽(114,104,105,103 交错, 槽7 无 103), 198, 423]`；
-  随后客户端自动跟发 297/302，再发 **op 92** 触发游戏开始 → S 回 `[111, 112 SelectMap(165B),
-  100(77B), 136(178B 棋盘块)]`（线序 seq=331~340）。
-- 大厅中参见 `docs/agents-notes-lobby.md`
-- 房间中参见 `docs/agents-notes-room.md`
-- 对局中参见 `docs/agents-notes-battle.md`
-- 商城参见 `docs/agents-notes-shop.md`
+- 大厅逻辑参见 `docs/agents-notes-lobby.md`
+- 房间逻辑参见 `docs/agents-notes-room.md`
+- 对局逻辑参见 `docs/agents-notes-battle.md`
+- 商城逻辑参见 `docs/agents-notes-shop.md`
 - 实现见 `handler/CreatePracticeSessionReq.kt`（op 75，⚠️ 原误绑 op 86）、`handler/Unk_92.kt`（游戏开始）、
   `handler/room/BomberActionAckReq.kt`（C→S op 172 角色动作切换确认空包）、`packet/Practice*.kt` / `packet/room/MapEventSync.kt`；
   工具 `tools/extract_op75.py`（提取回放+blob）、`tools/gen_practice_kotlin.py`（生成 blob 常量）；
@@ -92,10 +85,7 @@
 - 块头规律（op1/op2/op11/op12/op13 五块吻合）：`[0x18][(块长-5)&0xFF][u32 0]`（参见ssdEncode函数）
 - **op11 = 频道列表、op13 = 各频道开关/状态、op12 = 公告与PPL广告信息，均已结构化**：频道表 `EN_CHANNELS` 定义在
   `packet/ChannelsExtraInfo.kt`（`ChannelEntry`，op13 用其 `state`/`enabled` 栏，
-  生成逻辑在 `ChannelsState.kt`；条目逐字节结构、续读标记等细节见两文件顶部注释；
-  重编码与抓包逐字节一致，replay_test login 用例断言）。5 频道
-  PopTag-Forever / Ranked / Baby-Channel / Town / SquareCompat，Town/SquareCompat 为
-  大地图频道、并非被关闭；改频道清单两包同步生效
+  生成逻辑在 `ChannelsState.kt`；
 - op1 = multisvr.ssd 缓存体（解码布局见 MultiServerInit.kt 注释）；op51 = filterstr.ssd；
   op2 = 字串表；**op12 = ChannelsNotice 公告与广告块 已结构化在 `packet/ChannelsNotice.kt`
 - 已改写为 127.0.0.1 的 IP 位置：`packet/MultiServerInit.kt` EN_MULTISVR_BLOB（op1）、
@@ -125,7 +115,6 @@
    210 DynamicMapInfo, 87 RoomList, 65 50KB, 204, 66, 14(9B 变体), 20, 261, 247, 423, 81 名册, 72
    （分三波下发：客户端**等推送才继续发** 274/274/281 → 等 → 276，缺推送客户端卡"正在连接"对话框）；
    之后大厅期 S 周期推 op 81 名册 / 72 / 122 UserDynamicInfo / 87 / 86（86 尚未实现）
-- 版本线索：banner 内两个 Encode2(18)（`00 12 00 12`），若为版本字段则 EN 客户端可能是 **v18**（未验证；EN_VER 现为 0 占位）
 
 ## 测试资产（改协议层后必跑）
 - `tools/replay_test.py` + `replay_first_cs.bin` / `replay_login_cs.bin` / `replay_enter_cs.bin` /
