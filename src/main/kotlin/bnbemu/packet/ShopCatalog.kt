@@ -2,6 +2,7 @@ package bnbemu.packet
 
 import bnbemu.ACP
 import bnbemu.netty.PKT
+import bnbemu.netty.ssdEncode
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -208,12 +209,8 @@ object ShopCatalog {
         return ba
     }
 
-    /**
-     * 组装条目列表并加密为 SSD 格式 (每 DWORD LE 读取 ^ 0x96CA5395 按 BE 写回)
-     */
-    fun encode(items: List<ShopItemEntry>): ByteArray {
-        return ssdEncode(buildBlock(items))
-    }
+    /** 组装条目列表为明文块, 再交给统一的 [ssdEncode] 下发 (尾部余数由其负责)。 */
+    fun encode(items: List<ShopItemEntry>): ByteArray = ssdEncode(buildBlock(items))
 
     /**
      * 默认下发目录：基础 573 条商城道具 + 蓝妹妹 (Posh Evie / LuxuryMarid) 角色使用权卡

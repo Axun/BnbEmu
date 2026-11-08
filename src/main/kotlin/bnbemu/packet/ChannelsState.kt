@@ -1,6 +1,7 @@
 package bnbemu.packet
 
 import bnbemu.netty.PKT
+import bnbemu.netty.ssdEncode
 import java.io.ByteArrayOutputStream
 
 
@@ -12,7 +13,7 @@ fun ChannelsState() = PKT {
     // 重編碼與抓包逐位元組一致 (replay_test login 用例斷言 op 13); 結構:
     //   整包 = Encode4(塊長) + SSD 資料塊 (op13 無 Encode1Bool 開頭)
     //   塊明文 = [0x18][(塊長-5)&0xFF][u32 0][u16 頻道數 LE] + N × 條目, 經 ssdEncode 變換下發
-    //            (塊頭規律、SSD 變換見 ChannelsExtraInfo.kt 頂部註釋)
+    //            (塊頭規律見 ChannelsExtraInfo.kt 頂部註釋; SSD 變換見 netty/PKT.kt 的 ssdEncode)
 //   條目 = [u16 LE state][u8 enabled][u8 0] + 2B 續讀標記
     val blob = ssdEncode(channelsStateBlock(EN_CHANNELS))
     Encode4(blob.size)

@@ -3,12 +3,13 @@ package bnbemu.packet
 import bnbemu.ACP
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
+import bnbemu.netty.ssdEncode
 
 // 房間列表 — op 87 (真・房間列表, 2026-08-30 由房名解密確認; op 72 SessionList 是頻道在線用戶列表)
 // 週期推送 (登入期/大廳期都有), 34 個抓包實例皆為單房: E2(1) 恆 1, 多房間時的形態未知
 // (可能 count>1 + 多條目, 也可能每房一包 —— 待 live 抓包驗證)
 // 條目: E4(f1) E4(f2) E4(f3) E4(f4) E4(名長) 房名(NUL/殘渣補齊到 dword) E4(t1) E4(t2) E4(t3) E1(0)
-// 房名加密與 op 72 令牌同款: 明文 4B 一塊 LE 讀 ^ 0x96CA5395 按 BE 寫回
+// 房名加密 = ssdEncode (與 op 72 令牌同款), 但房名須先零補齊到 dword 對齊再編碼
 // f1~f4/t1~t3 與 房間編號/上限/目前人數 的對應尚未釘死 (rd 實例值見樣本;
 // 下一步在真實伺服器 rd #12 1/1 界面抓包按值匹配)
 // server = C???::MakeRoomListPacket (原始名稱未知)
@@ -44,24 +45,11 @@ class RoomEntry(
     }
 
     companion object {
-        // 明文 4B 一塊 LE 讀 ^ 0x96CA5395 按 BE 寫回 (解碼方向之逆); 零補齊到 dword
+        // 房名 + NUL/緩存殘渣後零補齊到 4B 倍數: 客戶端按 dword 讀房名, 這個對齊不能省。
+        // 補齊後長度必為 4B 倍數, ssdEncode 只走 dword 分支, 與原本手寫迴圈逐位元組一致。
         private fun encryptName(nameBytes: ByteArray, namePad: ByteArray): ByteArray {
             val raw = nameBytes + namePad
-            val len = (raw.size + 3) / 4 * 4
-            val src = raw.copyOf(len)
-            val out = ByteArray(len)
-            for (i in 0 until len step 4) {
-                val v = (src[i].toInt() and 0xFF) or
-                        ((src[i + 1].toInt() and 0xFF) shl 8) or
-                        ((src[i + 2].toInt() and 0xFF) shl 16) or
-                        ((src[i + 3].toInt() and 0xFF) shl 24)
-                val e = v xor 0x96CA5395.toInt()
-                out[i] = (e ushr 24).toByte()
-                out[i + 1] = (e ushr 16).toByte()
-                out[i + 2] = (e ushr 8).toByte()
-                out[i + 3] = e.toByte()
-            }
-            return out
+            return ssdEncode(raw.copyOf((raw.size + 3) / 4 * 4))
         }
     }
 }

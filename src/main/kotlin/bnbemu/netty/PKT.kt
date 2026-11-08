@@ -261,3 +261,42 @@ private object BufferManipulator {
 
 fun String.toBA() =
     replace("|", "").replace("\\s+".toRegex(), "").chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+
+// ============================================================================
+// 0x75DAF0 SSD 资料块变换 (ByteArray 版本, 与 SendPacketBase.EncodeCipherStr 的字串版本同源)
+// ============================================================================
+// 客户端 sub_75DAF0 (reference/CA.exe.c:744227) 对整块从 offset 0 一次性反混淆,
+// 近 30 处 sub_78F1E0 调用点共用, 不分 opcode。这里是它的逆变换:
+//   4B 一组: LE 读明文 ^0x96CA5395 按 BE 写回; 余 2B: LE ^0xA569 按 BE 写; 余 1B: ^0x5A
+// 所有 builder (op11/op12/op13/op60/op65/op210 的块, op72/op81 的名令牌) 只产出「纯明文」,
+// 尾部不足 4B 的余数一律由本函式统一编码, 呼叫方不需也不得预写线上字节;
+// 线上的 a5 69 5a / a5 69 / 5a 都是明文 0 经尾部编码的结果。
+// 例外: op1/op2/op51 是硬编码回放块, 不走这里; tools/extract_first_push.py 仍是旧约定。
+internal fun ssdEncode(plain: ByteArray): ByteArray {
+    val out = ByteArray(plain.size)
+    var i = 0
+    while (i + 4 <= plain.size) {
+        val le = (plain[i].toInt() and 0xFF) or
+                ((plain[i + 1].toInt() and 0xFF) shl 8) or
+                ((plain[i + 2].toInt() and 0xFF) shl 16) or
+                ((plain[i + 3].toInt() and 0xFF) shl 24)
+        val enc = le xor 0x96CA5395.toInt()
+        out[i] = (enc ushr 24).toByte()
+        out[i + 1] = (enc ushr 16).toByte()
+        out[i + 2] = (enc ushr 8).toByte()
+        out[i + 3] = enc.toByte()
+        i += 4
+    }
+    // 尾部余数: 余 2B/3B 先 Encode2 头 2B, 再 Encode1 最后 1B; 余 1B 只 Encode1
+    if (plain.size - i >= 2) {
+        val w = (plain[i].toInt() and 0xFF) or ((plain[i + 1].toInt() and 0xFF) shl 8)
+        val enc = w xor 0xA569
+        out[i] = (enc ushr 8).toByte()
+        out[i + 1] = enc.toByte()
+        i += 2
+    }
+    if (i < plain.size) {
+        out[i] = ((plain[i].toInt() and 0xFF) xor 0x5A).toByte()
+    }
+    return out
+}

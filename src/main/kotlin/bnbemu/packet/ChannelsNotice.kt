@@ -2,6 +2,7 @@ package bnbemu.packet
 
 import bnbemu.ACP
 import bnbemu.netty.PKT
+import bnbemu.netty.ssdEncode
 import java.io.ByteArrayOutputStream
 
 /**

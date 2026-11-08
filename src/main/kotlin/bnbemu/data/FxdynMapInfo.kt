@@ -1,5 +1,6 @@
 package bnbemu.data
 
+import bnbemu.netty.ssdEncode
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlMap
 import com.charleskorn.kaml.YamlScalar
@@ -21,10 +22,10 @@ import java.nio.charset.StandardCharsets
 // JSON 是 YAML 1.2 子集，项目已有的 kaml 可直接解析，无需新增依赖。
 // Python 侧等价实现与字节验证：tools/fxdynmapinfo_codec.py、tools/build_fxdynmapinfo.py。
 //
-// 包体编码（与 netty/PKT.kt 的 Encode2/Encode4、0x75daf0 的 EncodeBuffer 一致）：
+// 包体编码（与 netty/PKT.kt 的 Encode2/Encode4 一致, SSD 块统一复用 netty/PKT.kt 的 ssdEncode）：
 //   Encode2(210)   BE16 写入 210 xor 0xA569
 //   Encode4(len)   BE32 写入 len xor 0x96CA5395
-//   SSD 块         整块按 4B 分组 LE 读 → XOR 0x96CA5395 → BE 写；余 2B XOR 0xA569；余 1B XOR 0x5A
+//   SSD 块         ssdEncode: 4B 分组 LE 读 → XOR 0x96CA5395 → BE 写；余 2B XOR 0xA569；余 1B XOR 0x5A
 // SSD 块长 24117 B (4×6029+1)，最后一字节正是 1B 余数分支：明文末字节 0x00 编码成 0x5A。
 // 网络块 compress=0（无 zlib、无 ssi1 头、无 Adler 校验和）；客户端收包后自行压缩写盘成 .ssd。
 // ============================================================================
@@ -34,7 +35,6 @@ private const val OPCODE = 210
 private const val BLOCK_MARKER = 0x18
 private const val KEY32 = 0x96CA5395.toInt()
 private const val KEY16 = 0xA569
-private const val KEY8 = 0x5A
 
 /** 与 JSON 中每条记录的 15 个字段一一对应；hex 字段保留字符串形态，序列化时再解码。 */
 data class FxdynRecord(
@@ -195,7 +195,7 @@ object FxdynMapInfo {
     /** 完整包：Encode2(opcode) + Encode4(blockLen) + EncodeBuffer(SSD 块)。 */
     fun buildPacket(plain: ByteArray, opcode: Int = OPCODE): ByteArray {
         val block = buildBlock(plain)
-        val enc = encodeBuffer(block)
+        val enc = ssdEncode(block)
         val out = ByteArray(6 + enc.size)
         val op = opcode xor KEY16
         out[0] = (op ushr 8 and 0xFF).toByte()
@@ -209,33 +209,6 @@ object FxdynMapInfo {
         return out
     }
 
-    /** 0x75daf0 / PKT.kt EncodeBuffer：4B 分组、余 2B、余 1B 三档异或并转大端。 */
-    fun encodeBuffer(raw: ByteArray): ByteArray {
-        val out = ByteArray(raw.size)
-        val full = raw.size / 4 * 4
-        var i = 0
-        while (i < full) {
-            val le = (raw[i].toInt() and 0xFF) or
-                    ((raw[i + 1].toInt() and 0xFF) shl 8) or
-                    ((raw[i + 2].toInt() and 0xFF) shl 16) or
-                    ((raw[i + 3].toInt() and 0xFF) shl 24)
-            val enc = le xor KEY32
-            out[i] = (enc ushr 24 and 0xFF).toByte()
-            out[i + 1] = (enc ushr 16 and 0xFF).toByte()
-            out[i + 2] = (enc ushr 8 and 0xFF).toByte()
-            out[i + 3] = (enc and 0xFF).toByte()
-            i += 4
-        }
-        if (raw.size - i >= 2) {
-            val le = (raw[i].toInt() and 0xFF) or ((raw[i + 1].toInt() and 0xFF) shl 8)
-            val enc = le xor KEY16
-            out[i] = (enc ushr 8 and 0xFF).toByte()
-            out[i + 1] = (enc and 0xFF).toByte()
-            i += 2
-        }
-        if (i < raw.size) out[i] = ((raw[i].toInt() and 0xFF) xor KEY8).toByte()
-        return out
-    }
 }
 
 private class BinWriter {

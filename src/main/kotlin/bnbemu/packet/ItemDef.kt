@@ -2,6 +2,7 @@ package bnbemu.packet
 
 import bnbemu.ACP
 import bnbemu.netty.PKT
+import bnbemu.netty.ssdEncode
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
@@ -134,40 +135,8 @@ object ItemDef {
         return ba
     }
 
-    /**
-     * 组装条目列表并加密为 SSD 格式
-     * (每 DWORD LE 读取 ^ 0x96CA5395 按 BE 写回, 尾部不足 4B 按 LE 读 ^ 0xA569 按 BE 写回 / ^ 0x5A)
-     */
-    fun encode(items: List<ItemDefEntry>): ByteArray {
-        val plain = buildBlock(items)
-        val out = ByteArray(plain.size)
-        var i = 0
-        while (i + 4 <= plain.size) {
-            val le = (plain[i].toInt() and 0xFF) or
-                    ((plain[i + 1].toInt() and 0xFF) shl 8) or
-                    ((plain[i + 2].toInt() and 0xFF) shl 16) or
-                    ((plain[i + 3].toInt() and 0xFF) shl 24)
-            val enc = le xor 0x96CA5395.toInt()
-            out[i] = (enc ushr 24).toByte()
-            out[i + 1] = (enc ushr 16).toByte()
-            out[i + 2] = (enc ushr 8).toByte()
-            out[i + 3] = enc.toByte()
-            i += 4
-        }
-        var rem = plain.size - i
-        if (rem >= 2) {
-            val w = (plain[i].toInt() and 0xFF) or ((plain[i + 1].toInt() and 0xFF) shl 8)
-            val encW = (w xor 0xA569) and 0xFFFF
-            out[i] = (encW ushr 8).toByte()
-            out[i + 1] = encW.toByte()
-            i += 2
-            rem -= 2
-        }
-        if (rem == 1) {
-            out[i] = (plain[i].toInt() xor 0x5A).toByte()
-        }
-        return out
-    }
+    /** 组装条目列表为明文块, 再交给统一的 [ssdEncode] 下发 (尾部余数由其负责)。 */
+    fun encode(items: List<ItemDefEntry>): ByteArray = ssdEncode(buildBlock(items))
 
     /**
      * 基准定义表 (882 条) —— 与 `cap/chan_s2c_op60_46885B_0.bin` 解码后逐字节一致。

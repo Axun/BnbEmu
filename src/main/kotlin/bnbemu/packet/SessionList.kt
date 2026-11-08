@@ -3,6 +3,7 @@ package bnbemu.packet
 import bnbemu.ACP
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
+import bnbemu.netty.ssdEncode
 
 // 频道在线用户列表 — op 72 (enter-channel.pcap 线序 seq=73)
 // 条目 = E2(len)+角色名令牌(encodeName) + 16 个固定栏位; JoinSessionResult 以同一令牌指名进房玩家
@@ -12,39 +13,10 @@ fun SessionList(entries: List<SessionEntry> = EN_SAMPLE_ENTRIES) = PKT {
     entries.forEach { it.Encode(this) }
 }
 
-// 角色名令牌编码: 4B 一块 LE 读 ^0x96CA5395 按 BE 写; 尾部 2B LE 读 ^0xA569 按 BE 写, 1B ^0x5A;
+// 角色名令牌 = 0x75DAF0 变换后的名字字节, 与 SSD 资料块同源, 统一走 [ssdEncode]。
 // 3B 尾 = 2B 尾 + 1B 尾 (2026-08-30 由 kcworm1 7B 名对出, 与 4/5/6B 名样本回编码逐字节一致)
-// (op 81 JoinSessionResult 的名冊令牌同款, internal 供共用)
-internal fun encodeName(name: String): ByteArray {
-    val src = name.toByteArray(ACP)
-    val dst = ByteArray(src.size)
-    var i = 0
-    while (i + 4 <= src.size) {
-        val le = (src[i].toInt() and 0xFF) or
-                ((src[i + 1].toInt() and 0xFF) shl 8) or
-                ((src[i + 2].toInt() and 0xFF) shl 16) or
-                ((src[i + 3].toInt() and 0xFF) shl 24)
-        val enc = le xor 0x96CA5395.toInt()
-        dst[i] = (enc ushr 24).toByte()
-        dst[i + 1] = (enc ushr 16).toByte()
-        dst[i + 2] = (enc ushr 8).toByte()
-        dst[i + 3] = enc.toByte()
-        i += 4
-    }
-    while (i < src.size) {
-        if (src.size - i >= 2) {
-            val le = (src[i].toInt() and 0xFF) or ((src[i + 1].toInt() and 0xFF) shl 8)
-            val enc = le xor 0xA569
-            dst[i] = (enc ushr 8).toByte()
-            dst[i + 1] = enc.toByte()
-            i += 2
-        } else {
-            dst[i] = (src[i].toInt() xor 0x5A).toByte()
-            i += 1
-        }
-    }
-    return dst
-}
+// (op 81 JoinSessionResult 的名冊令牌同款, internal 供共用; 逆变换见下方 [decodeName])
+internal fun encodeName(name: String): ByteArray = ssdEncode(name.toByteArray(ACP))
 
 /**
  * [encodeName] 的逆變換：4B 一塊 BE 讀 ^0x96CA5395 按 LE 寫回, 尾 2B BE 讀 ^0xA569 按 LE 寫回, 尾 1B ^0x5A。

@@ -2,6 +2,7 @@ package bnbemu.packet
 
 import bnbemu.ACP
 import bnbemu.netty.PKT
+import bnbemu.netty.ssdEncode
 import java.io.ByteArrayOutputStream
 
 // server = CCenterProcess::MakeChannelsExtraInfoPacket
@@ -97,40 +98,6 @@ private fun channelsExtraBlock(entries: List<ChannelEntry>): ByteArray {
     val ba = out.toByteArray()
     ba[1] = ((ba.size - 5) and 0xFF).toByte()
     return ba
-}
-
-// SSD 資料塊變換 = 客戶端 sub_75DAF0 (reference/CA.exe.c:744227) 的逆變換, 全塊一次性套用:
-//   4B 一組: LE 讀明文 ^0x96CA5395 按 BE 寫回; 餘 2B: LE ^0xA569 按 BE 寫; 餘 1B: ^0x5A
-// 所有 builder 只產出「純明文」塊, 尾部不足 4B 的餘數一律由本函式統一編碼, 呼叫方不需也不得預寫線上字節。
-// 線上的 a5 69 5a / a5 69 / 5a 都是明文 0 經尾部編碼的結果 (op11/op13/op12 三塊已逐位元組驗過)。
-// 例外: op1/op2/op51 是硬編碼回放塊, 不走這裡; tools/extract_first_push.py 仍是尾部原樣的舊約定。
-internal fun ssdEncode(plain: ByteArray): ByteArray {
-    val out = ByteArray(plain.size)
-    var i = 0
-    while (i + 4 <= plain.size) {
-        val le = (plain[i].toInt() and 0xFF) or
-                ((plain[i + 1].toInt() and 0xFF) shl 8) or
-                ((plain[i + 2].toInt() and 0xFF) shl 16) or
-                ((plain[i + 3].toInt() and 0xFF) shl 24)
-        val enc = le xor 0x96CA5395.toInt()
-        out[i] = (enc ushr 24).toByte()
-        out[i + 1] = (enc ushr 16).toByte()
-        out[i + 2] = (enc ushr 8).toByte()
-        out[i + 3] = enc.toByte()
-        i += 4
-    }
-    // 尾部餘數: 餘 2B/3B 先 Encode2 頭 2B, 再 Encode1 最後 1B; 餘 1B 只 Encode1
-    if (plain.size - i >= 2) {
-        val w = (plain[i].toInt() and 0xFF) or ((plain[i + 1].toInt() and 0xFF) shl 8)
-        val enc = w xor 0xA569
-        out[i] = (enc ushr 8).toByte()
-        out[i + 1] = enc.toByte()
-        i += 2
-    }
-    if (i < plain.size) {
-        out[i] = ((plain[i].toInt() and 0xFF) xor 0x5A).toByte()
-    }
-    return out
 }
 
 // ---- 塊拼裝小工具 (塊內欄位皆為明文, 勿用會 XOR 的 Encode1/2/4 DSL; op13 共用) ----

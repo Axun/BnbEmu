@@ -15,7 +15,7 @@ import bnbemu.netty.PKT
 //
 // 包体 = Encode2(210) [框架写入] + Encode4(24117) + EncodeBuffer(SSD 块)；
 //   SSD 块未压缩: [0x18][u24 LE 24112][00][compress=0] + 24111 B 记录表, 共 24117 B。
-//   EncodeBuffer 对尾部 1 B 余数做 XOR 0x5A，故线上末字节为 0x5A（明文末字节 0x00），
+//   ssdEncode (netty/PKT.kt) 对尾部 1 B 余数做 XOR 0x5A，故线上末字节为 0x5A（明文末字节 0x00），
 //   并非额外的 Encode1(0) 字段。客户端收到后自行加 ssi1 头、Adler-32 变体校验和并 zlib 压缩写盘。
 //   基准: cap/chan_s2c_op210_24123B_0.bin / decoded_dump.txt:152（Kotlin 输出已逐字节对齐）。
 //
