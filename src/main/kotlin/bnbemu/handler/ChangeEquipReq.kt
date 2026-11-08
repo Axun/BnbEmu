@@ -4,6 +4,9 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
+import bnbemu.packet.EQUIP_SLOTS_PER_GROUP
+import bnbemu.packet.ItemDef
+import bnbemu.packet.equipGroupOfCategory
 import bnbemu.server.UserItemEntry
 import bnbemu.server.EquipSlot
 
@@ -30,6 +33,13 @@ import bnbemu.server.EquipSlot
  * - equipSlot = 0xFF 的含义: 该物品只存在于背包向量 `[inv+8]`, 还没有装备槽
  *   (sub_659004 对背包尾部分支取 `sub_44862D(item+120)`, 新入包物品该字段未初始化 → 0xFF)。
  *   所以 0xFF 不能当装备槽, 应视为「背包内容变化」。
+ *
+ * ⚠️ 非 0xFF 的 equipSlot 是**复合槽位 = 24 × 装备大类 + 子槽位**:
+ *   大类由物品分类推导 (`sub_67884E`: category 10 背景/旗帜/边框 → 9, 16 进阶卡 → 6,
+ *   12/14 特效/气泡 → 10), 槽项 +116 (即物品 +84) 存的就是这个复合值,
+ *   `sub_659004` 553095 行原样写进 E1。实证: 蓝妹妹 2082 上报 `0x94 = 148 = 6×24+4`。
+ *   因此装扮背景 (category 10 → 大类 9) 的槽位是 216~239, **不是** 0xFF；
+ *   旧实现用 `MAX_EQUIP_SLOT = 200` 卡它, 会把背景误判成背包物品 (背景回大厅被"自动脱掉"的根因之一)。
  *
  * 日志样本:
  *   1) `59 5A A5 68 CE 96 CA 5B B7 5B 5A` (11B, action=3):
@@ -60,8 +70,38 @@ const val BAG_SLOT = EquipSlot.BAG
 /** 一条装备变更记录的线上长度: E1(slot) + E4(itemId) */
 private const val EQUIP_ITEM_LEN = 5
 
-/** 合法装备槽上限 (客户端 CUserInventory 的装备区, 实测 0..0x94 都有使用) */
-private const val MAX_EQUIP_SLOT = 200
+/**
+ * 唯一不是装备槽的值就是 0xFF (背包伪槽位)。
+ *
+ * 其余 0..0xFE 全部按复合槽位处理: 复合槽位 = 24 × 大类 + 子槽位, 大类 1..10
+ * ⇒ 24..239 是实装区 (type 10 的 240..255 受 E1 截断, 属异常值), 没有「上限 200」这回事。
+ *
+ * ⚠️ 历史坑: 旧常量 `MAX_EQUIP_SLOT = 200` 把「> 200 一律当背包」写死, 于是
+ *   装扮背景/旗帜/边框 (category 10 → 大类 9 → 216~239) 一上报就被塞进 `user.items`,
+ *   永远进不了 `user.equips`, 也永远不会出现在 op 198 的装备清单里 →
+ *   回大厅时背景被客户端清空重建后「自动取消装备」。
+ */
+private const val NON_EQUIP_SLOT = EquipSlot.BAG
+
+/** 装备大类名 (仅用于日志可读性) */
+private val EQUIP_GROUP_NAMES = mapOf(
+    4 to "情侣/戒指", 5 to "19类", 6 to "进阶卡", 7 to "卡牌类",
+    8 to "角色卡", 9 to "装扮/背景", 10 to "特效/气泡",
+)
+
+/** 把复合槽位翻译成日志可读文本, 例: `0xD9(217) → 大类9(装扮/背景) 子槽 1` */
+private fun describeSlot(slot: Int): String {
+    val group = slot / EQUIP_SLOTS_PER_GROUP
+    val sub = slot % EQUIP_SLOTS_PER_GROUP
+    val name = EQUIP_GROUP_NAMES[group]?.let { "($it)" } ?: ""
+    return "0x${slot.toString(16).uppercase()}($slot) → 大类$group$name 子槽$sub"
+}
+
+/** 按 itemId 查 大类, 用于校验上报槽位与物品分类是否自洽 */
+private fun groupOfItem(itemId: Int): Int {
+    val cat = ItemDef.find(itemId)?.category ?: return -1
+    return equipGroupOfCategory(cat)
+}
 
 val ChangeEquipReq = PKTHandler { c ->
     val total = readableBytes()
@@ -91,20 +131,71 @@ val ChangeEquipReq = PKTHandler { c ->
 
     val user = c.users.firstOrNull() ?: return@PKTHandler
     var bagChanged = false
+    var equipChanged = false
+
     for (it in items) {
-        if (it.equipSlot == BAG_SLOT || it.equipSlot > MAX_EQUIP_SLOT) {
-            // 背包内容变化: 把新物品记进服务端背包, 下一次进频道用 op 320 补发
-            if (it.itemId != 0 && user.items.none { e -> e.itemId == it.itemId }) {
+        if (it.equipSlot == NON_EQUIP_SLOT) {
+            // 背包内容变化: 把新物品记进服务端背包, 下一次进频道用 op 198 补发
+            if (it.itemId == 0) {
+                println("[ChangeEquipReq]   slot=0xFF item=0 → 忽略 (背包空记录)")
+                continue
+            }
+            if (user.items.any { e -> e.itemId == it.itemId }) {
+                println("[ChangeEquipReq]   slot=0xFF item=${it.itemId} → 背包 (已存在, 跳过)")
+            } else {
                 user.items += UserItemEntry(itemId = it.itemId)
                 bagChanged = true
+                println("[ChangeEquipReq]   slot=0xFF item=${it.itemId} → 背包 (新入包)")
             }
+        } else if (it.itemId == 0) {
+            // 卸下: 装备槽清空后必须把物品退回背包, 否则下一次 op 198 清空重建时它会彻底消失
+            val removed = user.equips.remove(it.equipSlot)
+            if (removed != null && removed != 0) {
+                if (user.items.none { e -> e.itemId == removed }) {
+                    user.items += UserItemEntry(itemId = removed)
+                    bagChanged = true
+                }
+                println(
+                    "[ChangeEquipReq]   slot=${describeSlot(it.equipSlot)} → 卸下 item=$removed " +
+                        "(退回背包)"
+                )
+            } else {
+                println("[ChangeEquipReq]   slot=${describeSlot(it.equipSlot)} item=0 → 空槽卸下, 忽略")
+            }
+            equipChanged = true
         } else {
-            // 装备槽变化: itemId == 0 表示卸下
-            if (it.itemId == 0) user.equips.remove(it.equipSlot) else user.equips[it.equipSlot] = it.itemId
+            // 装备槽变化: 记进 user.equips, 下一次 op 198 会按真实槽位重新下发
+            user.equips[it.equipSlot] = it.itemId
+            // 穿上后从背包列表里摘掉, op 198 的「背包条目」与「装备条目」不能同时有它
+            val wasInBag = user.items.removeIf { e -> e.itemId == it.itemId }
+            if (wasInBag) bagChanged = true
+            equipChanged = true
+            val wantGroup = it.equipSlot / EQUIP_SLOTS_PER_GROUP
+            val gotGroup = groupOfItem(it.itemId)
+            val mismatch = when {
+                gotGroup == -1 ->
+                    "  ⚠️ op 60 无该物品定义 → 客户端 sub_6757A6 查不到会整条丢弃"
+                gotGroup in 1..15 && gotGroup != wantGroup ->
+                    "  ⚠️ 大类不符(item category→$gotGroup, 槽位→$wantGroup)"
+                else -> ""
+            }
+            println(
+                "[ChangeEquipReq]   slot=${describeSlot(it.equipSlot)} → 装备 item=${it.itemId}" +
+                    " (${ItemDef.find(it.itemId)?.name ?: "无定义"})" +
+                    (if (wasInBag) " [从背包移到装备]" else "") + mismatch
+            )
         }
     }
+
     if (bagChanged) {
-        println("[ChangeEquipReq] 服务端背包已记录: ${user.items.map { it.itemId }}")
+        println("[ChangeEquipReq] 服务端背包: ${user.items.map { it.itemId }}")
+    }
+    if (equipChanged) {
+        println(
+            "[ChangeEquipReq] 服务端装备槽: " +
+                (user.equips.entries.joinToString { (s, id) -> "0x${s.toString(16)}=$id" }
+                    .ifEmpty { "(空)" })
+        )
     }
 }
 

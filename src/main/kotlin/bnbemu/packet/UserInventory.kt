@@ -74,12 +74,33 @@ class UserInventoryEntry(
     }
 }
 
-// 进频道大厅默认生效/穿戴道具列表 (包含蓝妹妹进阶卡 itemId 2083)
-val DEFAULT_USER_INVENTORY_ITEMS = listOf(
-    UserInventoryEntry(itemId = 1, slot = EquipSlot.CHARACTER, param = 20, token = "Dao", status = 192),
-    UserInventoryEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param = 1, token = "Item/ItemBag", status = 255),
-    UserInventoryEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param = 1, token = "Item/CharDeco", status = 255), // 蓝妹妹 (LuxuryMarid / Posh Evie) 进阶卡
-)
+// 进频道大厅默认生效/穿戴道具列表 (包含蓝妹妹进阶卡 itemId 2082)
+val DEFAULT_USER_INVENTORY_ITEMS = defaultUserInventoryItems(0)
+
+/**
+ * 进频道时下发的默认穿戴三件套: 角色卡 + 道具栏 + 进阶卡。
+ *
+ * 角色卡跟随玩家当前选中的角色 ([bomber]): 否则大厅换角色后一进频道就被 op 198
+ * 重建回皮蛋, `SendUserInfo` 的名片也跟着错。
+ */
+fun defaultUserInventoryItems(bomber: Int = 0): List<UserInventoryEntry> {
+    val (charItemId, charToken) = when (bomber) {
+        0 -> 1 to "Dao"
+        1 -> 2 to "Diz"
+        2 -> 3 to "Moss"
+        3 -> 4 to "Melvin"
+        4, 10 -> 2082 to "Marid"
+        5 -> 5 to "Boz"
+        6 -> 6 to "Ike"
+        7 -> 7 to "Plunk"
+        else -> 1 to "Dao"
+    }
+    return listOf(
+        UserInventoryEntry(itemId = charItemId, slot = EquipSlot.CHARACTER, param = 20, token = charToken, status = 192),
+        UserInventoryEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param = 1, token = "Item/ItemBag", status = 255),
+        UserInventoryEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param = 1, token = "Item/CharDeco", status = 255), // 蓝妹妹 (LuxuryMarid / Posh Evie) 进阶卡
+    )
+}
 
 fun UserInventory(
     inventories: List<List<UserInventoryEntry>> = listOf(DEFAULT_USER_INVENTORY_ITEMS, DEFAULT_USER_INVENTORY_ITEMS)
@@ -112,15 +133,113 @@ const val BAG_ONLY_SLOT = EquipSlot.BAG
  *   商城里买完客户端自己塞进背包 → 一进频道被 op 198 清空 → 物品丢失。
  *   （S→C op 320 是商城专用的「单件商品入包」，且定义查的是商城商品管理器，
  *     在频道/大厅里查不到，不能用来持久化背包。）
+ *
+ * @param excludeIds 已经穿在身上的 itemId：这些条目由 [equippedInventoryEntries] 以真实
+ *   装备槽下发，不能再以 0xFF 重复入包（否则客户端背包里会多出一条重复物品，
+ *   而 op 198 是「全量真相」，重复条目会被当成两件不同物品分别落地）。
  */
-fun bagInventoryEntries(items: List<UserItemEntry>): List<UserInventoryEntry> = items.map { item ->
-    val def = ItemDef.find(item.itemId)
-    UserInventoryEntry(
-        itemId = item.itemId,
-        slot = BAG_ONLY_SLOT,
-        param = 1,
-        token = def?.name ?: "",
-        duration = 240000,
-        status = 255,
-    )
+fun bagInventoryEntries(
+    items: List<UserItemEntry>,
+    excludeIds: Set<Int> = emptySet(),
+): List<UserInventoryEntry> = items
+    .filter { it.itemId != 0 && it.itemId !in excludeIds }
+    .map { item ->
+        val def = ItemDef.find(item.itemId)
+        UserInventoryEntry(
+            itemId = item.itemId,
+            slot = BAG_ONLY_SLOT,
+            param = 1,
+            token = def?.name ?: "",
+            duration = 240000,
+            status = 255,
+        )
+    }
+
+// ============================================================================
+// 装备槽位编码 (op 273 的 E1(equipSlot) 与 op 198 / op 73 的 E1(slot) 不是同一套)
+// ============================================================================
+// CA.exe 装备数组布局: 每个装备项 200 字节, 下标 = type*24 + subSlot
+//   - 写入: `sub_65C81A` (`0x0065C81A`) 557216 行
+//           `sub_4484B0(v29 + 116, a4 + 24 * v41)` —— 把「复合槽位」写进槽项 +116,
+//           而槽项 +116 就是物品对象 +84 (`sub_44862D(item+84)` 读的同一字段)。
+//   - 发出: C→S op 273 的序列化 `sub_659004` (`0x00659004`) 553095 行原样读 item+84 写 E1。
+//   ⇒ op 273 的槽位 = 24*type + subSlot (蓝妹妹 2082 = 148 = 6*24+4, 实证吻合)。
+//
+// op 198 / op 73 的 slot 字段则只放 **subSlot**:
+//   客户端 `sub_65D55F` (`0x0065D55F`) 自己用 `sub_67884E(category)` 算 type, 再取 `slot % 24`
+//   (557643 行), 所以抓包里 2082 的 slot=4、角色卡 slot=15、道具栏 slot=13 都是 subSlot。
+// ============================================================================
+
+/** 每组装备的槽位数量 (客户端 24 个) */
+const val EQUIP_SLOTS_PER_GROUP = 24
+
+/**
+ * category → 装备大类, CA.exe `sub_67884E` (`0x0067884E`) 的逐 case 镜像。
+ * 0 表示该分类不可穿戴 (客户端 `sub_65C81A` 第一步就 `if (type == 0) return 0`)。
+ */
+fun equipGroupOfCategory(category: Int): Int = when (category) {
+    1, 3 -> 8
+    2, 9, 20, 33, 36, 41 -> 7
+    4, 5, 6, 10, 18, 28, 29 -> 9
+    12, 14 -> 10
+    16 -> 6
+    19 -> 5
+    42 -> 4
+    else -> 0
+}
+
+/**
+ * 装备条目的「客户端定位键」= (装备大类, 子槽位)。
+ *
+ * 用大类参与键值是因为 type 由物品分类推导: 同一个 subSlot 在不同大类里是**不同槽位**
+ * (例如道具栏 cat 13 的 subSlot 13 与装扮背景 cat 10 的 subSlot 13 互不影响)。
+ */
+fun equipSlotKey(itemId: Int, slot: Int): Pair<Int, Int> =
+    equipGroupOfCategory(ItemDef.find(itemId)?.category ?: -1) to slot
+
+/**
+ * 把 C→S op 273 上报的装备槽 (复合槽位) 拼成 op 198 / op 73 的条目。
+ *
+ * slot = equips 的 key (复合槽位 24*type+subSlot)，这里只取 subSlot 下发,
+ * 客户端会按 op 60 定义表里的 category 自行还原 type。
+ *
+ * @param equips 服务端记录的 装备槽 → itemId
+ */
+fun equippedInventoryEntries(equips: Map<Int, Int>): List<UserInventoryEntry> = equips
+    .filterValues { it != 0 }
+    .map { (compositeSlot, itemId) ->
+        val def = ItemDef.find(itemId)
+        UserInventoryEntry(
+            itemId = itemId,
+            slot = compositeSlot % EQUIP_SLOTS_PER_GROUP,
+            param = 1,
+            token = def?.name ?: "",
+            duration = 240000,
+            status = 255,
+        )
+    }
+
+/**
+ * 组装 S→C op 198 的完整清单 (进频道 / 商城退出重进大厅 / 背包查询都走这里)。
+ *
+ * 顺序与真实抓包一致: 先默认穿戴条目 (角色卡 / 道具栏 / 进阶卡), 再背包条目 (0xFF)。
+ * 服务端 op 273 记录下来的装备 (背景 / 旗帜 / 边框 / 气泡 / 特效 …) 会以真实槽位**覆盖**
+ * 同「大类+子槽位」的默认条目 —— 否则换角色卡或换背景时客户端会同时收到两条同槽条目。
+ *
+ * ⚠️ 这份清单就是客户端的全部真相 (`sub_67601D` 先清空再重建), 漏掉任何一件装备
+ *    都会在回大厅时表现为「自动脱下」(背景被取消装备的根因)。
+ */
+fun inventoryEntries(
+    defaults: List<UserInventoryEntry>,
+    bag: List<UserItemEntry>,
+    equips: Map<Int, Int>,
+): List<UserInventoryEntry> {
+    val equipped = equippedInventoryEntries(equips)
+    val equippedIds = equipped.map { it.itemId }.toSet()
+
+    val merged = LinkedHashMap<Pair<Int, Int>, UserInventoryEntry>()
+    defaults.forEach { merged[equipSlotKey(it.itemId, it.slot)] = it }
+    equipped.forEach { merged[equipSlotKey(it.itemId, it.slot)] = it }
+
+    return merged.values + bagInventoryEntries(bag, equippedIds)
 }

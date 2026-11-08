@@ -6,13 +6,41 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.netty.PassportServer
 import bnbemu.packet.UserDynamicInfo
+import bnbemu.packet.EQUIP_SLOTS_PER_GROUP
 import bnbemu.packet.UserEquipEntry
 import bnbemu.packet.UserInfoResult
+import bnbemu.packet.equipSlotKey
 import bnbemu.server.Room
 import bnbemu.server.bomber
 import bnbemu.server.EquipSlot
 
 private val LAST_USER_INFO_SEND_TIME = AttributeKey.valueOf<Long>("LAST_USER_INFO_SEND_TIME")
+
+/**
+ * S→C op 73 名片里的装备槽位列表。
+ *
+ * slot 只放**子槽位**（与抓包一致: 2082 进阶卡→4, 角色卡→15, 道具栏→13），
+ * 客户端 `COtherUserPageDialog::InitData` (`0x005E2F9B` → `0x005F488E`) 会用 itemId 查
+ * op 60 定义表的 category 自行还原装备大类，所以 C→S op 273 上报的复合槽位这里取 `% 24`。
+ *
+ * 默认三条 (角色卡 / 道具栏 / 进阶卡) 之后追加 op 273 记录下来的装备 (背景/旗帜/边框…),
+ * 同「大类+子槽位」以服务端记录为准 —— 否则换了角色卡/背景后名片里会同时出现两条同槽条目。
+ */
+private fun buildEquipEntries(charItemId: Int, equips: Map<Int, Int>): List<UserEquipEntry> {
+    val merged = LinkedHashMap<Pair<Int, Int>, UserEquipEntry>()
+    fun put(e: UserEquipEntry) {
+        merged[equipSlotKey(e.itemId, e.slot)] = e
+    }
+    put(UserEquipEntry(itemId = charItemId, slot = EquipSlot.CHARACTER, param1 = 20, param2 = 0))
+    put(UserEquipEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param1 = 1, param2 = 0))
+    put(UserEquipEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param1 = 1, param2 = 0))
+    equips.forEach { (compositeSlot, itemId) ->
+        if (itemId != 0) {
+            put(UserEquipEntry(itemId, compositeSlot % EQUIP_SLOTS_PER_GROUP, 1, 0))
+        }
+    }
+    return merged.values.toList()
+}
 
 /**
  * 下发用户详细资料与动态属性 (支持时间防抖 500ms)
@@ -44,11 +72,11 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
         4, 10, 2 -> 2082 // Marid
         else -> 1 // Dao / Bazzi
     }
-    val equips = listOf(
-        UserEquipEntry(itemId = charItemId, slot = EquipSlot.CHARACTER, param1 = 20, param2 = 0),
-        UserEquipEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param1 = 1, param2 = 0),
-        UserEquipEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param1 = 1, param2 = 0)
-    )
+    // 装备槽位列表: 默认三条 + C→S op 273 记录下来的装备 (背景/旗帜/边框…)
+    val equips = buildEquipEntries(charItemId, user?.equips.orEmpty())
+    if (user != null && user.equips.isNotEmpty()) {
+        println("[UserInfoReq] op 73 装备槽: ${equips.joinToString { "${it.itemId}@${it.slot}" }}")
+    }
 
     c send UserInfoResult(
         isSelf = true,
@@ -85,11 +113,7 @@ fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
         2 -> 2082 // Marid
         else -> 1 // Dao / Bazzi
     }
-    val equips = listOf(
-        UserEquipEntry(itemId = charItemId, slot = EquipSlot.CHARACTER, param1 = 20, param2 = 0),
-        UserEquipEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param1 = 1, param2 = 0),
-        UserEquipEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param1 = 1, param2 = 0)
-    )
+    val equips = buildEquipEntries(charItemId, targetUser?.equips.orEmpty())
 
     val win = targetUser?.win ?: 10
     val draw = targetUser?.draw ?: 0

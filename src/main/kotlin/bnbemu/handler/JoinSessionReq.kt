@@ -17,8 +17,8 @@ import bnbemu.packet.Unk423
 import bnbemu.packet.Unk66
 import bnbemu.packet.UserDynamicInfo
 import bnbemu.packet.UserInventory
-import bnbemu.packet.DEFAULT_USER_INVENTORY_ITEMS
-import bnbemu.packet.bagInventoryEntries
+import bnbemu.packet.defaultUserInventoryItems
+import bnbemu.packet.inventoryEntries
 import bnbemu.packet.UserInventoryInfo
 import bnbemu.packet.UserItemUpdate
 import bnbemu.packet.shop.FxStockInit
@@ -59,10 +59,25 @@ val JoinSessionReq = PKTHandler { c ->
     //   背包/装备，再由 ApplyEquippedInventory (0x6757A6) 逐条 sub_65D55F 重建 —— 也就是说
     //   op 198 是「全量真相」，没写进这份清单的物品一律被清掉。
     //   背包物品用伪槽位 0xFF（BAG_ONLY_SLOT），客户端只塞进背包向量、不占装备槽。
+    //   C→S op 273 记录下来的装备（背景/旗帜/边框/气泡/特效…）用**真实槽位**下发，
+    //   否则回大厅时会被这次清空重建抹掉（表现为「背景自动取消装备」）。
     val bag = user?.items.orEmpty()
-    val inventory = DEFAULT_USER_INVENTORY_ITEMS + bagInventoryEntries(bag)
+    val equips = user?.equips.orEmpty()
+    val defaults = defaultUserInventoryItems(user?.bomber ?: 0)
+    val inventory = inventoryEntries(defaults, bag, equips)
+    println(
+        "[JoinSessionReq] op 198 清单: 默认 ${defaults.size} 条 + 背包 ${bag.size} 件" +
+            " + 装备 ${equips.size} 件 → 共 ${inventory.size} 条"
+    )
     if (bag.isNotEmpty()) {
         println("[JoinSessionReq] op 198 携带背包物品: ${bag.map { it.itemId }}")
+    }
+    if (equips.isNotEmpty()) {
+        println(
+            "[JoinSessionReq] op 198 携带装备: " + equips.entries.joinToString { (slot, itemId) ->
+                "0x${slot.toString(16).uppercase()}(大类${slot / 24}/子槽${slot % 24})=$itemId"
+            }
+        )
     }
 
     // 先补一发 413 把背包容量抬到 8×50=400：
