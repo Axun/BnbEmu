@@ -66,7 +66,7 @@ CSlotStage (0x8A13C4)
 | **55 (0x37)** | `StringTableRevisionReq` (字串表版本上报) | `E4(stringTableRev) + E4(questStringRev) + E4(curseFilterRev)` | 登录成功后进入选区界面时上报本地 3 份 SSD 版本 (StringTable, QuestString, CurseFilter) 并触发下发频道列表推送 |
 | **88 (0x58)** | `AILevelChangeReq` (调等级) | `E1(chief) + E1(slotIdx) + E1(newLevel) + E1(flags)` | 设置 AI 难度等级 |
 | **89 (0x59)** | `OpenCloseSlotReq` (踢人/开关槽) | `E1((slotIdx << 4) \| (action & 0xF))` | `action & 1 == 1`: 踢出/关闭 (`FLAG_CLOSED=1`)<br>`action & 1 == 0`: 开放/加入 AI (`FLAG_CLOSED=0`) |
-| **75 (0x4B)** | `CreatePracticeSessionReq` (进练习房) | `E2(0) E2(0) E1(0) E1(1) E1(5) E1(15) E4(66)` | 进练习房 |
+| **75 (0x4B)** | `CreateSessionReq` (进练习房) | `E2(0) E2(0) E1(0) E1(1) E1(5) E1(15) E4(66)` | 进练习房 |
 | **92 (0x5C)** | `StartGameReq` (游戏开始确认) | 空包 | 准备完毕触发开局 |
 
 ### 4.2 S→C 服务端响应

@@ -21,7 +21,6 @@ UserInfoDetailReq: 67
 SessionInfoDetailReq: 68
 UserLocationReq: 69
 GuildInfoReq: 70
-CreateSessionReq: 80
 JoinSessionReq: 81
 AJoinSessionReq: 82
 EnterLobbyStageReq: 83
@@ -93,7 +92,7 @@ Unk_293: 293
 RegisterSessionKey: 297
 UserStageSyncReq: 302
 UserMapListReq: 310
-CreatePracticeSessionReq: 75
+CreateSessionReq: 75
 # 大廳聊天發言 (CA.exe 0x4EB856 push 0x12; body = E1(chatType) E1(1) DecodeStr(令牌化文字))
 # 原 TW/CN/JP 表把聊天放在 op 25, 真實 EN 客戶端發的是 op 18
 # ⚠️ 目前只確認 C→S 方向。S→C 的「顯示聊天」opcode 尚未確定:

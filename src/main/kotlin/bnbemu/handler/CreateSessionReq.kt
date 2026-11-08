@@ -1,40 +1,149 @@
+@file:JvmName("CreateSessionReqKt")
+
 package bnbemu.handler
 
 import bnbemu.netty.Decode1
-import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
-import bnbemu.netty.DecodeStr
+import bnbemu.netty.DecodeCipherStr
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.CreateSessionResult
+import bnbemu.packet.PracticeSelectMap
+import bnbemu.packet.PracticeRoomInfo
+import bnbemu.packet.PracticeSetPlayer
+import bnbemu.packet.PracticeSlot103
+import bnbemu.packet.PracticeSlot104
+import bnbemu.packet.PracticeSlot114
+import bnbemu.packet.PracticeSlotReady
+import bnbemu.packet.WelcomeNotice
+import bnbemu.packet.RoomList
+import bnbemu.packet.SessionInfoResult
+import bnbemu.packet.EnterSessionResult
+import bnbemu.packet.Unk113
+import bnbemu.packet.UserSimpleInfoResult
 import bnbemu.server.*
+import org.tinylog.kotlin.Logger
 
-// 開房間 / 退出商城
-// server = CGameSessionTable::CreateSession
+// ============================================================================
+// 创建 / 进入会话 (C→S op 75) — EN 客户端所有建房路径共用的通用请求
+// ============================================================================
+//    反编译里 CSendPacket_CtorWithOp(..., 75)
+//    共 8 处 (CA.exe.c 269546 / 269568 / 270030 / 270840 / 271682 / 272279 / 273058 / 530200),
+//    普通房/怪物模式等等和练习房共用，练习房只是其中一条参数退化的路径;
+//
+// 字段顺序由 CA.exe 0x00517233 (sub_517233) 钉死:
+//   EncodeStr(房间名)  ← CSendPacket::EncodeStr 的 3 度混淆 (0x75DAF0), 不是明文
+//   EncodeStr(密码)    ← 同上
+//   E1(a4)             模式: 0 = 练习 / AI 房, 1 = 普通房
+//   E1(玩家数)         GetLocalPlayerCount
+//   E1 × 玩家数        每个本地玩家的 bomber id (不是固定 1 个!)
+//   E1(a5)             房型: 15 = 练习房, 0 = 普通房 (CFxContext[0x570])
+//   E4(规则 id)        sub_516C5A 按房型查表: 15 → 66, 0 → 0
+// 调用点取值: 271986 练习房 (..., 0, 15); 272008 普通房 (..., 1, a2);
+//             272093 建房对话框 (..., v8, v9); 272279 / 530200 硬编码 E1(1) ... E1(0) E4(0)。
+//
+// 两种实包 (body, 不含 2B opcode):
+//   练习房 tst.pcap sq=79 (12B) = E2(0) E2(0) E1(0) E1(1) E1(5) E1(15) E4(66)
+//   普通房 (23B) = E2(11) + 11B 加密房名 "Come quick~" + E2(0) E1(1) E1(1) E1(0) E1(0) E4(0)
+//   ⚠️ 练习房恰好没有房名内容, 旧实现把「空串 / 15 / 66」这些定值当成了字段定义,
+//      普通房到达时 Decode2 只读长度不消费内容 → 后面 6 个字段全部错位
+//      (房型读成 229, 又被 takeIf{1..31} 退回 15, 等于把普通房当练习房回)。
+//
+// 字符串用 PKT.kt 的 DecodeCipherStr (4B BE^0x96CA5395 → LE; 余 2B ^0xA569; 余 1B ^0x5A);
+// 反向写回要用 EncodeCipherStr。⚠️ 但 op 87 RoomList 的房名是另一套容器
+// (E4 名长 + dword 对齐 + ssdEncode, 见 RoomList.kt), 不适用 EncodeCipherStr 的 E2 长度格式,
+// 所以这里只把房名记进 Room.name, 暂不动态改写 RoomList (会破坏 replay_test 逐字节基准)。
+//
+// 回应链 (seq 顺序, 见 Practice.kt 注释) 目前仍是练习房基准:
+//   [87 RoomList, 83 EnterSessionResult, 4(13B), 4(65B), 113, 100(78B), 108,
+//    106×8, 每槽(114,104,105,103), 198, 背包, WelcomeNotice]
+//   普通房走 CPrepareStage (与练习房的 CSlotStage 读法不同, 见 docs/agents-notes-room.md
+//   的 op 104 3B 变体), 需另抓一次普通房 S→C 包才能分叉; 在此之前两条路径共用这条链,
+//   仅按请求里的实际房型 / 规则 / 房名做记录与回显。
 val CreateSessionReq = PKTHandler { c ->
-    if (readableBytes() == 6) {
-        // CShopStageNew 0x005CDD3D 退出商城通知 (E2 + E4)
-        val channelId = Decode2
-        val extra = Decode4
-        return@PKTHandler
+    val roomName = DecodeCipherStr
+    val password = DecodeCipherStr
+    val mode = Decode1                          // a4: 0 练习房 / 1 普通房
+    val playerCount = Decode1.coerceIn(0, 8)
+    val bombers = List(playerCount) { Decode1 } // 每个本地玩家一个, 不能固定读 1 个
+    val sessionType = Decode1                   // a5: 15 练习房 / 0 普通房
+    val ruleId = Decode4
+
+    val isPractice = mode == 0
+    Room.sessionMode = mode
+    Room.sessionType = sessionType
+    Room.ruleId = ruleId
+    Room.name = roomName
+    Room.password = password
+    Room.localBombers = bombers
+
+    Logger.info(
+        "[CreateSession] mode=$mode (${if (isPractice) "practice" else "normal"}) " +
+            "type=$sessionType rule=$ruleId name='$roomName' pw=${password.isNotEmpty()} " +
+            "players=$playerCount bombers=$bombers"
+    )
+    if (!isPractice) {
+        // 分流点: 普通房的槽位初始化与 S→C 回应链尚未抓包, 暂沿用练习房基准。
+        Logger.info("[CreateSession] normal room still uses the practice reply chain; split here after S->C capture")
     }
 
-    val roomName = DecodeStr
-    val pw = DecodeStr
-    val mode = Decode1 // FREE = 0 | MANNER = 1
-    val userCount = Decode1
+    // 玩家 (op 7 已把 c.users[0] 填好) 放 slot 0, 其余 7 槽为 AI。
+    // ⚠️ 普通房真实应为「其余槽留空等真人加入」, 但回应链里 103/105/114 仍是 AI 槽推送,
+    //    两者必须一起改; 等普通房 S→C 抓包钉死线序后再在 isPractice 处分叉。
+    val player = c.users.firstOrNull()
+    if (player != null) {
+        val requestedBomber = bombers.firstOrNull() ?: player.bomber
+        val chosenBomber = if (requestedBomber in 0..15) requestedBomber else player.bomber
+        val effectiveBomber = if (chosenBomber == 4) 10 else chosenBomber
+        player.bomber = effectiveBomber
 
-    repeat(userCount) { i ->
-        Decode1 // 11
-
-        Room.slots[i].apply {
-            user = c.users[i]
-
+        Room.slots[0].apply {
+            this.user = player
             state = FLAG_CHIEF
-            bomber = 5
-            color = i
+            bomber = effectiveBomber
+            color = 0
+        }
+        for (i in 1..7) {
+            Room.slots[i].apply {
+                this.user = null
+                isAI = true
+                bomber = 5
+                color = 7
+            }
         }
     }
 
-    c send CreateSessionResult(mode)
-    Room.encodeSlots(c)
+    c.send(
+        RoomList(),
+        // 进房结果 (op 83): 房型必须原样回显, 客户端 0x0068626F 存进 CFxContext[0x570]。
+        // 0 = 普通房是合法值, 不能再退回 15; Decode1 本身已保证落在 E1 宽度 (0..255)。
+        EnterSessionResult(
+            sessionId = Room.sessionId,                 // 房号: 客户端拿它到 op 87 的房屋缓存里找房
+            sessionType = sessionType,
+        ),
+        UserSimpleInfoResult(), SessionInfoResult(),
+        Unk113(),
+        PracticeRoomInfo(),
+        PracticeSelectMap(),
+    )
+    // 106×8 (sq=208~229)
+    repeat(8) { slot ->
+        c.send(PracticeSlotReady(slot))
+    }
+    // 每槽交错发送 [114, 104, 105, 103] (槽 7 无 103), 与真实线序一致
+    repeat(8) { slot ->
+        c.send(
+            PracticeSlot114(slot),
+            PracticeSlot104(slot),
+            PracticeSetPlayer(slot),
+        )
+        if (slot < 7) c.send(PracticeSlot103(slot = slot + 1, isAI = true, aiLevel = slot + 1, flag = 1))
+    }
+    // 以前抓包有发送背包内容，但是实验去掉也没事
+//    val user = c.users.firstOrNull()
+//    val bag = user?.items.orEmpty()
+//    val equips = user?.equips.orEmpty()
+//    val bomber = user?.bomber ?: 0
+//    val defaults = defaultUserInventoryItems(bomber)
+//    val inventory = inventoryEntries(defaults, bag, equips)
+//    c.send(UserInventory(listOf(inventory, inventory)))
+    c.send(WelcomeNotice())
 }

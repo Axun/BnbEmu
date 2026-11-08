@@ -71,7 +71,14 @@ const val SESSION_ENTER_INVALID_SEASON = 11    // InvalidGradeSeason
 const val SESSION_ENTER_HORDE_TICKET = 12      // HordeEvent_RecommendBuyHordeTicket 需買討伐券
 
 // ---- 房間類型 (第 4 欄位) ----
-// 與 C→S op 75 的第 6 欄位同源: 客戶端 0x00517233 建練習房請求時把 CFxContext[0x570] 當 E1 寫進去,
+// 與 C→S op 75 的第 6 欄位 (a5) 同源: 客戶端 0x00517233 建房時把 CFxContext[0x570] 當 E1 寫進去,
 // 伺服器原樣回填到這裡。0x00516C5A 再把類型映射成規則索引: 14→3, 15→1, 0→0, 其他→2。
-// 15 = 練習房 (抓包值; 對應 op 75 body 的 E1(15))
+//
+// ⚠️ 0 是合法的「普通房」房型, 不是「無類型」:
+//    2026-11-08 普通房實包 body 末段 = ... E1(1) E1(1) E1(0) E1(0) E4(0)
+//    (a4=1 / 玩家數 1 / bomber 0 / 房型 0 / 規則 0), 272279 與 530200 兩處發包點也硬編碼 E1(0) E4(0)。
+//    舊 handler 用 `takeIf { it in 1..31 }` 把 0 (以及解析錯位讀到的 229) 一律退回 15,
+//    等於把所有普通房都當練習房回, 已移除。
+const val SESSION_TYPE_NORMAL = 0
+/** 15 = 練習房 (tst.pcap 抓包值; 對應 op 75 body 的 E1(15) / 規則 66) */
 const val SESSION_TYPE_PRACTICE = 15

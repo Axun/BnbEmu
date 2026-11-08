@@ -71,6 +71,26 @@
      = 选图/选色/换角色/开关槽位），EN 版重编号为 85/86/87/89，不适用于 EN。
      S→C 方向另有 op 86（大厅期周期推送，25B，见 `tst_flow4.txt:62`），与 C→S 的选色请求互不冲突。
   实现见 `handler/room/SelectColorReq.kt` + `packet/room/SelectColor.kt`；单元测试见 `SelectColorTest.kt`。
+- **进练习房（op 75，2026-09-01 已实现，tst.pcap stream4 逆向）**：大厅界面点"练习"→ 客户端
+  在练习房界面点"开始"发出 **op 75**，body = `E2(0) E2(0) E1(0) E1(1) E1(5) E1(15) E4(66)`
+  （2026-11-08 由客户端发包函数 0x00517233 逐字段钉死：`E2`房间名(空) `E2`房间密码(空) `E1(0)`=
+  CFxContext 取值 `E1(1)`=玩家数 `E1×人数`=玩家 id（抓包 5 = 当前选中的 bomber）`E1(15)`=**房间类型**
+  `E4(66)`=由房间类型算出的**游戏规则 id**）。服务器连发整套房间设置回应（线序 seq=187~328）：
+  `[87 RoomList, 83 EnterSessionResult, 4(13B), 4(65B), 113, 100(78B), 108, 106×8,
+  每槽(114,104,105,103 交错, 槽7 无 103), 198, 423]`；
+  随后客户端自动跟发 297/302，再发 **op 92** 触发游戏开始 → S 回 `[111, 112 SelectMap(165B),
+  100(77B), 136(178B 棋盘块)]`（线序 seq=331~340）。
+- **S→C op 113 = 房间名 / 会话名同步（2026-11-08 反编译钉死，`PracticeBlobs.EN_OP113`）**：
+  blob `a5 69` 不是「数值 0」，而是 `EncodeStr(房名)` 的 `E2(0)` 长度前缀（空房名）；
+  完整包 `a5 18 a5 69`（前 2B = Encode2(113)）。`CSlotStage::OnPacket` 0x4F480C /
+  `CPrepareStage::OnPacket` 0x52A949 / 对局阶段 0x616D59 三处 case 113 分别指向
+  逐字节相同的 handler（0x4F0B07 / 0x51F86F / 0x61273B）：`sub_78FDF0`(→`sub_78F910`)
+  读 [E2 长度][内容] 字符串，长度 >0x16 截到 21 字符，`sub_68872B`→`sub_44886E(this+113, str)`
+  把名字赋给全局会话对象 +0x1C4 的房名字段。反证：0x005147B9 建房时把玩家输入的房名
+  写进同一字段并作为 C→S op 75 第 1 字段发出；0x00506513（op 83 进房结果）从房间缓存
+  取出条目的房名写入；0x004EC7F8 case 3 用空串清空并切场景。⇒ op 113 是服务端权威回显 /
+  变更当前房名（可覆盖客户端输入），练习房无房名所以抓包为空串；普通房应发真实房名
+  （等价结构化写法 `EncodeStr(name)`）。实现与地址链详见 `packet/Practice.kt` 注释。
 - **S→C op 83 = `EnterSessionResult`「进房结果」(2026-11-08 反编译钉死；旧表名 SessionSimpleInfo 已废弃)**：客户端
   `CLobbyStage::OnPacket` 0x00510287 的 `case 'S'(0x53)` → 0x00507113，先 `Decode1` 取**结果码**
   （0=成功；1..12 = WrongPassword / CantJoinRoom / InvalidGrade / … 各弹一个对话框且**不再读任何字段**），
@@ -81,3 +101,34 @@
   已改由 `packet/EnterSessionResult.kt` 程序化生成（常量 `SESSION_ENTER_*` / `SESSION_TYPE_PRACTICE`，
   房号取 `Room.sessionId`，房型回显 op 75 请求值），`PracticeBlobs.EN_OP83` 已删除，
   `tools/gen_practice_kotlin.py` 不再生成该 blob；回归基准 `src/test/kotlin/bnbemu/netty/EnterSessionResultTest.kt`。
+- **C→S op 75 是通用「创建 / 进入会话」请求，非练习房专用 (2026-11-08 普通房实包 + 反编译定论)**：
+  `CSendPacket_CtorWithOp(..., 75)` 在 `reference/CA.exe.c` 共 8 处
+  (269546 / 269568 / 270030 / 270840 / 271682 / 272279 / 273058 / 530200)，练习房只是参数退化的一条路径；
+  yaml 的 `CreateSessionReq: 80` 是 TW 版残留，EN 客户端不发 op 80，其 handler 是死代码。
+  `sub_517233` (0x00517233) 的字段顺序 =
+  `EncodeStr(房名) EncodeStr(密码) E1(a4 模式) E1(玩家数) E1×玩家数(bomber) E1(a5 房型) E4(规则id)`；
+  271986 练习房传 `(0, 15)`、272008 普通房传 `(1, a2)`、272093 走建房对话框 `(v8, v9)`，
+  272279 / 530200 两处普通房路径硬编码 `E1(1) ... E1(0) E4(0)`。
+  `sub_516C5A` (0x00516C5A) 把房型映射成规则索引：15 → 66、0 → 0、14 → 3、其他 → 2。
+  两种实包 body（不含 opcode）：
+  · 练习房 `tst.pcap` sq=79 (12B) = `A5 69 A5 69 5A 5B 5F 55 96 CA 53 D7`（两个空串 / a4=0 / 房型 15 / 规则 66）
+  · 普通房 (23B) = `A5 62` + 11B 加密房名 + `A5 69 5B 5B 5A 5A 96 CA 53 95`
+    （房名 = `Come quick~` / 密码空 / a4=1 / 玩家数 1 / bomber 0 / 房型 0 / 规则 0）
+  ⚠️ **房名与密码是 `CSendPacket::EncodeStr` 的 3 度混淆串 (0x75DAF0)，不是明文**：
+  4B 组 BE 读 ^0x96CA5395 按 LE 写回，余 2B ^0xA569，余 1B ^0x5A；服务端侧对应
+  `PKT.kt` 的 `DecodeCipherStr` / `EncodeCipherStr`（此前没有任何 handler 使用）。
+  旧实现用 `Decode2` 只读长度不消费内容，普通房到达时后面 6 个字段全部错位（房型读成 229，
+  又被 `takeIf { 1..31 }` 退回 15），等于把所有普通房当练习房回。
+  **已落地 (1~3)**：`handler/CreateSessionReq.kt` 改用 `DecodeCipherStr` 读两个串、
+  按玩家数循环读 bomber id、按 `a4` 记录模式并把实际房型原样回显到 op 83；
+  请求快照存入 `Room.sessionMode / sessionType / ruleId / name / password / localBombers`；
+  `packet/EnterSessionResult.kt` 新增 `SESSION_TYPE_NORMAL = 0` 并去掉 0 的越界退回；
+  `PKT.kt` 的 `DecodeCipherStrAt` 对声明长度做 clamp（错位包不再越界断连）。
+  回归：`PracticeSetPlayerTest` 用上述 23B 实包断言房名 / 模式 / 房型 / 规则 / 完整消费，
+  `EnterSessionResultTest` 断言房型 0 原样回显；`mvn test` 全绿。
+  **待办 (第 4 项，需另抓普通房 S→C 包)**：普通房走 `CPrepareStage`（与练习房 `CSlotStage`
+  读法不同，见 op 104 的 3B 变体），回应链 `[113, 100(78B), 108, 106×8, 每槽(114,104,105,103), …]`
+  目前仍两路共用；槽位也仍是「1 真人 + 7 AI」，分叉点已标在 handler 的 `isPractice` 处。
+  另外 op 87 `RoomList` 的房名是「E4 名长 + dword 对齐 + ssdEncode」的容器（见 `RoomList.kt`
+  的 f1 长度前缀警告），**不适用** `EncodeCipherStr` 的 E2 长度格式，不能在这里直接套用；
+  op 113 回显真实房名时该用明文 `EncodeStr` 还是 `EncodeCipherStr` 也需随普通房抓包一并验证。

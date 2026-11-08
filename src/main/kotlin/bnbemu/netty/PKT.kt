@@ -102,7 +102,11 @@ private fun ReceivedPacketBase.DecodeStrAt(): String {
  *   剩餘 1B XOR 0x5A 寫入
  */
 private fun ReceivedPacketBase.DecodeCipherStrAt(): String {
-    val length = if (m_nCipherDegreeInit == 3 && !isEN) Decode4At() else Decode2At()
+    val declared = if (m_nCipherDegreeInit == 3 && !isEN) Decode4At() else Decode2At()
+    // 畸形包 / 上游字段错位时声明长度可能远超剩余字节 (例如把房名内容当成 E2 长度读出 22222),
+    // 直接按 declared 去 readInt 会越界抛异常 → ClientSocket.exceptionCaught 直接断开连接。
+    // clamp 到实际可读长度: 正常包不受影响, 错位包最多读到一个乱码串而不会掉线。
+    val length = declared.coerceIn(0, readableBytes())
     if (length <= 0) return ""
     val raw = ByteArray(length)
     if (m_nCipherDegreeInit in 1..3) {

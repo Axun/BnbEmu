@@ -5,7 +5,7 @@ import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
-import bnbemu.handler.CreatePracticeSessionReq
+import bnbemu.handler.CreateSessionReq
 import bnbemu.packet.PracticeSetPlayer
 import bnbemu.packet.room.GameStartMapInfo
 import bnbemu.server.Room
@@ -62,7 +62,7 @@ class PracticeSetPlayerTest {
     }
 
     @Test
-    fun testCreatePracticeSessionReqWithDao() {
+    fun testCreateSessionReqWithDao() {
         val savedBomber = Room.slots[0].bomber
         val ch = EmbeddedChannel()
         val client = ClientSocket()
@@ -83,7 +83,7 @@ class PracticeSetPlayerTest {
             sendPkt.Encode1(15)
             sendPkt.Encode4(66) // mapId
 
-            with(CreatePracticeSessionReq) {
+            with(CreateSessionReq) {
                 buf.handle(client)
             }
 
@@ -114,6 +114,65 @@ class PracticeSetPlayerTest {
             assertEquals(5, slot1Buf.Decode1, "AI bomber must remain 5")
         } finally {
             Room.slots[0].bomber = savedBomber
+            ch.finishAndReleaseAll()
+        }
+    }
+
+    @Test
+    fun testCipherStrRoundTripForRoomName() {
+        // CSendPacket::EncodeStr 的 3 度混淆: 4B BE^0x96CA5395 → LE, 余 2B ^0xA569, 余 1B ^0x5A
+        val buf = Unpooled.buffer()
+        SendPacketBase(buf, 3).EncodeCipherStr("Come quick~")
+        assertEquals("Come quick~", buf.DecodeCipherStr)
+        assertEquals(0, buf.readableBytes(), "长度前缀与 11B 内容都必须被消费")
+    }
+
+    @Test
+    fun testCreateNormalSessionReqParsesCipherRoomName() {
+        // 2026-11-08 普通房实包 body (日志 16:55:38, 不含 2B opcode):
+        // A5 62 [11B 加密房名] A5 69 5B 5B 5A 5A 96 CA 53 95
+        val body = byteArrayOf(
+            0xA5.toByte(), 0x62,
+            0xF3.toByte(), 0xA7.toByte(), 0x3C, 0xD6.toByte(), 0xFF.toByte(), 0xBF.toByte(),
+            0x22, 0xB5.toByte(), 0xCE.toByte(), 0x0A, 0x24,
+            0xA5.toByte(), 0x69,
+            0x5B, 0x5B, 0x5A, 0x5A,
+            0x96.toByte(), 0xCA.toByte(), 0x53, 0x95.toByte(),
+        )
+        val ch = EmbeddedChannel()
+        val client = ClientSocket()
+        client.users.add(User(client, id = 7215, name = "ffdf", bomber = 0))
+        ch.pipeline().addLast(client)
+
+        val savedName = Room.name
+        val savedPw = Room.password
+        val savedMode = Room.sessionMode
+        val savedType = Room.sessionType
+        val savedRule = Room.ruleId
+        val savedBombers = Room.localBombers
+        val savedSlotUser = Room.slots[0].user
+        val savedSlotBomber = Room.slots[0].bomber
+        try {
+            val buf = Unpooled.wrappedBuffer(body)
+            with(CreateSessionReq) { buf.handle(client) }
+
+            assertEquals("Come quick~", Room.name, "房名必须用 DecodeCipherStr 解出")
+            assertEquals("", Room.password, "密码为空串")
+            assertEquals(1, Room.sessionMode, "a4 = 1 → 普通房")
+            assertEquals(0, Room.sessionType, "a5 = 0 → 普通房, 合法值")
+            assertEquals(0, Room.ruleId, "规则 id = 0, 合法值")
+            assertEquals(listOf(0), Room.localBombers, "玩家数 1 → 只读 1 个 bomber id")
+            assertEquals(0, buf.readableBytes(), "整段 23B 必须被完整消费, 不能错位")
+            while (ch.readOutbound<PKT>() != null) { /* 排空响应, 避免泄漏 */ }
+        } finally {
+            Room.name = savedName
+            Room.password = savedPw
+            Room.sessionMode = savedMode
+            Room.sessionType = savedType
+            Room.ruleId = savedRule
+            Room.localBombers = savedBombers
+            Room.slots[0].user = savedSlotUser
+            Room.slots[0].bomber = savedSlotBomber
             ch.finishAndReleaseAll()
         }
     }

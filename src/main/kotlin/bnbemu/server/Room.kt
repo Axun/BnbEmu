@@ -36,6 +36,22 @@ object Room {
     var sessionId = DEFAULT_SESSION_ID
     const val DEFAULT_SESSION_ID = 75
 
+    // ---- C→S op 75 会话请求快照 (2026-11-08) ----
+    // EN 客户端的练习房 / 普通房 / 快速建房等 8 个发包点共用 op 75, 靠这几个值区分。
+    // 目前回应链仍只按练习房基准实现, 这里先完整记录请求, 等普通房 S→C 抓包钉死线序后
+    // 再按 sessionMode 分叉 (见 handler/CreateSessionReq.kt 顶部注释)。
+    /** sub_517233 的 a4: 0 = 练习 / AI 房, 1 = 普通房 */
+    var sessionMode = 0
+    /** a5 房型: 15 = 练习房, 0 = 普通房; 需原样回显到 S→C op 83 */
+    var sessionType = 15
+    /** sub_516C5A 按房型查表算出的规则 id: 15 → 66, 0 → 0 */
+    var ruleId = 66
+    /** 房间名 / 密码明文 (线上是 EncodeCipherStr 的 3 度混淆串) */
+    var name = ""
+    var password = ""
+    /** 每个本地玩家一个 bomber id, 长度 = 玩家数, 不再固定读 1 个 */
+    var localBombers: List<Int> = emptyList()
+
     val activeSlotCount: Int
         get() = slots.count { it.user != null || it.isAI }
 

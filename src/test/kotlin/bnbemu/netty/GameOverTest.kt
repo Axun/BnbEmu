@@ -44,7 +44,7 @@ class GameOverTest {
         savedDelay = Room.gameOverDelayMs
         Room.gameOverDelayMs = 0
 
-        // 练习房布局: slot 0 = 玩家, slot 1..7 = AI (见 CreatePracticeSessionReq)
+        // 练习房布局: slot 0 = 玩家, slot 1..7 = AI (见 CreateSessionReq)
         Room.slots.forEach { slot ->
             slot.user = null
             slot.isAI = false
