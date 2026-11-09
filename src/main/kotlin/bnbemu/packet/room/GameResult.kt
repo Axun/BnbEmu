@@ -20,9 +20,12 @@ import bnbemu.server.Room
 //        Decode2 -> +132
 //      Human 的关键字段偏移（与 0x00541205 的读取顺序一一对应）:
 //        +68 结果标签帧索引 / +72 KILLS / +76 SAVES /
-//        +84 EXP（备用列布局）/ +92 LUCCI（备用列布局）/
+//        +84/+88/+100/+104 CLadderInfo 与房间槽天梯字段（0x5599A8..0x559A75，且 header unk4!=0 时 +84/+92 作 EXP/LUCCI 备用列）/
 //        +124 战前等级进度 / +128 战后等级进度（EXP% 列真正的数据源）/
-//        +148 带正负号的 EXP 变体（仅 feature 36 分支）/ +152 LUCCI 数字
+//        +132 房间槽位(edi+0x6C) 与 CUserMap(0x4E03C1) 玩家等级 /
+//        +136 CUserDynamicInfo(0x6E4AAD -> CUDI+12*idx+24) 本机玩家战后等级（⚠️ 绝不可写 0，否则回房时 sub_67CAC3(1) 门禁因 0 < 1 弹 InvalidLevelPlayGame 并踢回大厅）/
+//        +240/+241/+242 CUserDynamicInfo 胜/负/平场次（0x6E4C72/0x6E4C8C/0x6E4CA6）/
+//        +148 带正负号的 EXP 变体（仅 feature 36 分支）/ +152 LUCCI 数字（同时写回房间槽 edi+0xB8）
 //   3. Trailer (CA.exe 0x0053E034):
 //      每 Human 槽 (slotType=1): 2 字节 (Decode1 × 2)
 //
@@ -79,33 +82,35 @@ fun GameResult(
         val expTo = expAfter.coerceIn(0, 1000)
 
         if (isHuman) {
+            val user = slot.user
+            val playerLevel = (user?.level ?: 5).coerceAtLeast(1)
             Encode1(1) // slotType = 1 (Human)
             Encode4(0) // score / unk（客户端读完即丢弃）
             Encode1(frame) // +68 结果标签帧 (RESULT_FRAME_WIN / RESULT_FRAME_LOSE)
             Encode1(0) // +72 KILLS
             Encode1(0) // +76 SAVES
             Encode1(0) // +80
-            Encode4(expTo) // +84 EXP（备用列布局，header unk4 != 0 时用）
-            Encode1(0) // +88 exp bonus %
+            Encode4(expTo) // +84 EXP（备用列布局，header unk4 != 0 时用；0x5599B4 写入 CLadderInfo / 房间槽 +0x3C）
+            Encode1(0) // +88 exp bonus % / CLadderInfo / 房间槽 +0x30
             Encode4(lucciGained) // +92 LUCCI（备用列布局）
             Encode1(0) // +96 lucci bonus %
-            Encode4(0) // +100
-            Encode1(0) // +104
+            Encode4(0) // +100 CLadderInfo / 房间槽 +0x54
+            Encode1(0) // +104 CLadderInfo / 房间槽 +0x48
             Encode4(0) // +108
             Encode1(0) // +112
             Encode1(0) // +116
             Encode1(0) // +120
             Encode2(expFrom) // +124 战前等级进度
             Encode2(expTo) // +128 战后等级进度 —— EXP% 列真正的数据源
-            Encode2(0) // +132
-            Encode2(0) // +136
+            Encode2(playerLevel) // +132 房间槽位 (edi+0x6C) / CUserMap (0x4E03C1) 玩家等级
+            Encode2(playerLevel) // +136 CUserDynamicInfo (0x6E4AAD) 战后等级（>=1，防回房触发 InvalidLevelPlayGame）
             Encode1(0) // +140
-            Encode1(0) // +240
-            Encode1(0) // +241
-            Encode1(0) // +242
+            Encode1(user?.win ?: 0) // +240 CUserDynamicInfo 胜场 (0x6E4C72)
+            Encode1(user?.lose ?: 0) // +241 CUserDynamicInfo 负场 (0x6E4C8C)
+            Encode1(user?.draw ?: 0) // +242 CUserDynamicInfo 平局/场次统计第三项 (0x6E4CA6)
             Encode4(0) // +144
             Encode2(0) // +148 带正负号的 EXP 变体（feature 36 分支才读）
-            Encode4(lucciGained) // +152 LUCCI 列
+            Encode4(lucciGained) // +152 LUCCI 列 (同时 0x559965 写入房间槽 edi+0xB8)
             // (feature 6 disabled, skipped)
             Encode2(0) // +160
             Encode4(0) // +164

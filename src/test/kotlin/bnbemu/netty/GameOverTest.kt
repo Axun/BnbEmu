@@ -36,13 +36,16 @@ class GameOverTest {
     private lateinit var ch: EmbeddedChannel
     private lateinit var cs: ClientSocket
     private var savedDelay = 0L
+    private var savedReturnDelay = 0L
 
     @BeforeEach
     fun setUp() {
         cs = ClientSocket()
         ch = EmbeddedChannel(cs)
         savedDelay = Room.gameOverDelayMs
+        savedReturnDelay = Room.resultReturnDelayMs
         Room.gameOverDelayMs = 0
+        Room.resultReturnDelayMs = -1 // 避免前序用例调度的 3.5s BackToRoom 污染后续用例 (回房单测见 BackToRoomTest)
 
         // 练习房布局: slot 0 = 玩家, slot 1..7 = AI (见 CreateSessionReq)
         Room.slots.forEach { slot ->
@@ -57,6 +60,7 @@ class GameOverTest {
     @AfterEach
     fun tearDown() {
         Room.gameOverDelayMs = savedDelay
+        Room.resultReturnDelayMs = savedReturnDelay
         Room.slots.forEach { slot ->
             slot.user = null
             slot.isAI = false
@@ -412,6 +416,8 @@ class GameOverTest {
         assertEquals(0, dec1(body[human + 5]), "胜方 +68 = YOU WIN 帧(0)")
         assertEquals(0, dec2(body, human + 31), "+124 战前 EXP 进度")
         assertEquals(50, dec2(body, human + 33), "+128 战后 EXP 进度 (=EXP% 列数据源)")
+        assertEquals(5, dec2(body, human + 35), "+132 房间槽位 / CUserMap 玩家等级必须保留 (>=1)")
+        assertEquals(5, dec2(body, human + 37), "+136 CUserDynamicInfo 战后等级必须保留 (>=1)，写 0 会导致回房触发 InvalidLevelPlayGame")
         assertEquals(100, dec4(body, human + 49), "+152 LUCCI 列")
 
         // 第一个 AI 槽：输的一方必须是 LOSE 帧，写 0 会显示成 "YOU WIN!!"
@@ -456,5 +462,20 @@ class GameOverTest {
         assertEquals(1, dec1(body[1]), "AI 胜")
         assertEquals(Room.loseExpAfter, dec2(body, 11 + 33), "AI 胜 → 玩家 +128 EXP = loseExpAfter")
         assertEquals(Room.loseLucci, dec4(body, 11 + 49), "AI 胜 → 玩家 +152 LUCCI = loseLucci")
+    }
+
+    @Test
+    fun testGameResultPreservesCustomPlayerLevelAndClampsZero() {
+        val human = 11
+        Room.slots[0].user = User(cs, id = 1, name = "tester", level = 12)
+        val body12 = bodyOf(GameResult(winnerTeam = 1))
+        assertEquals(12, dec2(body12, human + 35), "+132 必须写入 User.level")
+        assertEquals(12, dec2(body12, human + 37), "+136 必须写入 User.level")
+
+        // 即使 User.level 异常为 0，也必须钳制到 >= 1，防止 CUserDynamicInfo 等级被写成 0 触发 sub_67CAC3(1) 踢回大厅
+        Room.slots[0].user = User(cs, id = 1, name = "tester", level = 0)
+        val bodyClamped = bodyOf(GameResult(winnerTeam = 1))
+        assertTrue(dec2(bodyClamped, human + 35) >= 1, "+132 绝不可为 0")
+        assertTrue(dec2(bodyClamped, human + 37) >= 1, "+136 绝不可为 0")
     }
 }

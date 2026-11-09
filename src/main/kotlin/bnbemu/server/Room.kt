@@ -8,6 +8,7 @@ import bnbemu.netty.ClientSocket
 import bnbemu.netty.NettyServer.workerGroup
 import bnbemu.netty.PKT
 import bnbemu.packet.room.*
+import org.tinylog.kotlin.Logger
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
@@ -393,7 +394,52 @@ object Room {
             )
             // 结算后停掉对局主循环 (水泡倒计时), 与客户端离开棋盘同步
             endGame()
+            // ⚠️ 结果窗弹出 ≠ 对局结束: 客户端没有任何本地超时会把结果窗关掉
+            // (op150 的 delayMs 只决定「多久后弹窗」, 见 packet/room/BackToRoom.kt)。
+            // 必须由服务端补一条 S→C op 155, 客户端才会拆掉 CGameStage 回到 stage 12 房间。
+            executor.schedule({ backToRoom() }, resultReturnDelayMs, TimeUnit.MILLISECONDS)
         }, gameOverDelayMs, TimeUnit.MILLISECONDS)
+    }
+
+    /**
+     * 下发 S→C op 155 [BackToRoom] —— 唯一能把客户端从游戏阶段拉回房间的包。
+     *
+     * 时序参照真实服务器「结果窗显示几秒后自动返回」: 结算包之后 [resultReturnDelayMs] 再发。
+     *
+     * ⚠️ 光有 155 只能把客户端「切回 stage 12」，房间对象/会话是空的（实机验证
+     * 能回房、AI 还在，但「开始」按钮退化成「准备」= 房主位丢了）。
+     * 所以默认再补推整条房间链（[sendRoomEntryChain]，与 C→S op 75 的回应同一串），
+     * 把房主/座位/房间名/选图重新灌一遍；[reenterRoomAfterBack] 置 false 可只发 155。
+     *
+     * 调试入口: 聊天框 `/back`（仅 debugMode）—— 可强制重发、可指定槽位状态字节、可只发 155。
+     *
+     * @param sendRoomChain 是否在 155 之后补推房间链
+     * @param slotStates    槽 0..2 的状态字节（null = 用 [slots] 的真实 state，槽 0 保住房主位）
+     * @param chState       op155 首个 E1（`0x687393` → player+0x1AC，语义未定，默认 0）
+     * @param force         true = 忽略「本局已发过」的去重（调试重试用）
+     * @return 是否真的发出了包
+     */
+    fun backToRoom(
+        sendRoomChain: Boolean = reenterRoomAfterBack,
+        slotStates: List<Int>? = null,
+        chState: Int = 0,
+        force: Boolean = false
+    ): Boolean {
+        if (backSent && !force) return false
+        backSent = true
+
+        val states = slotStates ?: (0 until 3).map { slots.getOrNull(it)?.state?.toInt() ?: 0 }
+        BC(BackToRoom(chState = chState, slotStates = states))
+        Logger.info(
+            "[Room] 下发 op155 BackToRoom（回房间, stage 12）| chState=$chState " +
+                "slotStates=$states roomChain=$sendRoomChain"
+        )
+
+        if (sendRoomChain) {
+            uniqueClients.forEach { sendRoomEntryChain(it) }
+            Logger.info("[Room] op155 之后补推房间链sendRoomEntryChain")
+        }
+        return true
     }
 
     /**
@@ -526,7 +572,14 @@ object Room {
     }
 
     // 结算结果包的下发延迟。测试可置 0 以便同步断言。
-    internal var gameOverDelayMs = 1500L
+    internal var gameOverDelayMs = 1000L
+    // 结算包之后多久下发 S→C op 155 [BackToRoom]（客户端据此退出游戏阶段回到房间）。
+    // 真实服务器是「结果窗出来后过几秒自动返回」；测试可置 0 以便同步断言。
+    internal var resultReturnDelayMs = 7000L
+    // op155 之后是否补推整条房间链（重建房主位/座位/房间对象）。置 false = 只发 155（对照用）。
+    internal var reenterRoomAfterBack = true
+    // 本局是否已经发过回房间包
+    internal var backSent = false
 
     // ---- 结算奖励（op 150 GameResult） ----
     // EXP 是「等级进度千分比」：1000 = 100.0%，结果页会从 0.0% 涨到这个值
@@ -624,6 +677,7 @@ object Room {
      */
     fun resetMatchState() {
         gameOverSent = false
+        backSent = false
         slots.forEach {
             it.matchState = if (it.hasSeat()) SlotMatchState.ALIVE else SlotMatchState.OUT_OF_MATCH
         }

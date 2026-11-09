@@ -59,6 +59,7 @@ SetBomberState: 146
 BomberDeathList: 146
 InitGameResult: 169
 GameResult: 150
+BackToRoom: 155
 # SetBomberEvent 原名佔位 op 361 (局內 +200 偏移系列的推測), 無對應 Packet 類;
 # 真實用途為 C→S op 106 的回顯 op 139 (見檔案末尾), 故不再保留 361 鍵。
 SetEffect: 362

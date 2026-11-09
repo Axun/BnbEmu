@@ -6,19 +6,6 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.Decode4
 import bnbemu.netty.DecodeCipherStr
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.PracticeSelectMap
-import bnbemu.packet.PracticeRoomInfo
-import bnbemu.packet.PracticeSetPlayer
-import bnbemu.packet.PracticeSlot103
-import bnbemu.packet.PracticeSlot104
-import bnbemu.packet.PracticeSlot114
-import bnbemu.packet.PracticeSlotReady
-import bnbemu.packet.WelcomeNotice
-import bnbemu.packet.RoomList
-import bnbemu.packet.SessionInfoResult
-import bnbemu.packet.EnterSessionResult
-import bnbemu.packet.Unk113
-import bnbemu.packet.UserSimpleInfoResult
 import bnbemu.server.*
 import org.tinylog.kotlin.Logger
 
@@ -111,39 +98,5 @@ val CreateSessionReq = PKTHandler { c ->
         }
     }
 
-    c.send(
-        RoomList(),
-        // 进房结果 (op 83): 房型必须原样回显, 客户端 0x0068626F 存进 CFxContext[0x570]。
-        // 0 = 普通房是合法值, 不能再退回 15; Decode1 本身已保证落在 E1 宽度 (0..255)。
-        EnterSessionResult(
-            sessionId = Room.sessionId,                 // 房号: 客户端拿它到 op 87 的房屋缓存里找房
-            sessionType = sessionType,
-        ),
-        UserSimpleInfoResult(), SessionInfoResult(),
-        Unk113(),
-        PracticeRoomInfo(),
-        PracticeSelectMap(),
-    )
-    // 106×8 (sq=208~229)
-    repeat(8) { slot ->
-        c.send(PracticeSlotReady(slot))
-    }
-    // 每槽交错发送 [114, 104, 105, 103] (槽 7 无 103), 与真实线序一致
-    repeat(8) { slot ->
-        c.send(
-            PracticeSlot114(slot),
-            PracticeSlot104(slot),
-            PracticeSetPlayer(slot),
-        )
-        if (slot < 7) c.send(PracticeSlot103(slot = slot + 1, isAI = true, aiLevel = slot + 1, flag = 1))
-    }
-    // 以前抓包有发送背包内容，但是实验去掉也没事
-//    val user = c.users.firstOrNull()
-//    val bag = user?.items.orEmpty()
-//    val equips = user?.equips.orEmpty()
-//    val bomber = user?.bomber ?: 0
-//    val defaults = defaultUserInventoryItems(bomber)
-//    val inventory = inventoryEntries(defaults, bag, equips)
-//    c.send(UserInventory(listOf(inventory, inventory)))
-    c.send(WelcomeNotice())
+    sendRoomEntryChain(c)
 }

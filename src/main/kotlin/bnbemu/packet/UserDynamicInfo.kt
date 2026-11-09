@@ -21,10 +21,9 @@ import bnbemu.netty.PKT
 //   E1(count) + count × 43B 记录        count = 本机玩家数，有效 0..2
 //   （两个客户端单例都是 2 槽：CUserDynamicInfo = dword_993E70，
 //     CLadderInfo = dword_9982D0；getter 一律 `if (idx > 1) return 0`）
-//   本文件按 count=1 生成 44B，与两份真实抓包逐字节一致：
+//   单条记录 43B 与抓包完全一致：
 //     cap/chan_s2c_op20_46B_0.bin      (皮蛋会话) 第 29B = 0x5A → bomber 0 (Dao)
 //     cap/practice_s2c_op20_44B_0.bin  (宝宝会话) 第 29B = 0x5F → bomber 5 (Boz)
-//   其余 43B 完全一致。
 //
 // ---- 记录内字段表 (序号/偏移/宽度/落地位置) ----
 //   #   偏移 宽度 写入目标                        含义
@@ -60,28 +59,30 @@ import bnbemu.netty.PKT
 // ⚠️ 旧实现原样重放皮蛋版 (整个 44B blob)，于是 op 81 批次一到，
 //    客户端就把本机角色改回皮蛋 → 之后 C→S op 73 上报 `bomber=0`
 //    个人资料 / 纸娃娃 / op 198 的默认角色卡全部回退。所以第 12 项必须是当前角色。
-fun UserDynamicInfo(bomber: Int = 0, level: Int = 1) = PKT {
-    Encode1(1)          //   0  记录条数 count = 1 (单本机玩家)
-    Encode2(level)          //   1  #1  等级 (=1, 新账号; 抓包 a5 68 即 Encode2(1))
-    Encode1(0)          //   3  #2  天梯段位
-    Encode4(0)          //   4  #3  天梯数值 A
-    Encode1(0)          //   8  #4  天梯数值 E
-    Encode4(0)          //   9  #5  天梯数值 D
-    Encode1(0)          //  13  #6  天梯积分
-    Encode1(0)          //  14  #7  Lucci 上限倍率
-    Encode4(0)          //  15  #8  Lucci 金币值
-    Encode4(0)          //  19  #9  复合槽位 id
-    Encode1(0)          //  23  #10 未知
-    Encode4(0)          //  24  #11 装备/道具 id
-    Encode1(bomber)     //  28  #12 角色 ID (皮蛋=0 / 宝宝=5 …)
-    Encode2(0)          //  29  #13 未知
-    Encode1(0)          //  31  #14 未知
-    Encode1(0)          //  32  #15 未知
-    Encode2(0)          //  33  #16 字符串 (长度 0 = 空串)
-    Encode1(0)          //  35  #17 未知
-    Encode1(0)          //  36  #18 未知
-    Encode4(0)          //  37  #19 未知
-    Encode1(0)          //  41  #20 胜场
-    Encode1(0)          //  42  #21 负场
-    Encode1(0)          //  43  #22 场次统计第三项
+fun UserDynamicInfo(bomber: Int = 0, level: Int = 1, playerCount: Int = 1) = PKT {
+    Encode1(playerCount)          //   记录条数
+    repeat(playerCount) {
+        Encode2(level)          //   1  #1  等级 (=1, 新账号; 抓包 a5 68 即 Encode2(1))
+        Encode1(0)          //   3  #2  天梯段位
+        Encode4(0)          //   4  #3  天梯数值 A
+        Encode1(0)          //   8  #4  天梯数值 E
+        Encode4(0)          //   9  #5  天梯数值 D
+        Encode1(0)          //  13  #6  天梯积分
+        Encode1(0)          //  14  #7  Lucci 上限倍率
+        Encode4(0)          //  15  #8  Lucci 金币值
+        Encode4(0)          //  19  #9  复合槽位 id
+        Encode1(0)          //  23  #10 未知
+        Encode4(0)          //  24  #11 装备/道具 id
+        Encode1(bomber)     //  28  #12 角色 ID (皮蛋=0 / 宝宝=5 …)
+        Encode2(0)          //  29  #13 未知
+        Encode1(0)          //  31  #14 未知
+        Encode1(0)          //  32  #15 未知
+        Encode2(0)          //  33  #16 字符串 (长度 0 = 空串)
+        Encode1(0)          //  35  #17 未知
+        Encode1(0)          //  36  #18 未知
+        Encode4(0)          //  37  #19 未知
+        Encode1(0)          //  41  #20 胜场
+        Encode1(0)          //  42  #21 负场
+        Encode1(0)          //  43  #22 场次统计第三项
+    }
 }

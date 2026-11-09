@@ -242,8 +242,11 @@ class CharSelectSyncTest {
 
         val dao = body(UserDynamicInfo(0))
         val boz = body(UserDynamicInfo(5))
-        assertEquals(44, dao.size, "op 20 固定 44 字节")
-        assertEquals(44, boz.size, "op 20 固定 44 字节")
+        assertEquals(44, dao.size, "op 20 单人版固定 44 字节")
+        assertEquals(44, boz.size, "op 20 单人版固定 44 字节")
+
+        val twoPlayers = body(UserDynamicInfo(0, playerCount = 2))
+        assertEquals(87, twoPlayers.size, "op 20 双玩家版固定 87 字节")
 
         // 命名/绑定回归: op 20 = 整包 UserDynamicInfo, op 122 = 单值 UserDynamicInfoValue
         assertEquals(20, OpcodeManager.getSendOp(UserDynamicInfo(0)::class.java), "op 20 必须绑定 UserDynamicInfo")

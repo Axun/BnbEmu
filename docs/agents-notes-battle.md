@@ -156,3 +156,37 @@
          （case 0..13），驱动的是角色不是水泡。
        - 实现：`handler/room/BombKickThrowReq.kt` → `Room.onBombMove`（400ms 同动作去重 + 更新水泡位置/倒计时
          + 广播 op141）；`packet/room/BombKickThrow.kt` 。回归测试 `BombMoveTest.kt` 10 项
+- **对局结束回房间：S→C op 155 BackToRoom（2026-11-08 逆向定案，`packet/room/BackToRoom.kt`）**：
+    1. **客户端不会自己回房**。结果窗是纯本地 UI：`0x005597FD CheckResultDoc_AndShow` 每帧把 `doc+6520`
+       减 30，归零才调 `0x00558EE1` 装配弹窗；而 `doc+6520` 由 `0x00559F8B → 0x0053E181(delayMs-1500)`
+       一次性设置 —— **op150 的 delayMs 只决定「多久后弹结果窗」，与「多久后回房」无关**。
+       弹窗之后没有任何计时器关窗（`0x0046F38F` 只跑涨条动画），所以只发 169/150 会让客户端永久停在结果页。
+    2. **唯一出口**：全 `.text` 里能在游戏阶段（stage 13）改阶段的入口只有 `0x0054FC14` 末尾
+       `sub_68DC53(CStageManager, 12)`（`0x68DC53` 是全 exe 唯一的「请求切阶段」入口），
+       它的唯一调用者是局内分发器 `0x0055A4D8` 的 `case 155`：
+       `sub_67CDCE()` 为真（僵尸/团战）→ `0x0054A221` → 回 stage 11/20 并清 UI 子窗；否则 → `0x0054FC14` → 回 stage 12 房间。
+    3. **op 97 走不通**：op97 处理器 `0x5CDD15` 只挂在「选频道/房间」阶段虚表（`0x8AF0B4` 表 index 48）上，
+       局内分发器没有 97 分支，在 stage 13 收到会被静默丢弃（它接受的目标值仅 12/18/16/17，见 `0x4F748F`）。
+    4. **载荷**：`E1(chState)` + 固定 3 条 `{ E1 flag; flag!=0 → 3B 槽位状态{state,x,y} | flag==0 → E4 id + CRoomInfo(房名等) + 3B + E1 + Str + 用户列表 }`。
+       进入时客户端先本地清空 8 个槽位（`state&0xE3` 只清 0x1C，**保留 0x01/0x02 的房主位**；bomber/color/map=-1），
+       特殊模式再清 10 条频道记录。3 字节里的 `state` 与 op105 `Slot.meta[0]` 同一套（0x01 关闭 / **0x02 房主** / 0x04 准备）。
+       写入侧 `0x6865AC` 只用传入字节并自己重算 key/校验和，传什么都安全（`dword_A373C8` 只在**读回**校验失败时触发）。
+    5. **实机验证（2026-11-08 第一轮）**：只发 155 能回房间、AI 也还在，但
+       **「开始」按钮退化成「准备」= 房主位丢失** —— 因为旧实现把 3 条状态一律写 0，把槽 0 的 0x02 抹掉了。
+       现在 `BackToRoom` 默认按 `Room.slots[0..2].state` 下发（槽 0 = FLAG_CHIEF）。
+       另一条必修项：155 只把客户端「切回 stage 12」，房间对象/会话是空的 ——
+       `Room.backToRoom` 默认在 155 之后 `roomChainDelayMs`(400ms) 补推整条房间链
+       （`server/RoomEntryChain.kt`，与 C→S op 75 的回应同一串 87/83/4×2/113/100/108/106×8/114·104·105·103）。
+    6. **对局结束回房间弹 "InvalidLevelPlayGame" 并踢回大厅（2026-11-09 根因定案并修复）**：
+       - **现象**：从大厅进房间时等级正常（5级）不报错，但对局结束通过 `op 155 BackToRoom` 返回房间时弹出 `InvalidLevelPlayGame` 并被踢回大厅。
+       - **根因**：`CGameStage` 处理 `S→C op 150 GameResult` 的虚函数 `0x00559854`（此前 `CA.exe.c` 因 `control flows out of bounds` 漏反编译）在解析真人槽记录（`sub_541205`，`esi = doc + 244 * slot + 6648`）后：
+         · 用 `word[esi + 0x88]`（`+136`）调用 `sub_6E4AAD(CUserDynamicInfo, localPlayerIdx, level)` 无条件覆写本机玩家等级（`CUDI + 12*idx + 24`）；
+         · 用 `dword[esi + 0x84]`（`+132`）更新房间槽位对象（`edi + 0x6C`）及 `CUserMap`（`sub_4E03C1`）的玩家等级；
+         · 同段还用 `+84/+88/+100/+104` 更新 `CLadderInfo` 与房间槽天梯字段，用 `+240/+241/+242`（`0x6E4C72/0x6E4C8C/0x6E4CA6`）更新 `CUserDynamicInfo` 的胜/负/平场次。
+       - 旧 `GameResult.kt` 将 `+132` 和 `+136` 硬编码为 `0`，导致客户端一收到 `op 150` 就把 `CUserDynamicInfo` 里的玩家等级从 `5` 抹成 `0`；随后收到 `op 155` 重建 Stage 12 房间（`sub_525250`）时，`sub_67CAC3(1)` 等级门禁读出 `0 < 1` 触发 `InvalidLevelPlayGame` 并踢回大厅（而补推的 `sendRoomEntryChain` 延迟 400ms 且 `op 20` 只挂在 `CLobbyStage` 上，救不回来）。
+       - **修复**：`GameResult.kt` 中真人槽 `+132` 与 `+136` 改为写入 `(slot?.user?.level ?: 5).coerceAtLeast(1)`，`+240/+241/+242` 写入玩家胜/负/平场次。回归测试 `GameOverTest.testGameResultPreservesCustomPlayerLevelAndClampsZero`。
+    7. **时序/调参**：`Room.resultReturnDelayMs`（默认 3.5s，负数关闭自动发送）、
+       `Room.reenterRoomAfterBack`（默认 true）、`Room.roomChainDelayMs`（默认 400ms）。
+       聊天框调试命令（debugMode）：`/back`（155+房间链）、`/back raw`（只 155）、
+       `/back <s0> <s1> <s2>`（指定槽位状态字节，试房主位/准备位）、`/back chain`（只补房间链）、
+       `/backchain on|off`、`/backdelay <ms>`。回归测试 `BackToRoomTest.kt` 9 项。
