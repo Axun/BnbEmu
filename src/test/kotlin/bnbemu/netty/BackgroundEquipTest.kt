@@ -33,8 +33,12 @@ class BackgroundEquipTest {
     /** 装扮背景 710418 = 商城 "Slot background 418" (category 10 / Item/SlotDeco) */
     private val backgroundItemId = 710418
 
-    /** 复合槽位: 大类 9 (装扮/背景) 的子槽 1 → 9*24+1 = 217 (0xD9) */
-    private val backgroundSlot = 9 * EQUIP_SLOTS_PER_GROUP + 1
+    /**
+     * 复合槽位: 大类 9 (装扮/背景) 的子槽 4 → 9*24+4 = 220 (0xDC), 实测 C→S op 273 上报值。
+     * 子槽由 `sub_6580F2(category=10, targetCharId)` = targetCharId + 3 算出;
+     * 710418 的 targetCharId = 1 (背景) ⇒ 1 + 3 = 4。
+     */
+    private val backgroundSlot = 9 * EQUIP_SLOTS_PER_GROUP + 4
 
     private fun e1(v: Int) = byteArrayOf((v xor 0x5A).toByte())
 
@@ -112,7 +116,7 @@ class BackgroundEquipTest {
 
         assertEquals(
             backgroundItemId, user.equips[backgroundSlot],
-            "装扮背景 (槽位 0xD9/217) 必须记进装备槽, 不能被 MAX_EQUIP_SLOT 判成背包物品"
+            "装扮背景 (槽位 0xDC/220) 必须记进装备槽, 不能被 MAX_EQUIP_SLOT 判成背包物品"
         )
         assertTrue(
             user.items.none { it.itemId == backgroundItemId },
@@ -144,8 +148,8 @@ class BackgroundEquipTest {
             val bg = entries.firstOrNull { it.first == backgroundItemId }
             assertNotNull(bg, "op 198 必须回放已装备的背景 (否则客户端清空重建后背景被取消装备)")
             assertEquals(
-                1, bg!!.second,
-                "op 198 的 slot 只放子槽位 (复合槽位 217 % 24 = 1), 客户端按 category 还原大类"
+                4, bg!!.second,
+                "op 198 的 slot 只放子槽位 (复合槽位 220 % 24 = 4), 客户端按 category 还原大类"
             )
             assertTrue(
                 entries.count { it.first == backgroundItemId } == 1,
