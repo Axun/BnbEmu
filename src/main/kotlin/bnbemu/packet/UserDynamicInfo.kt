@@ -60,9 +60,9 @@ import bnbemu.netty.PKT
 // ⚠️ 旧实现原样重放皮蛋版 (整个 44B blob)，于是 op 81 批次一到，
 //    客户端就把本机角色改回皮蛋 → 之后 C→S op 73 上报 `bomber=0`
 //    个人资料 / 纸娃娃 / op 198 的默认角色卡全部回退。所以第 12 项必须是当前角色。
-fun UserDynamicInfo(bomber: Int = 0) = PKT {
+fun UserDynamicInfo(bomber: Int = 0, level: Int = 1) = PKT {
     Encode1(1)          //   0  记录条数 count = 1 (单本机玩家)
-    Encode2(1)          //   1  #1  等级 (=1, 新账号; 抓包 a5 68 即 Encode2(1))
+    Encode2(level)          //   1  #1  等级 (=1, 新账号; 抓包 a5 68 即 Encode2(1))
     Encode1(0)          //   3  #2  天梯段位
     Encode4(0)          //   4  #3  天梯数值 A
     Encode1(0)          //   8  #4  天梯数值 E

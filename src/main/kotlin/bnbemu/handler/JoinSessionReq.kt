@@ -108,7 +108,7 @@ val JoinSessionReq = PKTHandler { c ->
         RoomList(), ShopCatalog(),
         Unk204(), Unk66(), ChannelsGameState(tailOnes = 2),
         // ⚠️ op 20 (UserDynamicInfo) 是本機玩家動態檔案快照, 第 12 欄 = 角色 ID, 必須按當前角色生成!
-        UserDynamicInfo(bomber), ShopVersion(), Unk247(), WelcomeNotice(),
+        UserDynamicInfo(bomber, c.users.firstOrNull()?.level ?: 5), ShopVersion(), Unk247(), WelcomeNotice(),
         UserInventoryInfo(),
         JoinSessionResult(), SessionList(),
     )

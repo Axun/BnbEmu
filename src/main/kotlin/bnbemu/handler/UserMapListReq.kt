@@ -2,6 +2,7 @@ package bnbemu.handler
 
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.SessionList
+import bnbemu.packet.UserMapEntry
 import bnbemu.packet.UserMapInfo
 
 /**
@@ -12,8 +13,9 @@ import bnbemu.packet.UserMapInfo
  * 2. 由 CLobbyStage 发起。空载荷包。
  */
 val UserMapListReq = PKTHandler { c ->
+    val user = c.users.firstOrNull()
     c.send(
-        UserMapInfo(),
+        UserMapInfo(UserMapEntry(level = user?.level ?: 5)),
         SessionList(),
     )
 }
