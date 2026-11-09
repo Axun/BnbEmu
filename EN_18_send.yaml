@@ -30,7 +30,7 @@ AutoJoinSessionResult: 82
 EnterSessionResult: 83
 SessionDetailInfo: 84
 CreatePracticeSessionResult: 89
-SetPlayer: 105
+SetPlayer: 100
 SetSlotState: 107
 # C->S op 86 SelectColorReq 的应答 = S->C op 104 (CA.exe CSlotStage 0x4F480C / CPrepareStage 0x52A949 的 case 104,
 # 处理函数 0x4EFB48 / 0x51F196 会清除等待锁 6)。旧表沿袭 TW_5 写成 108 是错的: 108 实为 SelectMap。

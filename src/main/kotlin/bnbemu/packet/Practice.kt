@@ -2,6 +2,8 @@ package bnbemu.packet
 
 import bnbemu.netty.PKT
 import bnbemu.packet.room.SelectMap
+import bnbemu.packet.room.SetPlayer
+import bnbemu.server.User
 import bnbemu.server.Room
 import bnbemu.server.bomber
 
@@ -40,13 +42,12 @@ fun Unk113() = PKT {
     EncodeBuffer(EN_OP113)
 }
 
-// ---- op 100 房间设置版 (78B) / 游戏开始版 (77B) — 两版仅 1 处字节差 ----
-fun PracticeRoomInfo() = PKT {
-    EncodeBuffer(EN_OP100_ROOM)
-}
-fun PracticeStartInfo() = PKT {
-    EncodeBuffer(EN_OP100_START)
-}
+// ---- op 100 房间设置版 (78B) / 游戏开始版 (77B) — 官方命名 MakeSetPlayerPacket / SetPlayer ----
+fun PracticeRoomInfo(user: User? = null, level: Int = user?.level ?: 5) =
+    SetPlayer(slotId = 0, user = user, level = level, isStart = false)
+
+fun PracticeStartInfo(user: User? = null, level: Int = user?.level ?: 5) =
+    SetPlayer(slotId = 0, user = user, level = level, isStart = true)
 
 // ---- op 108 练习房开局选图回应 (8B): E2(result=0) E2(themeId=0) E4(mapId=172) ----
 //    CA.exe CPrepareStage::OnPacket (0x52A949) 的 case 108 = 0x51EFE0 是选图结果处理;

@@ -81,6 +81,7 @@ val StartGameReq = PKTHandler { c ->
         .ifEmpty { (0..7).toList() }
     println("StartGame. activeSlots=$activeSlots (AI=${activeSlots.count { Room.slots[it].isAI }})")
 
+    val user = c.users.firstOrNull()
     c.send(
         PracticeAiLevel(),
         GameStartMapInfo(
@@ -91,7 +92,7 @@ val StartGameReq = PKTHandler { c ->
             activeSlots = activeSlots,
             spawnPositions = randomSpawnPositions(),
         ),
-        PracticeStartInfo(),
+        PracticeStartInfo(user = user),
         PracticeBoard(),
     )
 

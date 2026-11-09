@@ -12,22 +12,6 @@ internal val EN_OP113 = """
     a5 69
 """.toBA()
 
-internal val EN_OP100_ROOM = """
-    5a 96 ca 4f ba 5b 5a 5a 5a a5 a0 6f 5a a5 6d f0
-    ae 35 f3 5a 5a 96 ca 53 95 5a 96 ca 53 95 a5 68
-    96 ca 53 95 96 ca 53 95 96 ca 53 95 96 ca 53 95
-    5a 96 ca 53 95 a5 69 a5 69 a5 69 a5 69 96 ca 53
-    95 52 5a a5 69 5a 5a a5 5a 96 ca 53 95 5a
-""".toBA()
-
-internal val EN_OP100_START = """
-    5a 96 ca 4f ba 5a 5a 5a 5a a0 6d 5a a5 6d f0 ae
-    35 f3 5a 5a 96 ca 53 95 5a 96 ca 53 95 a5 68 96
-    ca 53 95 96 ca 53 95 96 ca 53 95 96 ca 53 95 5a
-    96 ca 53 95 a5 69 a5 69 a5 69 a5 69 96 ca 53 95
-    52 5a a5 69 5a 5a a5 5a 96 ca 53 95 5a
-""".toBA()
-
 internal val EN_OP111 = """
     5a
 """.toBA()
