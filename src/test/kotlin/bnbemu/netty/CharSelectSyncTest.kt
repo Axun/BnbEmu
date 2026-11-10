@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test
 import bnbemu.handler.JoinSessionReq
 import bnbemu.handler.UserInfoReq
 import bnbemu.handler.sendUserInfo
+import bnbemu.packet.DEFAULT_BAG_LEVEL
 import bnbemu.packet.ItemDef
 import bnbemu.packet.UserDynamicInfo
 import bnbemu.packet.UserDynamicInfoValue
@@ -240,12 +241,14 @@ class CharSelectSyncTest {
             return ByteArray(out.readableBytes()).also { out.readBytes(it) }
         }
 
-        val dao = body(UserDynamicInfo(0))
-        val boz = body(UserDynamicInfo(5))
+        // 下面三份是「历史抓包回放基准」：原服在 op 20 里写 0，等级由后续 op 413 抬到 50。
+        // 生产默认值已改成 50，回放时必须显式传 0 才能与 cap/*.bin 逐字节一致。
+        val dao = body(UserDynamicInfo(0, bagLevel = 0))
+        val boz = body(UserDynamicInfo(5, bagLevel = 0))
         assertEquals(44, dao.size, "op 20 单人版固定 44 字节")
         assertEquals(44, boz.size, "op 20 单人版固定 44 字节")
 
-        val twoPlayers = body(UserDynamicInfo(0, playerCount = 2))
+        val twoPlayers = body(UserDynamicInfo(0, bagLevel = 0, playerCount = 2))
         assertEquals(87, twoPlayers.size, "op 20 双玩家版固定 87 字节")
 
         // 命名/绑定回归: op 20 = 整包 UserDynamicInfo, op 122 = 单值 UserDynamicInfoValue
@@ -256,6 +259,17 @@ class CharSelectSyncTest {
         assertEquals(listOf(28), diff, "不同角色之间只能差角色字段本身")
         assertEquals(0, (dao[28].toInt() and 0xFF) xor 0x5A)
         assertEquals(5, (boz[28].toInt() and 0xFF) xor 0x5A)
+
+        // 生产默认必须保住背包等级 (op 20 第 13 项 = CUDI + 3s + 123)；
+        // 写成 0 会让容量 = 8×0 = 0，商城购买恒报 "Your item bag is full."。
+        val prodDefault = body(UserDynamicInfo(0))
+        val rawDefault = Unpooled.wrappedBuffer(prodDefault)
+        rawDefault.skipBytes(29)
+        assertEquals(
+            DEFAULT_BAG_LEVEL,
+            rawDefault.readUnsignedShort() xor 0xA569,
+            "op 20 默认必须带上背包等级"
+        )
 
         File("cap/chan_s2c_op20_46B_0.bin").takeIf { it.isFile }?.let {
             val raw = it.readBytes()

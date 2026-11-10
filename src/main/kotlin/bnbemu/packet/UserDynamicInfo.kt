@@ -39,7 +39,7 @@ import bnbemu.netty.PKT
 //   10  23   E1   CUDI + 3s + 75                   未知
 //   11  24   E4   CUDI + 3s + 87                   装备/道具 id (特性判定 sub_6E5182 → sub_4DA374)
 //   12  28   E1   CUDI + 3s + 111                  **角色(bomber) id**，经 CBomberMan 归一化；==13 另置标记
-//   13  29   E2   CUDI + 3s + 123                  未知
+//   13  29   E2   CUDI + 3s + 123                  **背包等级**，见下方说明
 //   14  31   E1   CUDI + 3s + 129                  未知
 //   15  32   E1   CUDI + 3s + 135                  未知
 //   16  33   Str  CUDI + 6s + 162 (std::string)    字符串，抓包为空串
@@ -59,7 +59,29 @@ import bnbemu.netty.PKT
 // ⚠️ 旧实现原样重放皮蛋版 (整个 44B blob)，于是 op 81 批次一到，
 //    客户端就把本机角色改回皮蛋 → 之后 C→S op 73 上报 `bomber=0`
 //    个人资料 / 纸娃娃 / op 198 的默认角色卡全部回退。所以第 12 项必须是当前角色。
-fun UserDynamicInfo(bomber: Int = 0, level: Int = 1, playerCount: Int = 1) = PKT {
+//
+// ---- 第 13 项 = 背包等级 (2026-11-10 反汇编 CA.exe 钉死) ----
+//   op 20 解析函数 loc_6E6109 里 0x6E6233 `call 0x78F090` (Decode2) 之后紧跟
+//   0x6E623C `call 0x663F28`，即 sub_663F28(CUDI, playerIdx, v) →
+//   `this + 3*playerIdx + 123` (dword 下标) = 字节 492 = dyn+0x1EC。
+//   同一个字段被 sub_651445 读出，供 CUserInventory::GetBagSize (0x659361)
+//   算 `容量 = 8 × 背包等级`；IsBagFull (0x659520) 判定 `已用 >= 容量`。
+//   ⇒ 本包写 0 会让容量变 0，空背包也判满，商城购买恒弹
+//     "Your item bag is full. Purchase an item bag?"。
+//
+//   等级本来只由 S→C op 413 的 50 条 10007 槽位逐条 +1 抬到 50 (见 UserInventoryInfo.kt)。
+//   sub_663F28 的调用点 0x570079 会先判「当前等级 < skinId(50)」才写 min(skinId, 当前+1)，
+//   即上限钳制到 50，所以本包先写 50 不会被 op 413 累加成 100。
+//   ⇒ 默认就填 DEFAULT_BAG_LEVEL：任何单独下发 op 20 的路径都不会把容量清成 0，
+//     不必再依赖「后面必须跟一发 op 413」这个隐含约定。
+const val DEFAULT_BAG_LEVEL = 50
+
+fun UserDynamicInfo(
+    bomber: Int = 0,
+    level: Int = 1,
+    playerCount: Int = 1,
+    bagLevel: Int = DEFAULT_BAG_LEVEL,
+) = PKT {
     Encode1(playerCount)          //   记录条数
     repeat(playerCount) {
         Encode2(level)          //   1  #1  等级 (=1, 新账号; 抓包 a5 68 即 Encode2(1))
@@ -74,7 +96,7 @@ fun UserDynamicInfo(bomber: Int = 0, level: Int = 1, playerCount: Int = 1) = PKT
         Encode1(0)          //  23  #10 未知
         Encode4(0)          //  24  #11 装备/道具 id
         Encode1(bomber)     //  28  #12 角色 ID (皮蛋=0 / 宝宝=5 …)
-        Encode2(0)          //  29  #13 未知
+        Encode2(bagLevel)   //  29  #13 背包等级 (默认 50; 抓包回放需显式传 0)
         Encode1(0)          //  31  #14 未知
         Encode1(0)          //  32  #15 未知
         Encode2(0)          //  33  #16 字符串 (长度 0 = 空串)

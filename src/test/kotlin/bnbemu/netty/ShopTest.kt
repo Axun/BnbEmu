@@ -14,6 +14,7 @@ import bnbemu.handler.UserInfoReq
 import bnbemu.handler.sendUserInfo
 import bnbemu.handler.room.ShopToRoomReq
 import bnbemu.packet.ClientStage
+import bnbemu.packet.DEFAULT_BAG_LEVEL
 import bnbemu.packet.PracticeSetSlotAI
 import bnbemu.packet.bomberCharCard
 import bnbemu.server.Room
@@ -449,6 +450,42 @@ class ShopTest {
         } finally {
             Room.slots[0].user = prevUser
             Room.slots[0].bomber = prevBomber
+            ch.finishAndReleaseAll()
+        }
+    }
+
+    @Test
+    fun testShopReturnPreservesBagLevel() {
+        // 回归: op 20 第 13 项 = 背包等级 (CA.exe 0x6E623C → sub_663F28 → CUDI + 3s + 123)。
+        // 从商城返回房间时本路径单独下发 op 20、后面没有 op 413，若该项写 0，
+        // 背包容量 = 8×0 = 0，IsBagFull 恒真，再进商城买任何东西都报 "Your item bag is full."。
+        // 现在由 UserDynamicInfo 的默认值 DEFAULT_BAG_LEVEL 保证，本用例端到端锁住它；
+        // 默认值被改回 0，或本路径被改成显式传 0，都会在这里失败。
+        val cs = ClientSocket()
+        val ch = EmbeddedChannel(cs)
+        try {
+            cs.stage = ClientStage.Shop.value
+            cs.shopReturnStage = ClientStage.Room.value
+            with(ShopToRoomReq) {
+                Unpooled.wrappedBuffer(
+                    byteArrayOf(0xA5.toByte(), 0x69, 0x96.toByte(), 0xCA.toByte(), 0x53, 0x95.toByte())
+                ).handle(cs)
+            }
+            val op20 = generateSequence { ch.readOutbound<PKT>() }
+                .firstOrNull { OpcodeManager.getSendOp(it::class.java) == 20 }
+            assertNotNull(op20, "商城返回房间必须下发 op 20 回灌角色")
+
+            val out = Unpooled.buffer()
+            op20!!.encode(SendPacketBase(out, 3))
+            val body = ByteArray(out.readableBytes()).also { out.readBytes(it) }
+            val raw = Unpooled.wrappedBuffer(body)
+            raw.skipBytes(29)
+            assertEquals(
+                DEFAULT_BAG_LEVEL,
+                raw.readUnsignedShort() xor 0xA569,
+                "op 20 第 13 项必须保住背包等级，否则商城购买恒报背包已满"
+            )
+        } finally {
             ch.finishAndReleaseAll()
         }
     }
