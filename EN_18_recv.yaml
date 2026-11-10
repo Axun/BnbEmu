@@ -67,7 +67,6 @@ AskStringTable: 215
 UserItemListReq: 264
 AskPackageMap: 220
 CartListReq: 221
-DigiQAuthorizationReq: 224
 # 真實伺服器在用、但尚未對應 Handler 的 opcode (cap/*.pcap 逆向)
 # 實作對應 Handler 後把 Unk_N 改成 Handler 欄位名即可綁定
 AskFirstSession: 0

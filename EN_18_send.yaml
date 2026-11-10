@@ -74,7 +74,6 @@ FxStockInit: 200
 UserInventory: 198
 UserItemList: 320
 StringTableInit: 205
-DigiQAuthorizationResult: 209
 DynamicMapInfo: 210
 PackageMapInit: 213
 CartList: 214
