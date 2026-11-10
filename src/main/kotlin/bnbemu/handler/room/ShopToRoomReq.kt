@@ -4,7 +4,13 @@ import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ClientStage
+import bnbemu.packet.ItemDef
+import bnbemu.packet.UserDynamicInfo
+import bnbemu.packet.UserDynamicInfoValue
+import bnbemu.packet.UserItemUpdate
+import bnbemu.packet.bomberCharCard
 import bnbemu.packet.isRoomStage
+import bnbemu.server.lucci
 import bnbemu.server.sendRoomEntryChain
 
 /**
@@ -33,11 +39,37 @@ import bnbemu.server.sendRoomEntryChain
  *
  * 这里把服务端舞台状态同步成房间：万一别的分支改动过 `c.stage`，以客户端实际到达的舞台为准，
  * 保证下一次「房间内进商城」仍能正确返回房间。
+ *
+ * ## 角色回灌（修复「进商城返回后角色变宝宝」）
+ * C→S op 73 上报的是客户端 `CUserDynamicInfo` 单例里的角色字段
+ * (CA.exe `sub_4F881E` → `sub_6E50F0` 读 CUDI + 12*slot + 444)，而 [sendRoomEntryChain]
+ * 只重设房间槽位 (CFxContext / 槽位 UI)，**从不写 CUserDynamicInfo**。两份角色存储互不相干，
+ * 抓包里 op 105 的角色值 5 只是 AI 槽默认值，不能据此推断客户端角色被改。
+ *
+ * 从商城返回时客户端仍带着商城舞台留下的角色值；房间链不会纠正它，于是打开名片时 op 73
+ * 把旧值上报回来，`UserInfoReq` 写进槽位，`sendUserInfo` 又优先读槽位 → 名片显示该值。
+ * 首次进房不出问题，是因为进房前刚走过进频道握手 (op 81 → `JoinSessionReq`)，那批包里的
+ * op 20 已把 CUDI 写成正确角色；op 80 路径没有这一步。
+ *
+ * ⇒ 只需在重放房间链之后按 `user.bomber` 补发 op 20，把权威角色写回客户端 CUDI；
+ *   之后客户端上报、服务端同步、名片生成自然一致，无需进商城前快照、忽略上报或重设槽位。
+ *   op 20 会把 Lucci 字段刷成 0，末尾紧跟 op 122 补回当前金币。
  */
 val ShopToRoomReq = PKTHandler { c ->
     val sessionShort = if (readableBytes() >= 2) Decode2 else 0
     val sessionId = if (readableBytes() >= 4) Decode4 else 0
+
+    val user = c.users.firstOrNull()
+    val bomber = user?.bomber ?: 0
+
     c.stage = if (isRoomStage(c.shopReturnStage)) c.shopReturnStage else ClientStage.Room.value
     println("[ShopToRoomReq] op80 客户端已切回房间舞台 stage=${c.stage} | sessionShort=$sessionShort sessionId=$sessionId")
-    sendRoomEntryChain(c);
+    sendRoomEntryChain(c)
+
+    // 按服务端权威角色回灌客户端 CUserDynamicInfo 的角色字段 (op 20 第 12 项)，
+    // 它直接决定下一次 C→S op 73 的上报值；op 122 补回被 op 20 刷成 0 的 Lucci。
+    c.send(
+        UserDynamicInfo(bomber, user?.level ?: 5),
+        UserDynamicInfoValue(0, c.lucci),
+    )
 }

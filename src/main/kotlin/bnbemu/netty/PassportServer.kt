@@ -71,8 +71,22 @@ import java.util.zip.Adler32
  *        [userId: u32 LE (帳號數值，如 7215 / 7307)] +
  *        [charName: String (遊戲角色名，如 "ffdf")] +
  *        [suffix: 65 bytes (固定尾部欄位，含 u32 5000)]
+ *    - C→S 0x000D (Logout / 登出)：
+ *        [passportId: String ("NGP" + username)]  與 0x002D 同構，實測樣本明文 20B = "NGPdffdff"
+ *    - S→C 0x000E (Logout Reply)：
+ *        [returnCode: u32 LE (0=成功)]  沿用 0x000C / 0x002E 的開頭欄位
  *
- * 6. 附註：
+ * 6. 0x000D / 0x000E 命令號依據 (2026-11-10)：
+ *    - 實測客戶端點「登出」時送出 cmd 0x000D，容器 flags=0x02 (PCBC 加密)，解密後為單一
+ *      UTF-16LE 字串 "NGPdffdff"（即 passportId），與 0x002D 的 target 格式完全一致。
+ *    - nmconew.dll @0x1004C396 起依序註冊命令常數 push 0x0B / 0x0C / 0x0D / 0x0E / 0x2D / 0x2E
+ *      （每個常數後接一組物件建構 + 註冊呼叫），與已知的 0x000B→0x000C、0x002D→0x002E
+ *      請求/回應成對規律一致，故 0x000D 的回應為 0x000E。
+ *    - ⚠️ C→S 加密幀的 checksum 欄位與標準 Adler-32(明文) / Adler-32(密文) 皆不符（0x002D 抓包
+ *      實測 0xEB2970D9、0x000D 實測 0xEB2970D7），推測客戶端另有私有算法或沿用模板值；
+ *      伺服器一律跳過不校驗。S→C 幀則嚴格等於 Adler-32(payload)，已由 replay_passport.py 逐位元組斷言。
+ *
+ * 7. 附註：
  *    - 3838 埠的 op 2 票據 (36B) 與 passport 回應 4B 會話值的映射關係未考證（模擬器不驗證票據，無影響）。
  */
 object PassportServer {
@@ -102,6 +116,30 @@ object PassportServer {
 
     @Volatile
     internal var lastAccount: PassportAccount = PassportAccount("kcworms1", "ffdf", 7215)
+
+    /** 一次成功的 passport 登入會話 (0x000B 登記 / 0x000D 登出時移除) */
+    data class PassportSession(
+        val passportId: String,
+        val account: PassportAccount,
+        val loginTimeMillis: Long = System.currentTimeMillis()
+    )
+
+    /** 線上 passport 會話表；key 用 lowercase 以容忍客戶端大小寫差異 */
+    val SESSIONS = ConcurrentHashMap<String, PassportSession>()
+
+    /** 0x000B 登入成功後登記會話 (同一帳號重複登入直接覆蓋舊會話) */
+    fun openSession(account: PassportAccount): PassportSession {
+        val passportId = "NGP${account.username}"
+        val session = PassportSession(passportId, account)
+        SESSIONS[passportId.lowercase()] = session
+        return session
+    }
+
+    /** 0x000D 登出：移除並回傳會話；未知/重複登出回 null (客戶端仍收到成功碼) */
+    fun closeSession(passportId: String): PassportSession? =
+        if (passportId.isBlank()) null else SESSIONS.remove(passportId.lowercase())
+
+    fun isOnline(passportId: String): Boolean = SESSIONS.containsKey(passportId.lowercase())
 
     // cmd 0x000B 成功回應 (86B, login.pcap s0: 帳號 kcworms1) - 保留常量供回歸與參照
     internal val REPLY_0C = buildReply0C(0, "nmco_session", "NGPkcworms1")
@@ -264,6 +302,16 @@ object PassportServer {
         return buildFrame(0x002E, buf.array())
     }
 
+    /**
+     * 動態構造 S→C 0x000E (Logout 回應)。
+     * 與 0x000C / 0x002E 一致：明文容器 + u32 LE returnCode 開頭 (0 = 成功)。
+     */
+    fun buildReply0E(returnCode: Int = 0): ByteArray {
+        val buf = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+        buf.putInt(returnCode)
+        return buildFrame(0x000E, buf.array())
+    }
+
     data class LoginRequest(val username: String, val password: String)
 
     /**
@@ -294,29 +342,30 @@ object PassportServer {
     }
 
     /**
-     * 解析 C→S 0x002D (Session Query 請求)
+     * 解析「僅含單一 UTF-16LE 字串」的 C→S 命令容器 (0x002D / 0x000D 共用)。
+     * 0x18 頭部讀完後，依 flags bit1 決定是否 PCBC 解密，再解出字串。
+     * 注意：C→S 的 checksum 欄位不校驗 (見類別註釋第 6 點)，僅跳過。
      */
-    fun parseSessionQueryReq(buf: ByteBuf): String? {
+    private fun parseSingleStringReq(buf: ByteBuf): String? {
         if (buf.readableBytes() < 20) return null
         val magic = buf.readByte().toInt() and 0xFF
         if (magic != 0x18) return null
-        val contLen = buf.readUnsignedMedium()
+        buf.readUnsignedMedium()                        // container length
         val flags = buf.readByte().toInt() and 0xFF
-        val uncompLen = buf.readUnsignedMedium()
+        buf.readUnsignedMedium()                        // uncompressed length
         val key = buf.readInt()
-        val checksum = buf.readInt()
+        buf.readInt()                                   // checksum (C→S 不校驗)
 
-        val cipherLen = buf.readableBytes()
-        val cipherBytes = ByteArray(cipherLen).apply { buf.readBytes(this) }
-        val plainBytes = if (flags and 0x02 != 0) {
-            decryptPcbc(cipherBytes, key)
-        } else {
-            cipherBytes
-        }
-
-        val plainBuf = ByteBuffer.wrap(plainBytes).order(ByteOrder.LITTLE_ENDIAN)
-        return decodeStr(plainBuf)
+        val cipherBytes = ByteArray(buf.readableBytes()).apply { buf.readBytes(this) }
+        val plainBytes = if (flags and 0x02 != 0) decryptPcbc(cipherBytes, key) else cipherBytes
+        return decodeStr(ByteBuffer.wrap(plainBytes).order(ByteOrder.LITTLE_ENDIAN))
     }
+
+    /** 解析 C→S 0x002D (Session Query 請求) -> "NGP" + username */
+    fun parseSessionQueryReq(buf: ByteBuf): String? = parseSingleStringReq(buf)
+
+    /** 解析 C→S 0x000D (Logout 請求) -> passportId ("NGP" + username) */
+    fun parseLogoutReq(buf: ByteBuf): String? = parseSingleStringReq(buf)
 
     fun start() {
         if (!isEN) return
@@ -343,9 +392,9 @@ object PassportServer {
 }
 
 // 幀: [len:u16 BE][cmd:u16 BE][payload: len bytes]
-private class PassportFrame(val cmd: Int, val payload: ByteBuf)
+internal class PassportFrame(val cmd: Int, val payload: ByteBuf)
 
-private class PassportDecoder : ByteToMessageDecoder() {
+internal class PassportDecoder : ByteToMessageDecoder() {
     override fun decode(ctx: ChannelHandlerContext, buf: ByteBuf, out: MutableList<Any>) {
         while (buf.readableBytes() >= 2) {
             val len = buf.getUnsignedShort(buf.readerIndex())
@@ -358,7 +407,7 @@ private class PassportDecoder : ByteToMessageDecoder() {
 }
 
 @ChannelHandler.Sharable
-private object PassportHandler : SimpleChannelInboundHandler<PassportFrame>() {
+internal object PassportHandler : SimpleChannelInboundHandler<PassportFrame>() {
     override fun channelRead0(ctx: ChannelHandlerContext, frame: PassportFrame) {
         val hexOp = "0x${frame.cmd.toString(16).padStart(4, '0').uppercase()}"
         if (debugMode) {
@@ -385,6 +434,7 @@ private object PassportHandler : SimpleChannelInboundHandler<PassportFrame>() {
                     )
                 }
                 PassportServer.lastAccount = account
+                PassportServer.openSession(account)
 
                 PassportServer.buildReply0C(
                     returnCode = 0,
@@ -405,6 +455,16 @@ private object PassportHandler : SimpleChannelInboundHandler<PassportFrame>() {
                     userId = account.userId,
                     charName = account.charName
                 )
+            }
+            0x000D -> {
+                val target = PassportServer.parseLogoutReq(frame.payload) ?: ""
+                val closed = PassportServer.closeSession(target)
+                if (closed != null) {
+                    println("[Passport] 使用者登出: 帳號=${closed.account.username}, 角色=${closed.account.charName}, 剩餘線上=${PassportServer.SESSIONS.size}")
+                } else {
+                    println("[Passport] 使用者登出: 目標=$target (無對應線上會話，仍回成功; 目前線上=${PassportServer.SESSIONS.keys})")
+                }
+                PassportServer.buildReply0E(0)
             }
             else -> {
                 if (debugMode) println("[Passport] $hexOp 未知命令, 忽略")

@@ -13,6 +13,7 @@ import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.PermissionInfo
 import bnbemu.packet.ChangeStage
 import bnbemu.packet.ClientStage
+import bnbemu.server.PlayerCharacter
 import bnbemu.server.User
 import org.tinylog.kotlin.Logger
 
@@ -26,9 +27,11 @@ val OnConnEstablished = PKTHandler { c ->
             val userId = Decode4
             val userReserved = if (readableBytes() >= 4) Decode4 else 0
 
-            c.users.add(
-                User(c, userId, name)
-            )
+            // 读取初始角色状态。首次登录第一次读取就在这里
+            val user = User(c, userId, name)
+            PlayerCharacter.of(userId)?.let { user.bomber = it }
+            PlayerCharacter.set(userId, user.bomber)
+            c.users.add(user)
         }
 
         // 8B 校验码 (00 00 00 00 71 B1 85 89)

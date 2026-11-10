@@ -10,8 +10,16 @@ import bnbemu.packet.EnterShopStage
 import bnbemu.handler.shop.EnterShopReq
 import bnbemu.handler.StageInitReq
 import bnbemu.handler.StageStateSyncReq
+import bnbemu.handler.UserInfoReq
+import bnbemu.handler.sendUserInfo
 import bnbemu.handler.room.ShopToRoomReq
 import bnbemu.packet.ClientStage
+import bnbemu.packet.PracticeSetSlotAI
+import bnbemu.packet.bomberCharCard
+import bnbemu.server.Room
+import bnbemu.server.User
+import bnbemu.server.bomber
+import bnbemu.server.setBomber
 
 class ShopTest {
 
@@ -366,6 +374,81 @@ class ShopTest {
             assertNotNull(pkt)
             assertEquals(ClientStage.Lobby.value, readStageId(pkt!!))
         } finally {
+            ch.finishAndReleaseAll()
+        }
+    }
+
+    @Test
+    fun testOp103PacketNameIsRegistered() {
+        // 改名后 EN_18_send.yaml 的 key 必须与函数名一致, 否则 OpcodeManager 扫不到 op 103
+        assertEquals(103, OpcodeManager.getSendOp(PracticeSetSlotAI(1)::class.java))
+    }
+
+    @Test
+    fun testShopReturnRestoresCharacterOnClient() {
+        // 行为级回归: 返回房间必须把服务端权威角色回灌到客户端 CUserDynamicInfo，
+        // 否则客户端带着商城舞台残留的角色值打开名片，名片就会显示错误角色。
+        // 断言的是「名片最终显示的角色」，不是快照 / 忽略上报 / 重设槽位等实现细节。
+        val cs = ClientSocket()
+        val ch = EmbeddedChannel(cs)
+        val userId = 9310
+        val chosen = 7 // Plunk, 既不是默认皮蛋(0) 也不是抓包基准的宝宝(5)
+        val prevUser = Room.slots[0].user
+        val prevBomber = Room.slots[0].bomber.toInt()
+
+        fun bodyOf(pkt: PKT): ByteArray {
+            val out = Unpooled.buffer()
+            pkt.encode(SendPacketBase(out, 3))
+            return ByteArray(out.readableBytes()).also { out.readBytes(it) }
+        }
+        fun e1(v: Int) = byteArrayOf((v xor 0x5A).toByte())
+
+        val user = User(cs, userId, "tester")
+        cs.users += user
+        user.setBomber(chosen)
+        Room.slots[0].user = user
+        Room.slots[0].bomber = chosen
+
+        try {
+            // 模拟客户端 CUserDynamicInfo 里残留的商城角色值 (宝宝 5)，与服务端权威角色不一致
+            var clientCudiBomber = 5
+            cs.stage = ClientStage.Shop.value
+            cs.shopReturnStage = ClientStage.Room.value
+
+            // 返回房间 (C→S op 80)
+            with(ShopToRoomReq) {
+                Unpooled.wrappedBuffer(
+                    byteArrayOf(0xA5.toByte(), 0x69, 0x96.toByte(), 0xCA.toByte(), 0x53, 0x95.toByte())
+                ).handle(cs)
+            }
+            val pkts = generateSequence { ch.readOutbound<PKT>() }.toList()
+            val byOp = pkts.groupBy { OpcodeManager.getSendOp(it::class.java) }
+
+            // 客户端只会按收到的 op 20 更新 CUserDynamicInfo；没有 op 20、或回灌值不对，
+            // 它就仍带着商城残留的角色值，后续名片必然显示错误角色。
+            byOp[20].orEmpty().firstOrNull()?.let { op20 ->
+                clientCudiBomber = (bodyOf(op20)[28].toInt() and 0xFF) xor 0x5A
+            }
+
+            // 打开名片: 客户端上报 CUDI 里的角色，服务端同步后弹名片 (op 66 → sendUserInfo)
+            with(UserInfoReq) { Unpooled.wrappedBuffer(e1(1) + e1(clientCudiBomber)).handle(cs) }
+            sendUserInfo(cs, 0)
+
+            val profile = generateSequence { ch.readOutbound<PKT>() }
+                .firstOrNull { OpcodeManager.getSendOp(it::class.java) == 73 }
+            assertNotNull(profile, "必须下发 S→C op 73 UserInfoResult")
+            val hex = bodyOf(profile!!).joinToString("") { "%02x".format(it) }
+            val expectedCard = bomberCharCard(chosen).first
+            // 角色卡条目 = Encode4(itemId) + Encode1(slot 15)
+            val cardHex = "%08x".format(expectedCard xor 0x96CA5395.toInt()) + "55"
+            assertTrue(hex.contains(cardHex), "名片角色卡必须是 Plunk (item $expectedCard @ slot 15)")
+            assertFalse(
+                hex.contains("%08x".format(5 xor 0x96CA5395.toInt()) + "55"),
+                "名片不能再显示宝宝 (item 5)"
+            )
+        } finally {
+            Room.slots[0].user = prevUser
+            Room.slots[0].bomber = prevBomber
             ch.finishAndReleaseAll()
         }
     }

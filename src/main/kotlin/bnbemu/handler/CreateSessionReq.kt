@@ -81,7 +81,7 @@ val CreateSessionReq = PKTHandler { c ->
         val requestedBomber = bombers.firstOrNull() ?: player.bomber
         val chosenBomber = if (requestedBomber in 0..15) requestedBomber else player.bomber
         val effectiveBomber = if (chosenBomber == 4) 10 else chosenBomber
-        player.bomber = effectiveBomber
+        player.setBomber(effectiveBomber)
 
         Room.slots[0].apply {
             this.user = player

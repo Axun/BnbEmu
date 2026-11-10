@@ -14,6 +14,7 @@ import bnbemu.packet.equipSlotKey
 import bnbemu.server.Room
 import bnbemu.server.bomber
 import bnbemu.server.EquipSlot
+import bnbemu.server.setBomber
 
 private val LAST_USER_INFO_SEND_TIME = AttributeKey.valueOf<Long>("LAST_USER_INFO_SEND_TIME")
 
@@ -178,7 +179,7 @@ val UserInfoReq = PKTHandler { c ->
         val effective = if (bomberIds[0] == 4) 10 else bomberIds[0]
         if (user != null && user.bomber != effective) {
             println("[UserInfoReq] 角色同步: bomber ${user.bomber} → $effective (上报 ${bomberIds[0]})")
-            user.bomber = effective
+            user.setBomber(effective)
         }
         userSlot?.bomber = effective.toByte()
     }

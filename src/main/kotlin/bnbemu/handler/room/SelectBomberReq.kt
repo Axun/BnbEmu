@@ -5,6 +5,7 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.room.SlotBomber
 import bnbemu.server.Room
 import bnbemu.server.bomber
+import bnbemu.server.setBomber
 
 // ============================================================================
 // 房间内切换角色 (C→S op 87) — 点击房间槽位里的角色头像后发出
@@ -27,8 +28,6 @@ import bnbemu.server.bomber
 //   必须将槽位 bomber 设为 10 并回发 10, 否则客户端无法触发 0x4ef7fd -> 0x4731c4
 //   的高级角色精灵加载逻辑, 导致槽位与出战角色回退为普通基础角色。
 //
-// 与 TW 的差异: TW 表里 SelectBomberReq = op 99, 但真实 EN 客户端发的是 op 87;
-// op 99 (0x61201C) 在 EN 里另有用途, 故 EN 分支单独绑定。
 val SelectBomberReq = PKTHandler { c ->
     val slotIdx = Decode1
     val bomberIdx = Decode1
@@ -37,7 +36,7 @@ val SelectBomberReq = PKTHandler { c ->
 
     val user = c.users.firstOrNull()
     if (user != null && slotIdx == 0) {
-        user.bomber = effectiveBomber
+        user.setBomber(effectiveBomber)
     }
     Room.slots.getOrNull(slotIdx)?.bomber = effectiveBomber
 

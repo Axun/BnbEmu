@@ -9,6 +9,7 @@ import os
 import socket
 import struct
 import sys
+import zlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -61,6 +62,35 @@ def case(name: str, c2s_file: str, expect_file: str = None, expect_cmd: int = No
         print(f"[{name}] ✓ 幀格式正確 ({len(frame)}B, cmd={cmd:#06x})")
 
 
+def case_logout():
+    """真實客戶端點「登出」送出的 0x000D 幀 -> 必須回 0x000E + u32(0) 成功碼。
+
+    C→S 幀容器是 PCBC 加密的 (flags=0x02, 明文 "NGPdffdff")；S→C 回應一律明文容器。
+    """
+    blob = open(os.path.join(CAP, "passport_logout_s0_c2s.bin"), "rb").read()
+    s = socket.create_connection(("127.0.0.1", PORT), timeout=5)
+    s.sendall(blob)
+    frame = read_frame(s)
+    s.close()
+
+    check_frame_shape("passport 登出", frame)
+    cmd = struct.unpack(">H", frame[2:4])[0]
+    assert cmd == 0x000E, f"[passport 登出] 回應 cmd={cmd:#06x}, 預期 0x000e"
+
+    c = frame[4:]
+    assert c[0] == 0x18, "[passport 登出] 容器魔數錯誤"
+    assert c[4] == 0, "[passport 登出] 回應應為明文容器 (flags=0)"
+    uncomp = int.from_bytes(c[5:8], "big")
+    key = struct.unpack(">I", c[8:12])[0]
+    checksum = struct.unpack(">I", c[12:16])[0]
+    payload = c[16:]
+    assert len(payload) == uncomp, "[passport 登出] payload 長度與容器頭不符"
+    assert key == 0, "[passport 登出] 明文容器 key 應為 0"
+    assert checksum == zlib.adler32(payload) & 0xFFFFFFFF, "[passport 登出] Adler-32 校驗值錯誤"
+    assert payload == struct.pack("<I", 0), f"[passport 登出] returnCode 應為 0, got {payload.hex(' ')}"
+    print(f"[passport 登出] ✓ 0x000D -> 0x000E 成功碼 ({len(frame)}B)")
+
+
 def case_garbage():
     """亂數位元組流不應讓樁崩潰"""
     s = socket.create_connection(("127.0.0.1", PORT), timeout=5)
@@ -80,5 +110,6 @@ if __name__ == "__main__":
     # tst.pcap 的另一帳號 (kcworm1): 樁恆回 login.pcap 模板, 只驗幀格式與 cmd
     case("passport 登入(另一帳號)", "passport_tst_s1_c2s.bin", None, 0x000C)
     case("passport 會話查詢(另一帳號)", "passport_tst_s2_c2s.bin", None, 0x002E)
+    case_logout()
     case_garbage()
     print("passport 樁回歸測試全部通過")

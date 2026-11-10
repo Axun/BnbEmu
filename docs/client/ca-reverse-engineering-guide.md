@@ -54,7 +54,7 @@ CSlotStage (0x8A13C4)
 | 锁所在结构 | 偏移地址 | 触发设置位置 (C→S) | 解锁与刷新位置 (S→C) | 对应解锁包 |
 | :--- | :--- | :--- | :--- | :--- |
 | `CSlotStage` | `[esi + 0x2F64]` | `0x4F68D7`（置 `2`） | `0x4EFD27`（置 `0`） | **Opcode 106** (`PracticeSlotReady`) |
-| `CPrepareStrategyAIBattle` | `[esi + 0x3250]` | `0x52B9AD`（置 `1`） | `0x52B476`（置 `0`） | **Opcode 103** (`PracticeSlot103`) |
+| `CPrepareStrategyAIBattle` | `[esi + 0x3250]` | `0x52B9AD`（置 `1`） | `0x52B476`（置 `0`） | **Opcode 103** (`PracticeSetSlotAI`) |
 
 ---
 
@@ -73,7 +73,7 @@ CSlotStage (0x8A13C4)
 | Opcode | 名称 | 载荷结构 | 功能与作用 |
 | :--- | :--- | :--- | :--- |
 | **12 (0x0C)** | `ChannelsNotice` (选区公告与PPL广告) | `E4(len) + SSD[noticeTitle, p1..p3, pplType/urls, msgCount/msgs, tailStatus]` | 选区/频道列表界面的公告横幅 (`CFxApp`)、赞助商/广告横幅 (`CPPLManager`) 与滚动系统公告 (`CFxMessage`)，并刷新 `CSelectServerDlg` UI |
-| **103 (0x67)** | `PracticeSlot103` | `E2(slotIdx) + E1Bool(isAI) + E2(level) + E2(flags)` | 设置 AI 敌人对象并解锁策略锁；`isAI=false` 时移除 AI 敌人 |
+| **103 (0x67)** | `PracticeSetSlotAI` | `E2(slotIdx) + E1Bool(isAI) + E2(level) + E2(flags)` | 设置 AI 敌人对象并解锁策略锁；`isAI=false` 时移除 AI 敌人 |
 | **104 (0x68)** | `PracticeSlot104` | `E1((slotIdx << 4) \| flag)` | 槽位属性/队伍标志 |
 | **105 (0x69)** | `PracticeSetPlayer` | `E1(slotIdx) + E1(bomber)` | 槽位外观角色 (5=宝宝) |
 | **106 (0x6A)** | `PracticeSlotReady` | `E1((slotIdx << 4) \| state)` | 槽位开关状态 (`state & 1` 对应 `FLAG_CLOSED`)，解除槽位锁 2 |

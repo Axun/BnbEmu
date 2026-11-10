@@ -1,7 +1,14 @@
 package bnbemu.netty
 
+import io.netty.buffer.ByteBuf
+import io.netty.buffer.Unpooled
+import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.nio.ByteBuffer
@@ -153,5 +160,81 @@ class PassportTest {
 
         assertEquals("kcworms1", username)
         assertEquals("mendouhaiki1", password)
+    }
+
+    @Test
+    fun testParseLogoutReq() {
+        // 實測客戶端點「登出」送出的 cmd 0x000D 幀 (PCBC 加密，明文 = "NGPdffdff")
+        val frame = File("cap/passport_logout_s0_c2s.bin").readBytes()
+        val cmd = ((frame[2].toInt() and 0xFF) shl 8) or (frame[3].toInt() and 0xFF)
+        assertEquals(0x000D, cmd)
+        val container = frame.copyOfRange(4, frame.size)
+        assertEquals("NGPdffdff", PassportServer.parseLogoutReq(Unpooled.wrappedBuffer(container)))
+    }
+
+    @Test
+    fun testParseSessionQueryReqAfterRefactor() {
+        // 0x002D 與 0x000D 共用同一個容器解析器，確認重構未改變既有行為
+        val frame = File("cap/passport_login_s1_c2s.bin").readBytes()
+        val container = frame.copyOfRange(4, frame.size)
+        assertEquals(
+            "NGPkcworms1",
+            PassportServer.parseSessionQueryReq(Unpooled.wrappedBuffer(container))
+        )
+    }
+
+    @Test
+    fun testBuildReply0EFrameShape() {
+        val frame = PassportServer.buildReply0E(0)
+        val contLen = ((frame[0].toInt() and 0xFF) shl 8) or (frame[1].toInt() and 0xFF)
+        val cmd = ((frame[2].toInt() and 0xFF) shl 8) or (frame[3].toInt() and 0xFF)
+        assertEquals(frame.size - 4, contLen)
+        assertEquals(0x000E, cmd)
+
+        val c = frame.copyOfRange(4, frame.size)
+        assertEquals(0x18, c[0].toInt() and 0xFF)                 // 容器魔數
+        assertEquals(0, c[4].toInt() and 0xFF)                    // flags = 明文
+        assertEquals(0, ByteBuffer.wrap(c, 8, 4).order(ByteOrder.BIG_ENDIAN).int)  // key = 0
+        val payload = c.copyOfRange(16, c.size)
+        assertArrayEquals(byteArrayOf(0, 0, 0, 0), payload)       // returnCode = 0
+        val checksum = ByteBuffer.wrap(c, 12, 4).order(ByteOrder.BIG_ENDIAN).int
+        assertEquals(Adler32().apply { update(payload) }.value.toInt(), checksum)
+
+        // 錯誤碼也應正確編碼 (u32 LE)
+        val fail = PassportServer.buildReply0E(20015)
+        assertArrayEquals(byteArrayOf(0x2F, 0x4E, 0, 0), fail.copyOfRange(20, 24))
+    }
+
+    @Test
+    fun testLogoutSessionLifecycle() {
+        val account = PassportServer.PassportAccount("logouttest", "logouttest", 9999)
+        val session = PassportServer.openSession(account)
+        assertEquals("NGPlogouttest", session.passportId)
+        assertTrue(PassportServer.isOnline("NGPlogouttest"))
+        assertTrue(PassportServer.isOnline("ngplogouttest"))       // key 大小寫不敏感
+
+        val closed = PassportServer.closeSession("NGPlogouttest")
+        assertNotNull(closed)
+        assertEquals(9999, closed!!.account.userId)
+        assertFalse(PassportServer.isOnline("NGPlogouttest"))
+        assertNull(PassportServer.closeSession("NGPlogouttest"))    // 重複登出冪等
+        assertNull(PassportServer.closeSession(""))                 // 空目標不誤刪
+    }
+
+    @Test
+    fun testLogoutViaChannelEndToEnd() {
+        // 不需綁定 47611：用 Netty 記憶體通道跑完整鏈路
+        // 真實 0x000D 幀 -> PassportDecoder -> PassportHandler -> 0x000E 回包
+        val ch = EmbeddedChannel(PassportDecoder(), PassportHandler)
+        val frame = File("cap/passport_logout_s0_c2s.bin").readBytes()
+        ch.writeInbound(Unpooled.wrappedBuffer(frame))
+
+        val out = ch.readOutbound<ByteBuf>()
+        assertNotNull(out)
+        val reply = ByteArray(out!!.readableBytes()).apply { out.readBytes(this) }
+        val cmd = ((reply[2].toInt() and 0xFF) shl 8) or (reply[3].toInt() and 0xFF)
+        assertEquals(0x000E, cmd)
+        assertArrayEquals(PassportServer.buildReply0E(0), reply)
+        ch.finishAndReleaseAll()
     }
 }

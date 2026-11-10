@@ -74,6 +74,34 @@ object PlayerEquips {
         equips.computeIfAbsent(userId) { mutableMapOf() }
 }
 
+/**
+ * 进程级「当前选中角色」仓库（按账号/玩家 id 归档）。
+ *
+ * 和 [PlayerWallet] / [PlayerBag] 同理：进频道、进商城会各自新开连线，`ClientSocket.users`
+ * 只属于单条连线，[User.bomber] 只挂在实例上时换连线就回到默认皮蛋(0)。
+ * 本仓库按 id 保存角色，避免换连线后服务端权威角色丢失。注意它与「客户端
+ * CUserDynamicInfo 的角色字段」是两份独立的存储：后者由 S→C op 20 写入、由 C→S op 73
+ * 上报，房间链 (op 105/114) 只写 CFxContext 槽位 UI，不会改它。
+ *
+ * 所有写角色的入口（op 75 / op 87 / op 73）必须走 [setBomber] 同步到这里。
+ */
+object PlayerCharacter {
+    private val selected = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+
+    /** 已保存的角色；从未记录过（新账号）返回 null，由调用方回落默认值 */
+    fun of(userId: Int): Int? = selected[userId]
+
+    fun set(userId: Int, bomber: Int) {
+        selected[userId] = bomber
+    }
+}
+
+/** 统一写入角色：实例字段 + 进程级权威状态，避免任一处漏写导致换连线丢失。 */
+fun User.setBomber(value: Int) {
+    bomber = value
+    PlayerCharacter.set(id, value)
+}
+
 class User(
     val c: ClientSocket,
     val id: Int,

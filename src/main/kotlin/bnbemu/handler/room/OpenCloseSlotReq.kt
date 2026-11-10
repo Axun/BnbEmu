@@ -4,7 +4,7 @@ import bnbemu.isEN
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.PracticeSetPlayer
-import bnbemu.packet.PracticeSlot103
+import bnbemu.packet.PracticeSetSlotAI
 import bnbemu.packet.PracticeSlot104
 import bnbemu.packet.PracticeSlot114
 import bnbemu.packet.PracticeSlotReady
@@ -20,7 +20,7 @@ import bnbemu.server.state
 // EN: C→S op 89 (0x59), 载荷 1B = E1((slotIdx << 4) | (action & 0x0F))
 //     action & 1 == 1: 踢出 AI / 关闭槽位 (FLAG_CLOSED=1)
 //       S→C op 106 (PracticeSlotReady, state=1)
-//       S→C op 103 (PracticeSlot103, isAI=false)
+//       S→C op 103 (PracticeSetSlotAI, isAI=false)
 //     action & 1 == 0: 开放槽位 / 自动加入 AI (FLAG_CLOSED=0)
 //       S→C op 106 (state=2), 114, 104, 105, 103 (与进房槽位设置一致)
 // TW: C→S op 100 (0x64), 载荷 1B = E1(slotIdx)
@@ -42,7 +42,7 @@ val OpenCloseSlotReq = PKTHandler { c ->
                 slot.state = FLAG_CLOSED
 
                 val pkt106 = PracticeSlotReady(slot = slotIdx, state = 1)
-                val pkt103 = PracticeSlot103(slot = slotIdx, isAI = false, aiLevel = 0, flag = 0)
+                val pkt103 = PracticeSetSlotAI(slot = slotIdx, isAI = false, aiLevel = 0, flag = 0)
 
                 if (Room.uniqueClients.any()) {
                     Room.BC(pkt106, pkt103)
@@ -64,7 +64,7 @@ val OpenCloseSlotReq = PKTHandler { c ->
                 val pkt114 = PracticeSlot114(slot = slotIdx)
                 val pkt104 = PracticeSlot104(slot = slotIdx)
                 val pkt105 = PracticeSetPlayer(slot = slotIdx)
-                val pkt103 = PracticeSlot103(slot = slotIdx, isAI = true, aiLevel = slot.AILevel, flag = 1)
+                val pkt103 = PracticeSetSlotAI(slot = slotIdx, isAI = true, aiLevel = slot.AILevel, flag = 1)
 
                 if (Room.uniqueClients.any()) {
                     Room.BC(pkt106, pkt114, pkt104, pkt105, pkt103)

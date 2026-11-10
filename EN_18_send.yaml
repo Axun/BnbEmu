@@ -111,7 +111,7 @@ PracticeSlotReady: 106
 PracticeSlot104: 104
 PracticeSetPlayer: 105
 PracticeSlot114: 114
-PracticeSlot103: 103
+PracticeSetSlotAI: 103
 PracticeRoomInfo: 100
 PracticeStartInfo: 100
 # 练习房开局链里的 8B 选图包已改用结构化 SelectMap(mapId=172) 生成, 不再需要独立 key。

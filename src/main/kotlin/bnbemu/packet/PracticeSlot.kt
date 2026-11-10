@@ -45,8 +45,8 @@ fun PracticeSlot114(slot: Int) = PKT {
     Encode2(0)
 }
 
-// ---- op 103 单槽 7B: E2(slot) + E1Bool(isAI) + E2(level) + E2(flag) ----
-fun PracticeSlot103(slot: Int, isAI: Boolean = true, aiLevel: Int = slot, flag: Int = 1) = PKT {
+// ---- op 103 单槽 7B: 设置/移除槽位 AI 敌人 (isAI=false 即踢出该槽 AI) ----
+fun PracticeSetSlotAI(slot: Int, isAI: Boolean = true, aiLevel: Int = slot, flag: Int = 1) = PKT {
     Encode2(slot)
     Encode1Bool(isAI)
     Encode2(aiLevel)
