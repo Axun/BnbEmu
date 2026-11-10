@@ -7,6 +7,7 @@ import bnbemu.isJP
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.NettyServer.workerGroup
 import bnbemu.netty.PKT
+import bnbemu.packet.ClientStage
 import bnbemu.packet.room.*
 import org.tinylog.kotlin.Logger
 import java.util.concurrent.ConcurrentHashMap
@@ -430,6 +431,8 @@ object Room {
 
         val states = slotStates ?: (0 until 3).map { slots.getOrNull(it)?.state?.toInt() ?: 0 }
         BC(BackToRoom(chState = chState, slotStates = states))
+        // op 155 让客户端切回 stage 12; 同步服务端舞台状态, 之后从房间进商城才能正确返回房间
+        uniqueClients.forEach { it.stage = ClientStage.Room.value }
         Logger.info(
             "[Room] 下发 op155 BackToRoom（回房间, stage 12）| chState=$chState " +
                 "slotStates=$states roomChain=$sendRoomChain"

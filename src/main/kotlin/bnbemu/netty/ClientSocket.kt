@@ -6,6 +6,7 @@ import io.netty.channel.Channel
 import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.SimpleChannelInboundHandler
 import bnbemu.debugMode
+import bnbemu.packet.ClientStage
 import bnbemu.server.User
 import org.tinylog.kotlin.Logger
 import java.io.IOException
@@ -28,8 +29,19 @@ class ClientSocket : SimpleChannelInboundHandler<ByteBuf>() {
     lateinit var ctx: ChannelHandlerContext
     lateinit var ch: Channel
 
-//    val users = arrayOfNulls<User>(2)
     val users = mutableListOf<User>()
+
+    /**
+     * 客户端当前所处的舞台 id (CMainSystem::SetStage 的参数, 见 packet/ChangeStage.kt)。
+     * 服务端主动下发 ChangeStage 或客户端上报舞台状态时同步维护。
+     */
+    var stage: Int = ClientStage.Lobby.value
+
+    /**
+     * 进入商城前的舞台。「点返回」时按它决定回大厅(11)还是回房间(12),
+     * 由 handler/shop/EnterShopReq.kt 在收到 C→S op 315 时记录。
+     */
+    var shopReturnStage: Int = ClientStage.Lobby.value
 
     override fun handlerAdded(ctx: ChannelHandlerContext) {
         this.ctx = ctx

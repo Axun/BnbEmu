@@ -2,9 +2,9 @@ package bnbemu.handler.shop
 
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
+import bnbemu.packet.ClientStage
 import bnbemu.packet.EnterShopResult
 import bnbemu.packet.EnterShopStage
-import bnbemu.packet.UserDynamicInfoValue
 import bnbemu.packet.shop.CashBalance
 import bnbemu.server.cash
 import bnbemu.server.lucci
@@ -27,6 +27,11 @@ import bnbemu.server.lucci
  */
 val EnterShopReq = PKTHandler { c ->
     val tab = Decode1
+    // 记住「进商城之前」在哪: 大厅(11) 还是房间(12)。
+    // 退出商城时客户端完全听服务端下发的 ChangeStage(stageId), 自己不会记来源,
+    // 所以必须由服务端保存, 否则房间内点商城再返回会被硬拉回大厅。
+    if (c.stage != ClientStage.Shop.value) c.shopReturnStage = c.stage
+    c.stage = ClientStage.Shop.value
     c send EnterShopResult(success = true)
     c send EnterShopStage(lucci = c.lucci)
     c send CashBalance(c.cash)
@@ -65,6 +70,15 @@ val EnterShopReq = PKTHandler { c ->
      - **无法退出根因**：客户端发送 C→S op 97 (`stageState = 0`) 后等待服务端指示目标阶段。服务端此前未处理 `stageState == 0`，未下发 **S→C op 97 `ChangeStage(11)`**。
   3. **修复方案**：
      - `UserInfoReq.kt` 中仅根据载荷更新玩家槽位的 `bomber` 角色，移除 `sendUserInfo` 调用，杜绝非 MyPage 场景下的误弹窗；
-     - `StageStateSyncReq.kt` 中当 `stageState == 0` 时， 向客户端下发 **S→C op 97 `ChangeStage(11)`**。客户端 `CShopStageNew::OnPacket` (`0x005CDD15` -> `0x005CDDB8`) 收到后调用 `CMainSystem::SetStage(11)` 销毁商城舞台并切回大厅，同时自动向服务端发送 **C→S op 78 `StageInitReq`**，平滑进入大厅。
-  实现见 `handler/StageStateSyncReq.kt` + `handler/room/SelectMapReq.kt` + `handler/UserInfoReq.kt`，单元测试见 `src/test/kotlin/bnbemu/netty/ShopTest.kt`。
+     - `StageStateSyncReq.kt` 中当 `stageState == 0` 时向客户端下发 **S→C op 97 `ChangeStage(target)`**。
+  4. **返回目标必须区分来源**：商城舞台 OnPacket (`sub_5D5CBA`) 的 op 97
+     处理器 `sub_5CDD15`（另一套平行商城舞台的 `sub_62F728` 逐字节相同）读 `E2(stageId)` 后
+     并非固定切大厅：
+       · `sub_4F748F(stageId)` = 12/16/17/18 → 发 **C→S op 80** (E2+E4 会话信息) 并 `SetStage(stageId)` **回房间**；
+       · 其他值 → 特殊模式 `SetStage(20)` 广场，普通模式 `SetStage(11)` 大厅 + 发 C→S op 78。
+     旧实现固定 `ChangeStage(11)`，导致「房间内进商城→点返回」被踢回大厅。现由本 handler 在收到
+     C→S op 315 时把进商城前的舞台存进 `ClientSocket.shopReturnStage`，`StageStateSyncReq` 按它选择
+     `ChangeStage(12)`（房间）或 `ChangeStage(11)`（大厅）；`c.stage` 同时由 CreateSessionReq /
+     OnConnEstablished / StageInitReq / Room.backToRoom / ShopToRoomReq 维护。
+     S→C op 155 BackToRoom 只挂在 stage 13 对局分发器上，商城舞台收不到，不能用它回房。
  */

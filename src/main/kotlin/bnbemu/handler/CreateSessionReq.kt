@@ -6,6 +6,7 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.Decode4
 import bnbemu.netty.DecodeCipherStr
 import bnbemu.netty.PKTHandler
+import bnbemu.packet.ClientStage
 import bnbemu.server.*
 import org.tinylog.kotlin.Logger
 
@@ -99,4 +100,7 @@ val CreateSessionReq = PKTHandler { c ->
     }
 
     sendRoomEntryChain(c)
+    // op 83 EnterSessionResult 会让客户端 SetStage(12) 进入房间舞台。
+    // 记下来: 之后在房间内点商城, 退出时服务端要回 ChangeStage(12) 而不是回大厅。
+    c.stage = ClientStage.Room.value
 }

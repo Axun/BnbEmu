@@ -12,6 +12,7 @@ import bnbemu.packet.UserDynamicInfoValue
 import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.PermissionInfo
 import bnbemu.packet.ChangeStage
+import bnbemu.packet.ClientStage
 import bnbemu.server.User
 import org.tinylog.kotlin.Logger
 
@@ -66,5 +67,7 @@ val OnConnEstablished = PKTHandler { c ->
             RoomList(),
             WelcomeNotice(),
         )
+        // 这条 ChangeStage() 默认把客户端切进大厅 (stage 11); 记录为「进商城前的来源舞台」基准
+        c.stage = ClientStage.Lobby.value
     }
 }

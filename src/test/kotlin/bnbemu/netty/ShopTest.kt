@@ -7,6 +7,11 @@ import org.junit.jupiter.api.Test
 import bnbemu.packet.ChangeStage
 import bnbemu.packet.EnterShopResult
 import bnbemu.packet.EnterShopStage
+import bnbemu.handler.shop.EnterShopReq
+import bnbemu.handler.StageInitReq
+import bnbemu.handler.StageStateSyncReq
+import bnbemu.handler.room.ShopToRoomReq
+import bnbemu.packet.ClientStage
 
 class ShopTest {
 
@@ -220,5 +225,148 @@ class ShopTest {
         val stageId = inBuf.Decode2
         assertEquals(11, stageId, "Stage ID must be 11 (Lobby stage)")
         assertEquals(0, inBuf.readableBytes())
+    }
+
+    /** 把 S→C op 97 的 PKT 编码再解出 stageId */
+    private fun readStageId(pkt: PKT): Int {
+        val out = Unpooled.buffer()
+        pkt.encode(SendPacketBase(out, 3))
+        val inBuf = Unpooled.wrappedBuffer(out.array(), 0, out.writerIndex())
+        val stageId = inBuf.Decode2
+        assertEquals(0, inBuf.readableBytes(), "ChangeStage 包体只应有 2 字节")
+        return stageId
+    }
+
+    @Test
+    fun testShopExitFromRoomReturnsToRoom() {
+        // 回归: 练习房内点商城 → 点返回, 必须回房间 (ChangeStage(12)), 不能被踢回大厅
+        val cs = ClientSocket()
+        val ch = EmbeddedChannel(cs)
+        try {
+            cs.stage = ClientStage.Room.value // 模拟 C→S op 75 进房后 CreateSessionReq 置的舞台
+
+            // C→S op 315: E1(tab=0) -> 5A
+            val enter = Unpooled.wrappedBuffer(byteArrayOf(0x5A.toByte()))
+            with(EnterShopReq) { enter.handle(cs) }
+            assertEquals(0, enter.readableBytes())
+            assertEquals(ClientStage.Shop.value, cs.stage)
+            assertEquals(ClientStage.Room.value, cs.shopReturnStage, "进商城前必须记住来源舞台")
+
+            // 商城里再点一次商城按钮, 不能把来源覆盖成 14
+            val enterAgain = Unpooled.wrappedBuffer(byteArrayOf(0x5A.toByte()))
+            with(EnterShopReq) { enterAgain.handle(cs) }
+            assertEquals(ClientStage.Room.value, cs.shopReturnStage, "重复进商城要保留最初的来源舞台")
+
+            while (ch.readOutbound<PKT>() != null) { /* 清掉 259/17/201 进商城回包 */ }
+
+            // C→S op 97: E1(0) -> 5A, 点「返回」
+            val exit = Unpooled.wrappedBuffer(byteArrayOf(0x5A.toByte()))
+            with(StageStateSyncReq) { exit.handle(cs) }
+            assertEquals(0, exit.readableBytes())
+
+            val pkt = ch.readOutbound<PKT>()
+            assertNotNull(pkt, "退出商城必须回应 S→C op 97")
+            assertEquals(97, OpcodeManager.getSendOp(pkt!!::class.java))
+            assertEquals(ClientStage.Room.value, readStageId(pkt), "从房间进商城必须回 ChangeStage(12), 不能是 11")
+            assertEquals(ClientStage.Room.value, cs.stage)
+            assertNull(ch.readOutbound<PKT>(), "回房间路径不应额外下发回大厅的数据")
+        } finally {
+            ch.finishAndReleaseAll()
+        }
+    }
+
+    @Test
+    fun testShopExitFromLobbyStillReturnsToLobby() {
+        // 大厅进商城返回仍然回大厅, 不能被上面的修复带偏
+        val cs = ClientSocket()
+        val ch = EmbeddedChannel(cs)
+        try {
+            cs.stage = ClientStage.Lobby.value
+            val enter = Unpooled.wrappedBuffer(byteArrayOf(0x5A.toByte()))
+            with(EnterShopReq) { enter.handle(cs) }
+            assertEquals(ClientStage.Lobby.value, cs.shopReturnStage)
+            while (ch.readOutbound<PKT>() != null) { /* 清掉进商城回包 */ }
+
+            val exit = Unpooled.wrappedBuffer(byteArrayOf(0x5A.toByte()))
+            with(StageStateSyncReq) { exit.handle(cs) }
+
+            val pkt = ch.readOutbound<PKT>()
+            assertNotNull(pkt)
+            assertEquals(ClientStage.Lobby.value, readStageId(pkt!!))
+            assertEquals(ClientStage.Lobby.value, cs.stage)
+        } finally {
+            ch.finishAndReleaseAll()
+        }
+    }
+
+    @Test
+    fun testShopToRoomReqConfirmsRoomStage() {
+        // ChangeStage(12) 之后客户端会发 C→S op 80 (E2 + E4, 纯通知)
+        assertEquals("ShopToRoomReq", OpcodeManager.recvOps[80])
+        assertNotNull(handlerArray[80], "op 80 必须绑定 handler, 否则会刷 UNKNOWN 日志")
+
+        val cs = ClientSocket()
+        val ch = EmbeddedChannel(cs)
+        try {
+            cs.stage = ClientStage.Shop.value
+            cs.shopReturnStage = ClientStage.Room.value
+            val buf = Unpooled.wrappedBuffer(
+                byteArrayOf(0xA5.toByte(), 0x69, 0x96.toByte(), 0xCA.toByte(), 0x53, 0x95.toByte())
+            )
+            with(ShopToRoomReq) { buf.handle(cs) }
+            assertEquals(0, buf.readableBytes(), "E2 + E4 必须被完整消费")
+            assertEquals(ClientStage.Room.value, cs.stage, "客户端已切回房间, 服务端舞台状态要跟上")
+            val pkts = generateSequence { ch.readOutbound<PKT>() }.toList()
+            val firstPkt = pkts.firstOrNull()
+            assertNotNull(firstPkt, "切回房间后必须补推房间链 sendRoomEntryChain")
+            assertTrue(pkts.any { OpcodeManager.getSendOp(it::class.java) == 83 }, "房间链必须包含 EnterSessionResult(83)")
+        } finally {
+            ch.finishAndReleaseAll()
+        }
+    }
+
+    @Test
+    fun testShopToRoomReqIsNotShopSpecific() {
+        // 二进制复核结论: op 80 只在「ChangeStage 目标为房间舞台」时发, 与来源是不是商城无关。
+        // 即使 shopReturnStage 还停留在 11, 只要客户端已到达房间舞台, 服务端状态也要同步成 12。
+        val cs = ClientSocket()
+        val ch = EmbeddedChannel(cs)
+        try {
+            cs.stage = ClientStage.Shop.value
+            cs.shopReturnStage = ClientStage.Lobby.value
+            val buf = Unpooled.wrappedBuffer(
+                byteArrayOf(0xA5.toByte(), 0x69, 0x96.toByte(), 0xCA.toByte(), 0x53, 0x95.toByte())
+            )
+            with(ShopToRoomReq) { buf.handle(cs) }
+            assertEquals(ClientStage.Room.value, cs.stage)
+            assertNotNull(ch.readOutbound<PKT>(), "op 80 同样补推房间链 sendRoomEntryChain")
+        } finally {
+            ch.finishAndReleaseAll()
+        }
+    }
+
+    @Test
+    fun testStageInitReqClearsRoomStage() {
+        // 回大厅后客户端自动发 op 78; 之后从大厅进商城应回大厅而不是残留的房间
+        val cs = ClientSocket()
+        val ch = EmbeddedChannel(cs)
+        try {
+            cs.stage = ClientStage.Room.value
+            with(StageInitReq) { Unpooled.buffer().handle(cs) }
+            assertEquals(ClientStage.Lobby.value, cs.stage)
+
+            val enter = Unpooled.wrappedBuffer(byteArrayOf(0x5A.toByte()))
+            with(EnterShopReq) { enter.handle(cs) }
+            assertEquals(ClientStage.Lobby.value, cs.shopReturnStage)
+            while (ch.readOutbound<PKT>() != null) { /* 清掉回包 */ }
+
+            val exit = Unpooled.wrappedBuffer(byteArrayOf(0x5A.toByte()))
+            with(StageStateSyncReq) { exit.handle(cs) }
+            val pkt = ch.readOutbound<PKT>()
+            assertNotNull(pkt)
+            assertEquals(ClientStage.Lobby.value, readStageId(pkt!!))
+        } finally {
+            ch.finishAndReleaseAll()
+        }
     }
 }

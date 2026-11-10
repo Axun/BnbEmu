@@ -1,6 +1,7 @@
 package bnbemu.handler
 
 import bnbemu.netty.PKTHandler
+import bnbemu.packet.ClientStage
 import bnbemu.packet.ItemDef
 import bnbemu.packet.bomberCharCard
 import bnbemu.packet.MyPageInfo
@@ -24,6 +25,9 @@ import bnbemu.packet.UserSimpleInfoResult
  *                               MyPageInfo, ItemDef, UserMarketItemList, UserMarketMyItemList]
  */
 val StageInitReq = PKTHandler { c ->
+    // 客户端只在 SetStage(11) 之后自动补发 op 78 (ChangeStage.kt 注释 / 0x0068D80F),
+    // 所以收到它就说明已经在大厅了 —— 清除房间舞台状态, 避免下次进商城误回房间。
+    c.stage = ClientStage.Lobby.value
     // op 60 先按当前角色生成 (角色卡 itemId/skinId + 所有 cat=3 模型名都在里面),
     val bomber = c.users.firstOrNull()?.bomber ?: 0
     val (charItemId, charToken) = bomberCharCard(bomber)
