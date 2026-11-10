@@ -20,9 +20,11 @@ import bnbemu.server.state
 // EN: C→S op 89 (0x59), 载荷 1B = E1((slotIdx << 4) | (action & 0x0F))
 //     action & 1 == 1: 踢出 AI / 关闭槽位 (FLAG_CLOSED=1)
 //       S→C op 106 (PracticeSlotReady, state=1)
-//       S→C op 103 (PracticeSetSlotAI, isAI=false)
+//       S→C op 103 (PracticeSetSlotAI, isAI=false, refSlot=0, aiLevel=0)
 //     action & 1 == 0: 开放槽位 / 自动加入 AI (FLAG_CLOSED=0)
 //       S→C op 106 (state=2), 114, 104, 105, 103 (与进房槽位设置一致)
+// ⚠️ op 103 字段 = E2(slot) + E1Bool(isAI) + E2(refSlot≤7) + E2(aiLevel 0..4)：
+//    第 3 字段是槽位引用、第 4 字段才是难度档
 // TW: C→S op 100 (0x64), 载荷 1B = E1(slotIdx)
 //     S→C op 110 (DoOpenCloseSlot), 载荷 1B = E1(slotIdx)
 // ============================================================================
@@ -42,7 +44,7 @@ val OpenCloseSlotReq = PKTHandler { c ->
                 slot.state = FLAG_CLOSED
 
                 val pkt106 = PracticeSlotReady(slot = slotIdx, state = 1)
-                val pkt103 = PracticeSetSlotAI(slot = slotIdx, isAI = false, aiLevel = 0, flag = 0)
+                val pkt103 = PracticeSetSlotAI(slot = slotIdx, isAI = false, refSlot = 0, aiLevel = 0)
 
                 if (Room.uniqueClients.any()) {
                     Room.BC(pkt106, pkt103)
@@ -55,16 +57,16 @@ val OpenCloseSlotReq = PKTHandler { c ->
                 slot.user = null
                 slot.bomber = 5
                 slot.color = 7
-                if (slot.AILevel !in 1..7) {
-                    slot.AILevel = if (slotIdx in 1..7) slotIdx else 1
-                }
+                // AILevel 是难度档 0..4 (抓包默认 1)，不是槽号/角色 id；
+                // 保留玩家已选档位，只有越界时才回落到默认档 1。
+                if (slot.aILevel !in 0..4) slot.aILevel = 1
                 slot.state = 0
 
                 val pkt106 = PracticeSlotReady(slot = slotIdx, state = 2)
                 val pkt114 = PracticeSlot114(slot = slotIdx)
                 val pkt104 = PracticeSlot104(slot = slotIdx)
                 val pkt105 = PracticeSetPlayer(slot = slotIdx)
-                val pkt103 = PracticeSetSlotAI(slot = slotIdx, isAI = true, aiLevel = slot.AILevel, flag = 1)
+                val pkt103 = PracticeSetSlotAI(slot = slotIdx, isAI = true, refSlot = slotIdx, aiLevel = slot.aILevel)
 
                 if (Room.uniqueClients.any()) {
                     Room.BC(pkt106, pkt114, pkt104, pkt105, pkt103)

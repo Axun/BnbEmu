@@ -93,6 +93,9 @@ val CreateSessionReq = PKTHandler { c ->
             Room.slots[i].apply {
                 this.user = null
                 isAI = true
+                // 新建房是本局设置的起点：难度档回到抓包默认 1，避免全局 Room 单例
+                // 把上一次房间设置的 aILevel 带进新房 (sendRoomEntryChain 现按 slots 回灌)。
+                aILevel = 1
                 bomber = 5
                 color = 7
             }

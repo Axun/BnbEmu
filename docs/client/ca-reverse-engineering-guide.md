@@ -64,7 +64,7 @@ CSlotStage (0x8A13C4)
 | Opcode | 名称 / 触发场景 | 载荷结构 | 说明 |
 | :--- | :--- | :--- | :--- |
 | **55 (0x37)** | `StringTableRevisionReq` (字串表版本上报) | `E4(stringTableRev) + E4(questStringRev) + E4(curseFilterRev)` | 登录成功后进入选区界面时上报本地 3 份 SSD 版本 (StringTable, QuestString, CurseFilter) 并触发下发频道列表推送 |
-| **88 (0x58)** | `AILevelChangeReq` (调等级) | `E1(chief) + E1(slotIdx) + E1(newLevel) + E1(flags)` | 设置 AI 难度等级 |
+| **88 (0x58)** | `AILevelChangeReq` (调等级/换 AI 角色) | `E1(chiefSlot) + E1(slotIdx) + E1(charId) + E1(aiLevel)` | 第 4 字段是**难度档绝对值 0..4**，由客户端 `0x52B8B4` 把当前等级 ±1 后发出，不是增减标志；第 3 字段是角色/头像 id，不是等级 |
 | **89 (0x59)** | `OpenCloseSlotReq` (踢人/开关槽) | `E1((slotIdx << 4) \| (action & 0xF))` | `action & 1 == 1`: 踢出/关闭 (`FLAG_CLOSED=1`)<br>`action & 1 == 0`: 开放/加入 AI (`FLAG_CLOSED=0`) |
 | **75 (0x4B)** | `CreateSessionReq` (进练习房) | `E2(0) E2(0) E1(0) E1(1) E1(5) E1(15) E4(66)` | 进练习房 |
 | **92 (0x5C)** | `StartGameReq` (游戏开始确认) | 空包 | 准备完毕触发开局 |
@@ -73,7 +73,7 @@ CSlotStage (0x8A13C4)
 | Opcode | 名称 | 载荷结构 | 功能与作用 |
 | :--- | :--- | :--- | :--- |
 | **12 (0x0C)** | `ChannelsNotice` (选区公告与PPL广告) | `E4(len) + SSD[noticeTitle, p1..p3, pplType/urls, msgCount/msgs, tailStatus]` | 选区/频道列表界面的公告横幅 (`CFxApp`)、赞助商/广告横幅 (`CPPLManager`) 与滚动系统公告 (`CFxMessage`)，并刷新 `CSelectServerDlg` UI |
-| **103 (0x67)** | `PracticeSetSlotAI` | `E2(slotIdx) + E1Bool(isAI) + E2(level) + E2(flags)` | 设置 AI 敌人对象并解锁策略锁；`isAI=false` 时移除 AI 敌人 |
+| **103 (0x67)** | `PracticeSetSlotAI` | `E2(slotIdx) + E1Bool(isAI) + E2(refSlot) + E2(aiLevel)` | 第 4 字段 = 难度档 0..4，经 `0x685E9B` 写入槽位 +8；第 3 字段 = 槽位引用 0..7（`0x52B3E8` 守卫，越界提前 return 且不清等待锁）；`isAI=false` 时后三字段全 0 移除 AI |
 | **104 (0x68)** | `PracticeSlot104` | `E1((slotIdx << 4) \| flag)` | 槽位属性/队伍标志 |
 | **105 (0x69)** | `PracticeSetPlayer` | `E1(slotIdx) + E1(bomber)` | 槽位外观角色 (5=宝宝) |
 | **106 (0x6A)** | `PracticeSlotReady` | `E1((slotIdx << 4) \| state)` | 槽位开关状态 (`state & 1` 对应 `FLAG_CLOSED`)，解除槽位锁 2 |

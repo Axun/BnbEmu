@@ -11,5 +11,5 @@ fun SetSlotState(slotId: Int, slot: Slot) = PKT {
 
     Encode1Bool(slot.isAI)
     if (slot.isAI)
-        Encode2(slot.AILevel)
+        Encode2(slot.aILevel)
 }

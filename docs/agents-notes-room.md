@@ -1,15 +1,29 @@
-- **设置电脑敌人等级（op 88 AILevelChangeReq，2026-09-10 逆向 CA.exe 确认）**：在房间/练习房界面调整
-  AI 难度等级时由客户端发出 **op 88 (0x58)**（CA.exe 中 `CPrepareStrategyAIBattle::OnButtonClick`
-  触发，原 TW_5 为 op 110）。body = `E1(chief/f1) + E1(slotIdx) + E1(newLevel) + E1(flags/f4)`（4 字节）；
-  服务器更新 `Room.slots[slotIdx].AILevel = newLevel` 并下发 **op 103 PracticeSetSlotAI**
-  （`E2(slotIdx) + E1Bool(isAI) + E2(newLevel) + E2(flags)`，7 字节），`CPrepareStrategyAIBattle::OnPacket`
-  (`0x52d188` -> Case 103 `0x52b39a`) 收到后调用 `0x52b048`/`0x52b0ad` 刷新槽位 UI 并执行
-  `and dword ptr [esi + 0x3250], 0` 清除等待锁。
+- **设置电脑敌人等级（op 88 AILevelChangeReq，2026-11-10 反汇编校正字段）**：在房间/练习房界面调整
+  AI 难度或 AI 角色时由客户端发出 **op 88 (0x58)**（4 个发包点 `0x52B8B4` +/- 按钮、
+  `0x52B237` NPC 选择器、`0x52DE74` 循环换角色、`0x52DBAB` 另一舞台；原 TW_5 为 op 110）。
+  body = `E1(chiefSlot) + E1(slotIdx) + E1(charId) + E1(aiLevel)`（4 字节，均由
+  `0x78D060` → 虚表 +0x44 → `0x78DAF0` 写 1B / XOR 0x5A）。
+  **第 4 字段是难度档绝对值 0..4**：`0x52B8FB call 0x686A4C` 读全局槽位 +8，
+  `0x52B909 inc` / `0x52B90E dec` 取决于按钮参数，`0x52B935`/`0x52B93E` 夹到下界 0 或 1、上界 4。
+  默认等级 1 ⇒ 点减发 0、点加发 2，这就是实测「0=减少 / 2=增加」的成因；发 3 或 4 会直接跳到更高难度档
+  （`0x59973E` 用 0..4 索引每个 NPC 的 5 档 AI 表，`0x599D3F` 在 >2 给 Shield/Needle、=4 再加 Spring，
+  `0x686B57` 把 0..4 映射成 3/10/52/109/163）。
+  **第 3 字段是 charId**（`0x4D5F18` 读槽位控件头像 id，13=随机；或 `0x51B158` 的 NPC 选择 20..23），
+  不是等级；旧实现把它存进 `slot.AILevel` 是错的，角色切换另由 op 87 处理。
+  服务器应更新 `Room.slots[slotIdx].AILevel = aiLevel` 并下发 **op 103 PracticeSetSlotAI**
+  （`E2(slotIdx) + E1Bool(isAI) + E2(refSlot) + E2(aiLevel)`，7 字节）：
+  `CPrepareStrategyAIBattle::OnPacket` (`0x52D188` -> Case 103 `0x52B39A`) 把第 4 个 Decode2 结果
+  传给 `0x685E9B` 写成槽位 +8（`0x686A4C` 再读回），调用 `0x52B048`/`0x52B0AD` 刷新 UI，
+  最后 `0x52B476` 执行 `and dword ptr [esi + 0x3250], 0` 清除等待锁。
+  ⚠️ 第 3 字段 refSlot 被 `0x52B3E8 cmp esi,7 / ja 0x52B47D` 限定为 **0..7**（抓包中等于槽号，
+  `0x687CBB`/GetPlayerInfo_Plus32 拿它查玩家信息）；超范围会提前 return 连解锁都不做 → 房间卡死。
+  因此服务端回包时第 3 字段填目标槽位号，**不能把 charId 原样塞进去**。
+  另有 `0x52DDB7` / `0x597192` 两个同构的 op 103 接收点，字段读法一致。
 - **踢出电脑敌人 / 打开关闭槽位（op 89 OpenCloseSlotReq，2026-09-10 逆向 CA.exe 确认）**：在房间/练习房
   界面踢出 AI 或切换槽位开关时由客户端发出 **op 89 (0x59)**（CA.exe 中 `0x4f6866` / `0x51c7ea` 触发，
   原 TW_5 为 op 100）。body = `E1((slotIdx << 4) | (action & 0x0F))`（1 字节）；
   服务器重置该槽位 AI 状态并下发 **op 106 PracticeSlotReady**（`E1((slotIdx << 4) | state)`，清除
-  `CSlotStage` 的 `[esi + 0x2f64]` 等待锁 2）与 **op 103 PracticeSetSlotAI(isAI=false)**（`E2(slotIdx) + E1Bool(0) + E2(0) + E2(0)`，
+  `CSlotStage` 的 `[esi + 0x2f64]` 等待锁 2）与 **op 103 PracticeSetSlotAI(isAI=false)**（`E2(slotIdx) + E1Bool(false) + E2(refSlot=0) + E2(aiLevel=0)`，
   触发 `CPrepareStrategyAIBattle` 的 `0x685ed9` 移除 AI 槽位并清除策略等待锁）。
 - **房间内切换角色（C→S op 87，2026-10-31 逆向 CA.exe 确认）**：在房间界面点击槽位里的角色头像切换
   bomber 时由客户端发出 **op 87 (0x57)**（CA.exe `0x4F67E9`，`CPrepareStrategyAIBattle` 的槽位角色设置；

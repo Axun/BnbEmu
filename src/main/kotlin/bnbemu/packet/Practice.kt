@@ -54,7 +54,11 @@ fun PracticeStartInfo(user: User? = null, level: Int = user?.level ?: 5) =
 //    这里复用结构化 SelectMap 生成, 与 cap/practice_s2c_op108_10B_0.bin 的 body 逐字节一致。
 fun PracticeSelectMap() = SelectMap(result = 0, themeId = 0, mapId = 172)
 
-// ---- op 111 AILevelChange 空体 (1B): E1(0) —— 练习房开局时的 AI 等级重置 ----
+// ---- op 111 空体 (1B): E1(0) —— 开局时的房间 UI 开关通知 ----
+// ⚠️ 历史误标：函数名 PracticeAiLevel / yaml 的 AILevelChange: 111 都沿袭 TW_5 的猜测，
+//    它跟 AI 难度档毫无关系。CA.exe sub_5285BD (reference/CA.exe.c:249938) 只读 1B 参数，
+//    case 0/1 调虚表 +0x1C4(this, 0) 关掉房间 UI 按钮，完全不碰全局槽位结构
+//    (0x685E9B / 0x686A4C，也就是 op 103 写 AI 等级的地方)。
 fun PracticeAiLevel() = PKT {
     EncodeBuffer(EN_OP111)
 }
