@@ -10,8 +10,18 @@
       `sub_65D55F` 重建，末尾 `sub_659334` 按 13×24 重铺纸娃娃）：**每次回大厅重走进频道握手
       （op 81）都会重发 198**，清单里没有的装备一律被清掉。所以 273 记录下来的装备必须并入
       `inventoryEntries()`（`packet/UserInventory.kt`）下发，否则表现为「商城设了背景，回大厅自动取消装备」。
+    - ⚠️ **真实客户端 CA.exe 卸下装备的发包协议**：
+      `CA.exe` 唯一序列化 op 273 的函数 `sub_659004` (0x00659004) 在遍历装备槽时：
+      `0x659043: test eax, eax; je 0x65908a`，即 **itemId=0 的槽位直接跳过**，客户端**绝不会**发 `(slot, 0)`！
+      卸下的物品经 `sub_65CF4E` 移入背包向量（`slot=0xFF`），在第二段遍历中上报为 `(slot=0xFF, itemId)`。
+      若服务端只当成背包新增物品而未从 `user.equips` 中移除，会导致装备永远脱不下来。
+      修复：收到 `slot=0xFF` 时检测若在 `user.equips` 则执行卸下并回包。
+    - ⚠️ **房间内脱掉装备/换装后外观不刷新的根因**：
+      客户端在房间阶段关闭背包 (`CInventoryWnd`) 仅发 op 273，本地槽位 UI (`CSlotView`) 不会自动重绘，
+      必须由服务端广播 **S→C op 100 `SetPlayer`**，客户端收到后由 `sub_4F7022` -> `sub_4F6E89`
+      按三段清单清空并重绘槽位外观（清单无背景即彻底擦除）。
     - 实现：`packet/UserInventory.kt` 的 `equipGroupOfCategory` / `equipSlotKey` / `equippedInventoryEntries` /
-      `inventoryEntries`；回归测试 `src/test/kotlin/bnbemu/netty/BackgroundEquipTest.kt`。
+      `inventoryEntries`；`handler/ChangeEquipReq.kt`；回归测试 `src/test/kotlin/bnbemu/netty/BackgroundEquipTest.kt`。
 - **房间内装扮显示（S→C op 100 / CSlotAccessoryPacket）**：
     - `SetPlayer` 尾部的 `CSlotAccessoryPacket` 不是固定 11B 全零块，而是**玩家装备快照**：
       `E2(保留) + E1(count1) + count1×[E1(idx)+E2(value)] + E1(count2) + count2×[E4×3] +

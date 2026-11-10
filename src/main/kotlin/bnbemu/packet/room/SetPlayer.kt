@@ -31,7 +31,7 @@ import bnbemu.server.User
 //      Encode2(acc_u16) +
 //      Encode1(count1) + count1 × [Encode1(idx) + Encode2(value)] +
 //      Encode1(count2) + count2 × [Encode4 + Encode4 + Encode4] +
-//      Encode1(acc_f29=255) + Encode1(acc_f30=0) + Encode4(acc_f32=0) +
+//      Encode1(acc_f29=255) + Encode1(acc_f30=0) + Encode4(acc_f32=水泡皮肤编号) +
 //      Encode1(count3) + count3 × [Encode4 + Encode4 + Encode4]
 //
 // ---------------------------------------------------------------------------
@@ -66,6 +66,35 @@ import bnbemu.server.User
 // 客户端本地从 CUserInventory 拼同一份清单的代码: sub_6A7396 (0x006A7396, count1/count2)
 // 与 sub_6A72C2 (0x006A72C2, count3), 字段取的就是物品对象 +48/+60/+72
 // = ItemDef 的 skinId / targetCharId / param (见 sub_65A034 0x0065A034)。
+//
+// ---------------------------------------------------------------------------
+// 尾部 E4 字段 f32 = 水泡皮肤编号 (2026-11-10 反编译定案, 与三段清单完全独立)
+// ---------------------------------------------------------------------------
+// sub_44A856 (0x0044A856) 读到 count2 之后依次是:
+//   *(this+29) = ReadUInt8  → f29   (恒 255)
+//   *(this+30) = ReadUInt8  → f30   (恒 0)
+//   *(this+32) = ReadUInt32 → f32   ← 本字段, 旧实现误当成"占位 0"
+//   *(this+19) = ReadUInt8  → count3
+// sub_687B3D (0x00687B3D) / sub_4F6E89 (0x004F6E89) 把 a3[32] 交给
+// sub_6874A2 (0x006874A2) 写入 CFxContext + 484*slot + 472;
+// sub_687DFD (0x00687DFD) 从同一位置读出。全 .text 里这个槽只有这两个
+// SetPlayer 类包处理函数会写, 客户端本地穿脱装备不会写它。
+//
+// 语义铁证: 0x00643xxx 的玩家装扮列表用
+//   sub_6777BC(CUserItemMan, 14, 0, 0, sub_687DFD(CFxContext, slot))
+// 按 (category=14 水泡, skinId=0, targetCharId=0, param=f32) 反查物品定义
+// (sub_6777BC 的四个匹配字段见 0x006777BC)。item_def_base.bin 里
+//   930000655 = category 14 / name "BombDeco/Bomb655" / param 655
+// 即 f32 就是水泡序号。
+// 局内落地: 0x00535E60 附近创建 bomber 时 bomber[288] = sub_687DFD(...);
+// 水泡精灵贴图里 this+100 > 0 才走 "BombDeco/" + "Bomb%03d" (sub_45A8EC),
+// 否则回落 "Bomb/Bomb" 默认贴图。
+// ⇒ 旧实现恒发 0, 进房/进战斗时每次 op 100 都把水泡皮肤覆写成默认,
+//   而角色装扮走三段清单照常生效 —— 这就是"装备显示正常、水泡还是默认"的根因。
+//
+// ⚠️ category 14 不要塞进 count2: 客户端 sub_687B3D 会把每条 count2 写入
+//   CFxContext 特效槽, 局内建 bomber 时又按 category 12 特效去应用, 反而会给
+//   角色挂一个查不到定义的无效特效。水泡只认 f32 这一个字段。
 // ============================================================================
 
 val RAW3_ROOM = byteArrayOf(0xa0.toByte(), 0x6f.toByte(), 0x5a.toByte())
@@ -79,8 +108,14 @@ data class SlotAccessories(
     val effects: List<Triple<Int, Int, Int>> = emptyList(),
     /** count3: [E4 × 3]，category 19 纸娃娃装扮 */
     val avatars: List<Triple<Int, Int, Int>> = emptyList(),
+    /**
+     * 尾部 E4 (f32): 当前装备的水泡皮肤编号 = ItemDef.param。
+     * 0 = 未装备, 客户端回落默认水泡 "Bomb/Bomb"。
+     */
+    val bombSkin: Int = 0,
 ) {
-    val isEmpty: Boolean get() = decorations.isEmpty() && effects.isEmpty() && avatars.isEmpty()
+    val isEmpty: Boolean get() =
+        decorations.isEmpty() && effects.isEmpty() && avatars.isEmpty() && bombSkin == 0
 }
 
 /**
@@ -88,6 +123,8 @@ data class SlotAccessories(
  *
  * 分类以 op 60 ItemDef 定义表为准 —— 客户端 `sub_65D55F` 也是自己按 category 反推
  * 装备大类, 上报的槽位不参与显示计算。按复合槽位排序保证同一份 equips 生成同样的包。
+ *
+ * category 14 (水泡) 走 f32 而不是 count1/2/3, 见文件头注释。
  */
 fun slotAccessoriesOf(
     equips: Map<Int, Int>,
@@ -96,6 +133,7 @@ fun slotAccessoriesOf(
     val decorations = ArrayList<Pair<Int, Int>>()
     val effects = ArrayList<Triple<Int, Int, Int>>()
     val avatars = ArrayList<Triple<Int, Int, Int>>()
+    var bombSkin = 0
 
     for ((compositeSlot, itemId) in equips.entries.sortedBy { it.key }) {
         if (itemId == 0 || compositeSlot == EquipSlot.BAG) continue
@@ -111,13 +149,19 @@ fun slotAccessoriesOf(
             ) {
                 effects += Triple(def.skinId, def.targetCharId, def.param)
             }
+            // 水泡皮肤: f32 = param (水泡序号, 如 Bomb 655 → 655)。
+            // 客户端 sub_687B3D 只在 >0 时写入 CFxContext+472, <=0 一律按默认水泡。
+            // 同一玩家理论上只装备一件, 按复合槽位排序取第一件, 保证结果确定。
+            14 -> if (bombSkin == 0 && def.param > 0) {
+                bombSkin = def.param
+            }
             // 纸娃娃: param>0 才会被 CGOAvatar 接受, targetCharId 是 12 个部位之一
             19 -> if (def.targetCharId in 0..11 && def.param > 0) {
                 avatars += Triple(def.skinId, def.targetCharId, def.param)
             }
         }
     }
-    return SlotAccessories(decorations, effects, avatars)
+    return SlotAccessories(decorations, effects, avatars, bombSkin)
 }
 
 fun SetPlayer(
@@ -135,7 +179,7 @@ fun SetPlayer(
     if (!acc.isEmpty) {
         println(
             "[SetPlayer] 槽 $slotId 装扮: 背景/边框=${acc.decorations.joinToString { "(${it.first},${it.second})" }} " +
-                "特效=${acc.effects.size} 纸娃娃=${acc.avatars.size}"
+                "特效=${acc.effects.size} 纸娃娃=${acc.avatars.size} 水泡皮肤=${acc.bombSkin}"
         )
     }
 
@@ -195,7 +239,9 @@ fun SetPlayer(
     }
     Encode1(255)   // acc_f29
     Encode1(0)     // acc_f30
-    Encode4(0)     // acc_f32
+    // f32 = 水泡皮肤编号 (CFxContext+472 → bomber 水泡贴图 "BombDeco/Bomb%03d")。
+    // ⚠️ 恒 0 会让客户端每收到一次 op 100 就把水泡覆写成默认, 见文件头注释。
+    Encode4(acc.bombSkin)
     Encode1(acc.avatars.size)
     acc.avatars.forEach { (a, b, c) ->
         Encode4(a)

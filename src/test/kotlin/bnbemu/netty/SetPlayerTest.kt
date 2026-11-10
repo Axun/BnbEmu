@@ -1,6 +1,7 @@
 package bnbemu.netty
 
 import bnbemu.packet.EQUIP_SLOTS_PER_GROUP
+import bnbemu.handler.ChangeEquipReq
 import bnbemu.packet.ItemDef
 import bnbemu.packet.ItemDefEntry
 import bnbemu.packet.PracticeRoomInfo
@@ -218,5 +219,149 @@ class SetPlayerTest {
             findItem = { avatarDef.copy(param = 0) },
         )
         assertTrue(rejected.avatars.isEmpty())
+    }
+
+    // ========================================================================
+    // 水泡皮肤 (category 14) → 尾部 E4 f32 (2026-11-10 定案)
+    // 客户端 sub_44A856 把 f32 存进 CSlotAccessoryPacket+32,
+    // sub_687B3D 写入 CFxContext+472, 局内 bomber[288] = sub_687DFD(...),
+    // 贴图按 "BombDeco/Bomb%03d" 加载; 恒 0 就回落默认水泡 "Bomb/Bomb"。
+    // ========================================================================
+
+    /** 复合槽位: 大类 10 (特效/气泡) 子槽 0 = 240, 见 equipGroupOfCategory(14) */
+    private fun bombSlot(sub: Int = 0) = 10 * EQUIP_SLOTS_PER_GROUP + sub
+
+    @Test
+    fun testRealItemDefForBomb655() {
+        // 防止 op 60 定义表漂移: 930000655 必须是 category 14 / param 655
+        val def = ItemDef.find(930000655)
+        assertEquals(14, def?.category)
+        assertEquals(655, def?.param)
+        assertEquals("BombDeco/Bomb655", def?.name)
+    }
+
+    @Test
+    fun testEquippedBombSkinGoesIntoF32() {
+        val got = body(
+            SetPlayer(slotId = 0, level = 1, equips = mapOf(bombSlot() to 930000655))
+        )
+        // f32 是定长字段, 装备水泡不改变包长 (旧实现恒 0 时也是 78B)
+        assertEquals(78, got.size, "水泡皮肤走 f32, 不应往 count1/2/3 追加条目")
+
+        val acc = decodeAccessories(got)
+        assertEquals(655, acc.f32, "f32 必须等于 ItemDef.param (水泡序号)")
+        assertEquals(255, acc.f29)
+        assertEquals(0, acc.f30)
+        assertTrue(acc.decorations.isEmpty())
+        assertTrue(acc.effects.isEmpty(), "category 14 不能塞进 count2, 否则局内会挂无效特效")
+        assertTrue(acc.avatars.isEmpty())
+    }
+
+    @Test
+    fun testBombSkinSurvivesGameStartVariant() {
+        // 进战斗前的最后一次 op 100 (PracticeStartInfo) 会覆写 CFxContext+472,
+        // 这一发必须同样带上水泡, 否则进房时设的值会被清回默认。
+        val got = body(
+            SetPlayer(slotId = 0, level = 1, isStart = true, equips = mapOf(bombSlot() to 930000655))
+        )
+        assertEquals(77, got.size)
+        assertEquals(655, decodeAccessories(got, isStart = true).f32)
+    }
+
+    @Test
+    fun testBombSkinCoexistsWithOtherAccessories() {
+        // 背景 (count1) + 角色特效 (count2) + 水泡 (f32) 三种通道互不干扰
+        val got = body(
+            SetPlayer(
+                slotId = 0, level = 1,
+                equips = mapOf(
+                    220 to 710418,   // category 10 背景
+                    240 to 2040,     // category 12 特效
+                    bombSlot(1) to 930000655, // category 14 水泡
+                ),
+            )
+        )
+        val acc = decodeAccessories(got)
+        assertEquals(listOf(1 to 418), acc.decorations)
+        assertEquals(listOf(Triple(-1, 0, 16)), acc.effects)
+        assertEquals(655, acc.f32, "count2 有条目时 f32 仍必须在 f30 之后被正确读到")
+        assertEquals(0, acc.f30)
+        assertTrue(acc.avatars.isEmpty())
+    }
+
+    @Test
+    fun testNoEquippedBombSkinKeepsF32Zero() {
+        // 未装备 / 卸下 / 未知物品 / 只在背包 (0xFF) 都必须是默认水泡
+        val cases = listOf(
+            emptyMap(),
+            mapOf(bombSlot() to 0),
+            mapOf(bombSlot() to 999999999),
+            mapOf(0xFF to 930000655),
+        )
+        cases.forEach { equips ->
+            val acc = decodeAccessories(body(SetPlayer(slotId = 0, level = 1, equips = equips)))
+            assertEquals(0, acc.f32, "equips=$equips 不应下发水泡皮肤")
+        }
+    }
+
+    @Test
+    fun testSlotAccessoriesOfCategory14UsesParamOnly() {
+        val bombDef = { param: Int ->
+            ItemDefEntry(itemId = 930000001, category = 14, name = "BombDeco/Bomb001", param = param)
+        }
+        // param <= 0 客户端 sub_687B3D 会按默认处理, 不应下发
+        assertEquals(0, slotAccessoriesOf(mapOf(bombSlot() to 930000001)) { bombDef(0) }.bombSkin)
+        assertEquals(0, slotAccessoriesOf(mapOf(bombSlot() to 930000001)) { bombDef(-1) }.bombSkin)
+
+        // 多件时按复合槽位排序取第一件, 结果确定; 且不进 count2
+        val defs = mapOf(
+            930000041 to ItemDefEntry(itemId = 930000041, category = 14, name = "BombDeco/Bomb041", param = 41),
+            930000065 to ItemDefEntry(itemId = 930000065, category = 14, name = "BombDeco/Bomb065", param = 65),
+        )
+        val acc = slotAccessoriesOf(
+            equips = mapOf(bombSlot(2) to 930000065, bombSlot(1) to 930000041),
+        ) { defs[it] }
+        assertEquals(41, acc.bombSkin, "按复合槽位排序取第一件水泡, 结果必须确定")
+        assertTrue(acc.effects.isEmpty())
+    }
+
+    // ========================================================================
+    // 端到端: C→S op 273 (背包穿上水泡) → user.equips → 开局 op 100 的 f32
+    // ========================================================================
+    private fun e1(v: Int) = byteArrayOf((v xor 0x5A).toByte())
+    private fun e2(v: Int) = byteArrayOf(
+        (((v shr 8) and 0xFF) xor 0xA5).toByte(),
+        ((v and 0xFF) xor 0x69).toByte(),
+    )
+    private fun e4(v: Int) = byteArrayOf(
+        ((v ushr 24) xor 0x96).toByte(),
+        (((v ushr 16) and 0xFF) xor 0xCA).toByte(),
+        (((v ushr 8) and 0xFF) xor 0x53).toByte(),
+        ((v and 0xFF) xor 0x95).toByte(),
+    )
+
+    @Test
+    fun testEquipBombViaOp273ReachesStartPacket() {
+        // PlayerEquips 是进程级单例, 用独立 id 避免污染其它用例
+        val cs = ClientSocket()
+        val user = User(cs, 9102, "bomber")
+        cs.users += user
+        user.equips.clear()
+
+        // action=5 (背包穿脱) / player=0 / count=1 / (复合槽位 240, item 930000655)
+        val payload = e1(5) + e1(0) + e2(1) + e1(bombSlot()) + e4(930000655) + e1(1) + e1(1)
+        val buf = Unpooled.wrappedBuffer(payload)
+        with(ChangeEquipReq) { buf.handle(cs) }
+        assertEquals(0, buf.readableBytes(), "op 273 必须被完整消费")
+        assertEquals(930000655, user.equips[bombSlot()], "水泡必须记进真实装备槽而不是背包")
+
+        // 开局那一发 op 100 是客户端最后一次重建 CFxContext 的机会
+        val got = body(SetPlayer(slotId = 0, user = user, isStart = true))
+        assertEquals(655, decodeAccessories(got, isStart = true).f32)
+
+        // 卸下后 f32 归零, 回落默认水泡 (真实客户端脱下上报 slot=0xFF + itemId 进入背包)
+        val off = Unpooled.wrappedBuffer(e1(5) + e1(0) + e2(1) + e1(0xFF) + e4(930000655) + e1(1) + e1(1))
+        with(ChangeEquipReq) { off.handle(cs) }
+        assertEquals(0, decodeAccessories(body(SetPlayer(slotId = 0, user = user, isStart = true)), true).f32)
     }
 }

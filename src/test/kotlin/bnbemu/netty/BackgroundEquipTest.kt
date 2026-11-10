@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Test
 import bnbemu.handler.ChangeEquipReq
 import bnbemu.handler.JoinSessionReq
 import bnbemu.packet.EQUIP_SLOTS_PER_GROUP
+import bnbemu.server.Room
 import bnbemu.server.User
+import bnbemu.server.state
 
 /**
  * 「商城装扮页设了背景，回大厅后被自动取消装备」的回归测试。
@@ -160,20 +162,64 @@ class BackgroundEquipTest {
         }
     }
 
+    /**
+     * 真实客户端 CA.exe 的卸下行为回归:
+     * sub_659004 在装备槽 item=0 时直接跳过, 仅在背包向量遍历时上报 (slot=0xFF, itemId=backgroundItemId)。
+     * 服务端据此从 user.equips 中卸下该物品并退回背包。
+     */
     @Test
-    fun testUnequipReturnsItemToBag() {
+    fun testRealClientUnequipReports0xFF() {
         val cs = ClientSocket()
-        val user = User(cs, USER_ID, "tester")
+        val user = User(cs, USER_ID + 10, "real_unequip_tester")
         cs.users += user
 
+        // 先穿上
         sendChangeEquip(cs, changeEquipPayload(1, listOf(backgroundSlot to backgroundItemId)))
-        // 再脱掉: itemId = 0
-        sendChangeEquip(cs, changeEquipPayload(5, listOf(backgroundSlot to 0)))
+        assertEquals(backgroundItemId, user.equips[backgroundSlot])
 
-        assertNull(user.equips[backgroundSlot], "卸下后装备槽应为空")
+        // 真实客户端卸下: 上报 slot=0xFF + itemId
+        sendChangeEquip(cs, changeEquipPayload(5, listOf(0xFF to backgroundItemId)))
+
+        assertNull(user.equips[backgroundSlot], "真实客户端发 0xFF 卸下后装备槽必须被清空")
         assertTrue(
             user.items.any { it.itemId == backgroundItemId },
-            "卸下的物品必须退回背包, 否则下一次 op 198 清空重建后它就彻底消失了"
+            "卸下的物品必须退回背包"
         )
+    }
+
+    /**
+     * 房间阶段换装/卸下外观刷新测试:
+     * 当玩家位于房间槽位时，任何装备变更 (穿上/卸下) 均需向房间广播 S→C op 100 SetPlayer,
+     * 触发客户端刷新槽位 UI (CSlotView) 并重绘/清理装扮。
+     */
+    @Test
+    fun testRoomSlotBroadcastsSetPlayerOnEquipAndUnequip() {
+        val ch = EmbeddedChannel()
+        val cs = ClientSocket()
+        val user = User(cs, USER_ID + 20, "room_equip_tester")
+        cs.users += user
+        ch.pipeline().addLast(cs)
+
+        val previousUser = Room.slots[0].user
+        try {
+            Room.slots[0].user = user
+            Room.slots[0].state = 0x01 // FLAG_CHIEF
+
+            // 1. 在房间内穿上背景
+            sendChangeEquip(cs, changeEquipPayload(5, listOf(backgroundSlot to backgroundItemId)))
+            val pkt1 = ch.readOutbound<PKT>()
+            assertNotNull(pkt1, "房间内穿上装备必须广播 SetPlayer (op 100)")
+            assertEquals(100, OpcodeManager.getSendOp(pkt1!!::class.java), "广播包 opcode 必须为 100")
+
+            // 2. 在房间内脱掉背景 (真实客户端发 0xFF + itemId)
+            sendChangeEquip(cs, changeEquipPayload(5, listOf(0xFF to backgroundItemId)))
+            val pkt2 = ch.readOutbound<PKT>()
+            assertNotNull(pkt2, "房间内脱掉装备必须广播 SetPlayer (op 100)")
+            assertEquals(100, OpcodeManager.getSendOp(pkt2!!::class.java), "广播包 opcode 必须为 100")
+            assertNull(user.equips[backgroundSlot], "装备槽中的背景必须已被脱下")
+        } finally {
+            Room.slots[0].user = previousUser
+            ch.finishAndReleaseAll()
+        }
     }
 }

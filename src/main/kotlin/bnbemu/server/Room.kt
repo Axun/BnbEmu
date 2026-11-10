@@ -60,6 +60,7 @@ object Room {
     val uniqueClients: Sequence<ClientSocket>
         get() = slots.asSequence()
             .mapNotNull { it.user?.c } // 取得所有slot中有玩家的 ClientSocket
+            .filter { runCatching { it.ch }.isSuccess && runCatching { it.ctx }.isSuccess }  // 初始化，防止在单元测试等场景抛出异常
             .distinctBy { it.ch.id() } // 過濾掉 2P 的重複連線 對2P只會發一次
 
     fun startGame() {
