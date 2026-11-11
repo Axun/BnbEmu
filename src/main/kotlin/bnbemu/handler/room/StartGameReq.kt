@@ -1,6 +1,6 @@
 package bnbemu.handler.room
 
-import bnbemu.data.FxdynMapInfo
+import bnbemu.data.map.MapCatalog
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
@@ -9,33 +9,17 @@ import bnbemu.packet.PracticeAiLevel
 import bnbemu.packet.PracticeBoard
 import bnbemu.packet.PracticeStartInfo
 import bnbemu.packet.room.GameStartMapInfo
-import bnbemu.packet.room.randomSpawnPositions
+import bnbemu.packet.room.assignSpawnPositions
 import bnbemu.server.Room
 import kotlin.random.Random
 
 // ============================================================================
-// 地图表: 与 S→C op 210 共用唯一事实源 data/FxdynMapInfo.records
+// 地图表: 唯一事实源是 data/fxdynmapinfo.json，join 逻辑在 data/map/MapCatalog
 // ============================================================================
 // 客户端 CDynamicMapMan 只把 flag==0 的记录按数组顺序装入选图数组，其 0-based 下标
 // 就是 C→S op 85 / op 92 的 mapId；themeId 等于记录的 sort_order。
-// op 210 的下发包体由同一 List<FxdynRecord> 序列化，因此改 JSON 时下发内容与
-// mapId 编号必然同步，不会再出现「表已更新、编号没跟上」的漂移。
-// 依据: CA.exe 0x52F56C / 0x51C60F / 0x531A09，详见 docs/client/ssd-file.md (3)(5)。
-data class MapInfo(val name: String, val themeId: Int)
-
+// 这里只取「名字」（下发 op 112 的 mapName），元数据（人数/等级/会员）用 MapCatalog.of(mapId)。
 private const val FALLBACK_MAP_NAME = "Cemetery03"
-
-val mapIdTable: Map<Int, MapInfo> by lazy { loadMapIdTable() }
-
-// FxdynMapInfo 读取/校验失败一律 fail-fast，这里只对结果做完整性检查。
-fun loadMapIdTable(): Map<Int, MapInfo> {
-    val table = LinkedHashMap<Int, MapInfo>()
-    FxdynMapInfo.records.filter { it.flag == 0 }.forEachIndexed { mapId, r ->
-        table[mapId] = MapInfo(r.name, r.sortOrder)
-    }
-    check(table.isNotEmpty()) { "fxdynmapinfo.json 中没有 flag==0 的记录" }
-    return table
-}
 
 // ============================================================================
 // C→S op 92: 開始遊戲請求 (StartGameReq) — 房間/練習房內點擊"開始"後發出
@@ -69,7 +53,7 @@ val StartGameReq = PKTHandler { c ->
         println("mapId or themeId mismatch")
     }
 
-    val mapName = mapIdTable[mapId]?.name ?: FALLBACK_MAP_NAME
+    val mapName = MapCatalog.ref(mapId)?.name ?: FALLBACK_MAP_NAME
     println("StartGame. mapId: $mapId, mapName: $mapName")
 
     // 開局名冊 = 房間裡真正參戰的槽位 (op 89 踢掉的 AI 已被清成 user=null / isAI=false)。
@@ -90,7 +74,8 @@ val StartGameReq = PKTHandler { c ->
             themeId = themeId,
             mapName = mapName,
             activeSlots = activeSlots,
-            spawnPositions = randomSpawnPositions(),
+            // 出生点数量由地图决定（4 人图只有 0..3），按参战槽顺序分配，见 assignSpawnPositions
+            spawnPositions = assignSpawnPositions(mapId, activeSlots),
         ),
         PracticeStartInfo(user = user),
         PracticeBoard(),

@@ -84,6 +84,12 @@ JSON 是 YAML 1.2 子集，现有 kaml 可直接解析，**未新增依赖**。
 读取/校验失败改为 fail-fast（旧实现只打日志并返回空表，会让所有地图静默兜底 `Cemetery03`）。
 `mvn clean test` 全量通过，`testLoadMapIdTable` 覆盖 0/66/145/172/175/176、themeId 28/29 与越界 999。
 
+**2026-11-11 收口**：这套 join 已搬进 `data/map/MapCatalog`——`MapCatalog.ref(mapId)` 给 `MapRef(name, themeId)`
+（只依赖 JSON，恒有），`MapCatalog.of(mapId)` 给 `MapTemplate`（带 `.bin` 里的人数/队伍数/等级门槛/会员限制，
+无 `.bin` 的虚拟条目返回 null）。`handler/room/StartGameReq.kt` 里的 `data class MapInfo`、`mapIdTable`、
+`loadMapIdTable()` 已删除，handler 只调 `MapCatalog.ref(mapId)?.name`；对应测试改名 `testMapRefFollowsFlagZeroOrder`
+并加断言 `MapCatalog.of(0) == null`（HotRandom 无地图文件）。
+
 #### (4) 游戏目录下常见的 `.ssd` 清单
 | 文件名 | 内部全称 / 对应类 | 作用 | 对应协议下发 |
 | :--- | :--- | :--- | :--- |

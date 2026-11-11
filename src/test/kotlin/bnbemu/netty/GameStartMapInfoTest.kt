@@ -4,11 +4,10 @@ import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
+import bnbemu.data.map.MapCatalog
 import bnbemu.handler.room.StartGameReq
-import bnbemu.handler.room.loadMapIdTable
-import bnbemu.handler.room.mapIdTable
 import bnbemu.packet.room.GameStartMapInfo
-import bnbemu.packet.room.randomSpawnPositions
+import bnbemu.packet.room.assignSpawnPositions
 import bnbemu.packet.room.spawnRandom
 import bnbemu.server.Room
 import bnbemu.server.bomber
@@ -170,20 +169,21 @@ class GameStartMapInfoTest {
     }
 
     @Test
-    fun testLoadMapIdTable() {
-        val decoded = loadMapIdTable()
-        assertEquals(193, decoded.size, "flag==0 的记录数")
-        assertEquals("HotRandom", decoded[0]?.name)
-        assertEquals("CampRandom", decoded[66]?.name)
-        assertEquals("Patrit14", decoded[145]?.name)
-        assertEquals("Cemetery", decoded[172]?.name)
-        assertEquals("Cemetery03", decoded[175]?.name)
-        assertEquals("Cemetery04", decoded[176]?.name)
-        assertEquals(28, decoded[175]?.themeId)
-        assertEquals(29, decoded[176]?.themeId)
-        assertEquals("Cemetery03", mapIdTable[175]?.name)
-        assertEquals("Cemetery04", mapIdTable[176]?.name)
-        assertEquals(null, decoded[999]?.name, "越界 mapId 不应命中")
+    fun testMapRefFollowsFlagZeroOrder() {
+        // 协议 mapId = fxdynmapinfo 里 flag==0 记录的 0-based 下标（见 data/map/MapCatalog）
+        val refs = MapCatalog.refs
+        assertEquals(193, refs.size, "flag==0 的记录数")
+        assertEquals("HotRandom", refs[0].name)
+        assertEquals("CampRandom", refs[66].name)
+        assertEquals("Patrit14", refs[145].name)
+        assertEquals("Cemetery", refs[172].name)
+        assertEquals("Cemetery03", refs[175].name)
+        assertEquals("Cemetery04", refs[176].name)
+        assertEquals(28, refs[175].themeId, "themeId 即记录的 sort_order")
+        assertEquals(29, refs[176].themeId)
+        assertEquals("Cemetery04", MapCatalog.ref(176)?.name)
+        assertEquals(null, MapCatalog.ref(999), "越界 mapId 不应命中")
+        assertEquals(null, MapCatalog.of(0), "HotRandom 没有 .bin，模板应为 null")
     }
 
     @Test
@@ -343,11 +343,32 @@ class GameStartMapInfoTest {
         val saved = spawnRandom
         try {
             spawnRandom = Random(20261106)
-            val draws = List(32) { randomSpawnPositions().toList() }
+            // mapId 176 = Cemetery04，8 人圖
+            val draws = List(32) { assignSpawnPositions(176, (0..7).toList()).toList() }
             draws.forEach { spawns ->
                 assertEquals((0..7).toList(), spawns.sorted(), "出生點必須是 0..7 的排列: 不重複、不越界")
             }
             assertTrue(draws.distinct().size > 1, "每次開局都必須重新洗牌")
+        } finally {
+            spawnRandom = saved
+        }
+    }
+
+    @Test
+    fun testSpawnPositionsFollowMapCapacity() {
+        val saved = spawnRandom
+        try {
+            spawnRandom = Random(20261111)
+            // mapId 8 = Wriggle01，4 人圖：出生點只能是 0..3（真端 spawns = min(maxPlayer, 8)）
+            repeat(16) {
+                val spawns = assignSpawnPositions(8, listOf(0, 1, 2, 3))
+                assertEquals(listOf(0, 1, 2, 3), spawns.copyOfRange(0, 4).sorted(), "4 人圖不得發 4..7")
+            }
+            // 只有部分槽位參戰時，其餘槽位保持自身槽號（不會被編碼進 op112）
+            val partial = assignSpawnPositions(176, listOf(0, 2, 5))
+            assertEquals(8, partial.size)
+            listOf(1, 3, 4, 6, 7).forEach { assertEquals(it, partial[it], "未參戰槽 $it 應保持自身槽號") }
+            assertEquals(3, listOf(partial[0], partial[2], partial[5]).distinct().size, "參戰槽的出生點互不重複")
         } finally {
             spawnRandom = saved
         }

@@ -1,5 +1,7 @@
 package bnbemu.packet.room
 
+import bnbemu.constants.MAX_SESSION_SLOTS
+import bnbemu.data.map.MapCatalog
 import bnbemu.netty.PKT
 import bnbemu.server.Room
 import bnbemu.server.bomber
@@ -14,14 +16,29 @@ import kotlin.random.Random
 // 也就是說 op112 的 spawnPos 就是「這局誰站在哪個出生點」的唯一來源。
 //
 // 真實對局不能沿用抓包裡的固定排列 [2,1,6,0,3,4,5,7], 否則每局玩家都在同一個點出生。
-// 這裡每次開局重新洗牌 0..7 (一個排列, 8 個出生點恰好各用一次, 不會有兩人重疊);
 // GameStartMapInfo() 的預設值仍保留抓包原值, 供 replay_test 與單元測試逐位元組比對。
+//
+// 出生點數量由地圖決定: 真端 LaunchGameStage 取 min(maxPlayer, 8), 4 人圖只有 0..3
+// 四個出生點, 洗 0..7 會把玩家放到不存在的出生點 (GameSession.ts:1384)。
 //
 // spawnRandom 抽成可替換的 RNG, 讓回歸測試能用固定 seed 得到確定性結果。
 internal var spawnRandom: Random = Random.Default
 
-/** 產生本局的隨機出生點排列, 按「真實槽號」索引 (見 [GameStartMapInfo])。 */
-fun randomSpawnPositions(): IntArray = (0..7).shuffled(spawnRandom).toIntArray()
+/**
+ * 產生本局的出生點分配表, 按「真實槽號」索引 (見 [GameStartMapInfo])。
+ *
+ * 與真端 CGameSession::LaunchGameStage 同序: 先把 0 until spawnCount 洗成一個排列,
+ * 再按參戰槽號從小到大依次取用; 未參戰的槽位保持自身槽號 (不會被編碼進 op112)。
+ * 參戰人數超過該圖出生點數時, 多出來的槽位退回自身槽號 (房間本應先擋掉超额人數)。
+ */
+fun assignSpawnPositions(mapId: Int, activeSlots: List<Int>): IntArray {
+    val order = MapCatalog.spawnPermutation(mapId, spawnRandom)
+    val out = IntArray(MAX_SESSION_SLOTS) { it }
+    activeSlots.filter { it in 0 until MAX_SESSION_SLOTS }
+        .sorted()
+        .forEachIndexed { i, slot -> if (i < order.size) out[slot] = order[i] }
+    return out
+}
 
 /**
  * S→C op 112: GameStartMapInfo (對局地圖與槽位出生點/角色初始化)
@@ -63,7 +80,7 @@ fun randomSpawnPositions(): IntArray = (0..7).shuffled(spawnRandom).toIntArray()
  *    預設值 0..7 保留給抓包重放/單元測試, 與 cap/practice_s2c_op112_167B_0.bin 逐位元組一致。
  *
  * ⚠️ spawnPositions 的預設值同樣是抓包裡的固定排列, 只供重放比對;
- *    正式開局由 [StartGameReq] 傳入 [randomSpawnPositions] 的每局洗牌結果。
+ *    正式開局由 [StartGameReq] 傳入 [assignSpawnPositions] 的每局分配結果。
  */
 fun GameStartMapInfo(
     randomSeed: Int = 0x7E022E6B,
