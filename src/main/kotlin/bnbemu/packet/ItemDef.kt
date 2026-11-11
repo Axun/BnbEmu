@@ -1,10 +1,10 @@
 package bnbemu.packet
 
 import bnbemu.ACP
+import bnbemu.data.DataResource
 import bnbemu.netty.PKT
 import bnbemu.netty.ssdEncode
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -88,15 +88,7 @@ object ItemDef {
     /**
      * 从基础数据文件加载历史 882 条基础物品定义
      */
-    fun loadBaseItems(): List<ItemDefEntry> {
-        val stream = ItemDef::class.java.getResourceAsStream("/data/item_def_base.bin")
-            ?: File("src/main/resources/data/item_def_base.bin").takeIf { it.exists() }?.inputStream()
-        if (stream == null) {
-            throw RuntimeException("Failed to load item_def_base.bin")
-        }
-        val raw = stream.use { it.readAllBytes() }
-        return decodeBlock(raw)
-    }
+    fun loadBaseItems(): List<ItemDefEntry> = decodeBlock(DataResource.bytes("data/item_def_base.bin"))
 
     /**
      * 将明文 SSD 数据块解析为 ItemDefEntry 列表

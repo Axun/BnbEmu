@@ -7,7 +7,6 @@ import com.charleskorn.kaml.YamlScalar
 import com.charleskorn.kaml.yamlList
 import com.charleskorn.kaml.yamlMap
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.nio.charset.StandardCharsets
 
 // ============================================================================
@@ -30,6 +29,7 @@ import java.nio.charset.StandardCharsets
 // 网络块 compress=0（无 zlib、无 ssi1 头、无 Adler 校验和）；客户端收包后自行压缩写盘成 .ssd。
 // ============================================================================
 
+private const val SOURCE_PATH = "data/fxdynmapinfo.json"
 private const val SCHEMA = "bnbemu/fxdynmapinfo@1"
 private const val OPCODE = 210
 private const val BLOCK_MARKER = 0x18
@@ -70,18 +70,12 @@ object FxdynMapInfo {
     /** 完整 S→C 包，24123 B；仅用于回归验证，实际发送由框架补 opcode。 */
     fun buildFullPacket(): ByteArray = buildPacket(plain)
 
+    /** 读取同一份源 JSON 文本，供回归测试做「解析 → 序列化」往返验证。 */
+    fun readSourceText(): String = DataResource.text(SOURCE_PATH)
+
     // ------------------------------------------------------------------
     // 读取与解析（fail-fast：数据文件是唯一事实源，缺失/损坏必须立刻失败）
     // ------------------------------------------------------------------
-
-    fun readSourceText(): String {
-        val stream = FxdynMapInfo::class.java.getResourceAsStream("/data/fxdynmapinfo.json")
-            ?: File("src/main/resources/data/fxdynmapinfo.json").takeIf { it.exists() }?.inputStream()
-            ?: File("data/fxdynmapinfo.json").takeIf { it.exists() }?.inputStream()
-            ?: File("fxdynmapinfo.json").takeIf { it.exists() }?.inputStream()
-            ?: error("找不到地图事实源 fxdynmapinfo.json (classpath /data/ 与工作目录均已尝试)")
-        return stream.use { it.bufferedReader(StandardCharsets.UTF_8).readText() }
-    }
 
     fun parseRecords(text: String): List<FxdynRecord> {
         val root = Yaml.default.parseToYamlNode(text).yamlMap

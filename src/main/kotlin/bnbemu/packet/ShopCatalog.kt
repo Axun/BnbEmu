@@ -1,10 +1,10 @@
 package bnbemu.packet
 
 import bnbemu.ACP
+import bnbemu.data.DataResource
 import bnbemu.netty.PKT
 import bnbemu.netty.ssdEncode
 import java.io.ByteArrayOutputStream
-import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -157,15 +157,7 @@ object ShopCatalog {
     /**
      * 从基础数据文件加载历史 573 条商城物品条目
      */
-    fun loadBaseItems(): List<ShopItemEntry> {
-        val stream = ShopCatalog::class.java.getResourceAsStream("/data/shop_catalog_base.bin")
-            ?: File("src/main/resources/data/shop_catalog_base.bin").takeIf { it.exists() }?.inputStream()
-        if (stream == null) {
-            throw RuntimeException("Failed to load data")
-        }
-        val raw = stream.use { it.readAllBytes() }
-        return decodeBlock(raw)
-    }
+    fun loadBaseItems(): List<ShopItemEntry> = decodeBlock(DataResource.bytes("data/shop_catalog_base.bin"))
 
     /**
      * 将明文 SSD 数据块解析为 ShopItemEntry 列表
