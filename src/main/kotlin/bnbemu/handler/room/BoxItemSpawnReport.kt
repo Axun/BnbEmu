@@ -52,7 +52,8 @@ val BoxItemSpawnReport = PKTHandler { c ->
             val token = Decode4
         }
         2, 3 -> {
-            // 角色受困 / 被救状态同步，仅 4 字节 payload，已读取完毕
+            // 角色受困 / 被救状态同步，仅 4 字节 payload，已读取完毕。
+            // 实测 EN 客户端从不为 AI 发这两个 action
         }
         0 -> {
             val arg1 = Decode2

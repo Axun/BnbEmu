@@ -105,6 +105,22 @@
            所以结果页恒显示 `00.0%` / `000000`。现在 `+124/+128/+152` 才是显示源。
          · 回归测试：`GameOverTest.testGameResultResultScreenFields` / `testGameResultAiWinSwapsFrames`
            （包长 119B、gameType==0、胜负帧、`+124/+128/+152` 偏移全部钉死）。
+    4.2 **杀 AI 为什么没有死亡音，官方是怎么做到的（2026-11-11 定案）**：
+       - **死亡音 0x2A 只有一个来源**：全 `.text` 里 `sub_4DEDAD(..., 42, ...)` 仅两处，
+         都在 op146 处理器 `0x0054DDD1` 的收尾（`case 4` 死亡+掉落 / `case 5` 死亡名单）。
+         op159 播的是 **0x37**（`0x0054C378: sub_4DEDAD(..., 55, ...)`），实测无声 ——
+         「音效是 BomberDie 触发的」这个印象，实际来自同一批下发里的 op146 state=5。
+       - **客户端对 AI 一条濒死包都不发**（实测整局 72 个 op154，action 只有 1 / 4）：
+         · action 5 死亡上报 → 闸门 `IsLocalPlayerIndex_0or1`（`0x45FBD3`：`0 <= bomber+0x4D0 < 2`），
+           AI 的 `m_selfidx` 恒 -1，永不过；
+         · action 2/3 被困/被救 → 闸门 `IsNonLocal_And_SlotTypeZero`（`0x45FBA0`：只有
+           `m_selfidx<0 && slotType==0` 才跳过），AI 座位 slotType 非 0 能过 —— **这是 AI 唯一的濒死信号**。
+       - **本模拟器落地（唯一路径）**：`tools/patch_ai_die.py` 把 `0x0046DB08` 的 `74 52`（`je 0x46DB5C`，
+         即 `IsLocalPlayerIndex_0or1` 不通过就整段跳过发包）改成 `90 90`。打完补丁后**每个 bomber
+         （含 AI）阵亡都发 C→S op154 action=5**，走的正是人类那条路 → 服务端 `Room.onBomberDie`
+         广播 159 + op146 state=5 → 客户端播 0x2A。时机精确、每个 AI 一声，与官方客户端等价；
+         对人类玩家行为零变化。
+
     5. **op 160 = `ReviveBomber`（复活某个 bomber）：
        分发表 `0x55A6A2`（`sub eax,0x90` / `cmp 0x1A` / `movzx byte[0x55AA48+..]` / `jmp [0x55AA08+idx*4]`）
        里 `0xA0 → 0x55A719 → call 0x55345D`。处理器：
