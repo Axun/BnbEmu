@@ -11,6 +11,7 @@ import bnbemu.packet.PracticeStartInfo
 import bnbemu.packet.room.GameStartMapInfo
 import bnbemu.packet.room.assignSpawnPositions
 import bnbemu.server.Room
+import org.tinylog.kotlin.Logger
 import kotlin.random.Random
 
 // ============================================================================
@@ -56,7 +57,13 @@ val StartGameReq = PKTHandler { c ->
     val mapName = MapCatalog.ref(mapId)?.name ?: FALLBACK_MAP_NAME
     println("StartGame. mapId: $mapId, mapName: $mapName")
 
-    // 開局名冊 = 房間裡真正參戰的槽位 (op 89 踢掉的 AI 已被清成 user=null / isAI=false)。
+    val mapLimit = MapCatalog.maxPlayerOf(mapId)
+    if (Room.activeSlotCount > mapLimit) {
+        // 应该不会发生，客户端有检查
+        Logger.warn("[StartGame] mapId=$mapId 人数上限 $mapLimit, 房间人数超限")
+    }
+
+    // 開局名冊 = 房間裡真正參戰的槽位 (op 89 / 选图上限 踢掉的 AI 已被清成 user=null / isAI=false)。
     // 與 Room.resetMatchState 的 hasSeat() 判據必須完全一致, 否則會出現
     // 「服務端按 6 個 AI 判勝負、客戶端卻照 op112 的 8 槽名冊生成 7 個 AI」的錯位。
     // 異常防護: 若房間槽位尚未初始化 (例如非練習房流程), 退回舊的 8 槽名冊,

@@ -2,12 +2,16 @@ package bnbemu.server
 
 import io.netty.channel.EventLoop
 import io.netty.util.concurrent.ScheduledFuture
+import bnbemu.constants.MAX_SESSION_SLOTS
+import bnbemu.data.map.MapCatalog
 import bnbemu.isEN
 import bnbemu.isJP
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.NettyServer.workerGroup
 import bnbemu.netty.PKT
 import bnbemu.packet.ClientStage
+import bnbemu.packet.PracticeSetSlotAI
+import bnbemu.packet.PracticeSlotReady
 import bnbemu.packet.room.*
 import org.tinylog.kotlin.Logger
 import java.util.concurrent.ConcurrentHashMap
@@ -62,6 +66,51 @@ object Room {
             .mapNotNull { it.user?.c } // 取得所有slot中有玩家的 ClientSocket
             .filter { runCatching { it.ch }.isSuccess && runCatching { it.ctx }.isSuccess }  // 初始化，防止在单元测试等场景抛出异常
             .distinctBy { it.ch.id() } // 過濾掉 2P 的重複連線 對2P只會發一次
+
+    // ========================================================================
+    // 地图人数上限 → 更换地图后自动踢出超额的电脑玩家 (2026-11-12)
+    // ========================================================================
+    // 真端选图时若房间人数超过地图 maxPlayer, 只会在 S→C op 108 回 result=1,
+    // 由客户端 (CA.exe 0x4F09D9) 弹 "MapSelectExceedMaxPlayer" 拒绝选图, 要玩家自己踢人。
+    // 模拟器改为服务端直接把超额的 AI 从高槽位起踢掉, 并同步客户端房间界面:
+    //   S→C op 106 PracticeSlotReady(state=1) + op 103 PracticeSetSlotAI(isAI=false)
+    // —— 与 C→S op 89「踢出电脑敌人」完全同一套 (见 handler/room/OpenCloseSlotReq.kt),
+    //    103 还会清掉 CPrepareStrategyAIBattle 的 [esi+0x3250] 等待锁。
+    //
+    // · 真人槽永不进踢出候选; 查不到地图模板 (随机图按钮等) 时 maxPlayerOf 退回 8, 即不踢。
+    // · 只踢不加: 换回大容量地图也不会自动把 AI 加回来, 要加回由玩家自己点槽位 (op 89)。
+    // · 开局的 op 112 名册读的是 Room.slots 的 hasSeat(), 这里改完状态后开局自然只发
+    //   上限内的槽位, 不会再出现「4 人图塞 8 个 bomber / 出生点 4..7 不存在」。
+    // ========================================================================
+
+    /**
+     * 把房间人数裁剪到地图上限以内, 并向房间内所有客户端下发踢人同步包。
+     * 只做减法、幂等: 同一张图重复选不会重复踢。
+     *
+     * @param broadcast false = 只改服务端状态 (开局兜底 / 纯状态测试)
+     * @return 被踢出的槽号 (从大到小)
+     */
+    fun applyMapPlayerLimit(mapId: Int, broadcast: Boolean = true): List<Int> {
+        val limit = MapCatalog.maxPlayerOf(mapId).coerceIn(1, MAX_SESSION_SLOTS)
+        val seated = slots.indices.filter { slots[it].hasSeat() }
+        // 只踢「空的 AI 槽」; 从大槽号开始, 留下的槽号连续, 与真端房间 UI 顺序一致。
+        val aiSlots = slots.indices.filter { slots[it].isAI && slots[it].user == null }
+        val kicked = aiSlots.sortedDescending().take((seated.size - limit).coerceAtLeast(0))
+
+        val packets = mutableListOf<PKT>()
+        for (slotIdx in kicked) {
+            val slot = slots[slotIdx]
+            slot.isAI = false
+            slot.user = null
+            slot.state = FLAG_CLOSED
+            slot.matchState = SlotMatchState.OUT_OF_MATCH
+            packets += PracticeSlotReady(slot = slotIdx, state = 1)
+            packets += PracticeSetSlotAI(slot = slotIdx, isAI = false)
+        }
+
+        if (broadcast && packets.isNotEmpty()) BC(*packets.toTypedArray())
+        return kicked
+    }
 
     fun startGame() {
         // 每 200ms 一次炸弹与对局状态检测

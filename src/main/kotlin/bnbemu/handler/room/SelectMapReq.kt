@@ -17,12 +17,18 @@ val SelectMapReq = PKTHandler { c ->
         println("SelectMapReq -> themeId: $themeId, mapId: $mapId")
         Room.themeId = themeId
         Room.mapId = mapId
+        // 先回 op 108 解掉客户端的选图等待锁并刷新地图 UI, 再做人数上限调整。
         Room BC SelectMap(result = 0, themeId = themeId, mapId = mapId)
+        // 4 人图 (如 mapId=8 Wriggle01) 容不下练习房默认的 1 真人 + 7 AI:
+        // 把超额的电脑玩家从高槽位起踢出, 并下发 op106/op103 同步房间界面。
+        // 只踢不加: 换回大图不会自动把 AI 加回来, 要加回由玩家自己点槽位 (op 89)。
+        Room.applyMapPlayerLimit(mapId)
     } else if (readableBytes() >= 2) {
         val map = Decode2
         println("SelectMapReq (legacy 2B) -> mapId: $map")
         Room.mapId = map
         Room BC SelectMap(result = 0, themeId = 0, mapId = map)
+        Room.applyMapPlayerLimit(map)
     } else {
         Logger.warn("SelectMapReq unknown data")
     }
