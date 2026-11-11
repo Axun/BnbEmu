@@ -49,11 +49,6 @@ fun PracticeRoomInfo(user: User? = null, level: Int = user?.level ?: 5) =
 fun PracticeStartInfo(user: User? = null, level: Int = user?.level ?: 5) =
     SetPlayer(slotId = 0, user = user, level = level, isStart = true)
 
-// ---- op 108 练习房开局选图回应 (8B): E2(result=0) E2(themeId=0) E4(mapId=172) ----
-//    CA.exe CPrepareStage::OnPacket (0x52A949) 的 case 108 = 0x51EFE0 是选图结果处理;
-//    这里复用结构化 SelectMap 生成, 与 cap/practice_s2c_op108_10B_0.bin 的 body 逐字节一致。
-fun PracticeSelectMap() = SelectMap(result = 0, themeId = 0, mapId = 172)
-
 // ---- op 111 空体 (1B): E1(0) —— 开局时的房间 UI 开关通知 ----
 // ⚠️ 历史误标：函数名 PracticeAiLevel / yaml 的 AILevelChange: 111 都沿袭 TW_5 的猜测，
 //    它跟 AI 难度档毫无关系。CA.exe sub_5285BD (reference/CA.exe.c:249938) 只读 1B 参数，

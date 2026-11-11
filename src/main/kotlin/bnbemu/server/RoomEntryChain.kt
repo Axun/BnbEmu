@@ -2,7 +2,6 @@ package bnbemu.server
 
 import bnbemu.netty.ClientSocket
 import bnbemu.packet.EnterSessionResult
-import bnbemu.packet.PracticeSelectMap
 import bnbemu.packet.PracticeSetPlayer
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.PracticeSetSlotAI
@@ -14,6 +13,7 @@ import bnbemu.packet.SessionInfoResult
 import bnbemu.packet.Unk113
 import bnbemu.packet.UserSimpleInfoResult
 import bnbemu.packet.WelcomeNotice
+import bnbemu.packet.room.SelectMap
 
 /**
  * 整条「进房间」S→C 推送链（练习房基准）。
@@ -27,7 +27,7 @@ import bnbemu.packet.WelcomeNotice
  *   [87 RoomList, 83 EnterSessionResult, 4(13B), 4(65B), 113, 100(78B), 108,
  *    106×8, 每槽(114, 104, 105) + 下一槽的 103, WelcomeNotice]
  */
-fun sendRoomEntryChain(c: ClientSocket) {
+fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
     val user = c.users.firstOrNull()
     c.send(
         RoomList(),
@@ -36,8 +36,11 @@ fun sendRoomEntryChain(c: ClientSocket) {
         UserSimpleInfoResult(), SessionInfoResult(),
         Unk113(),
         SetPlayer(slotId = 0, user = user),
-        PracticeSelectMap(),
     )
+    if (init) {
+        c.send(SelectMap(result = 0, themeId = 0, mapId = 141))  // 海盗随机
+    }
+
     // 106×8
     repeat(8) { slot -> c.send(PracticeSlotReady(slot)) }
     // 每槽先发 [114, 104, 105]，随后补「下一槽」的 AI 槽属性包 103 (槽号 = 当前组 + 1)。

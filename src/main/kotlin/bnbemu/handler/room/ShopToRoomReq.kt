@@ -64,7 +64,7 @@ val ShopToRoomReq = PKTHandler { c ->
 
     c.stage = if (isRoomStage(c.shopReturnStage)) c.shopReturnStage else ClientStage.Room.value
     println("[ShopToRoomReq] op80 客户端已切回房间舞台 stage=${c.stage} | sessionShort=$sessionShort sessionId=$sessionId")
-    sendRoomEntryChain(c)
+    sendRoomEntryChain(c, init = false)
 
     // 按服务端权威角色回灌客户端 CUserDynamicInfo 的角色字段 (op 20 第 12 项)，
     // 它直接决定下一次 C→S op 73 的上报值；op 122 补回被 op 20 刷成 0 的 Lucci。

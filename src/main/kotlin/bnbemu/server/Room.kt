@@ -440,7 +440,7 @@ object Room {
         )
 
         if (sendRoomChain) {
-            uniqueClients.forEach { sendRoomEntryChain(it) }
+            uniqueClients.forEach { sendRoomEntryChain(it, init = false) }
             Logger.info("[Room] op155 之后补推房间链sendRoomEntryChain")
         }
         return true
