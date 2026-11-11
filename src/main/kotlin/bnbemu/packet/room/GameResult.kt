@@ -17,7 +17,7 @@ import bnbemu.server.Room
 //   2. 8 Slots (CA.exe 0x00541205, 每槽记录 244 字节)
 //      slotType = 1 (Human) 共 63 字节字段; slotType = 2 (AI) 只读 5 字节:
 //        Decode1 -> +68 结果标签帧索引, Decode1 -> +72 KILLS, Decode1 -> +76 SAVES,
-//        Decode2 -> +132
+//        Decode2 -> +132 玩家等级徽章显示
 //      Human 的关键字段偏移（与 0x00541205 的读取顺序一一对应）:
 //        +68 结果标签帧索引 / +72 KILLS / +76 SAVES /
 //        +84/+88/+100/+104 CLadderInfo 与房间槽天梯字段（0x5599A8..0x559A75，且 header unk4!=0 时 +84/+92 作 EXP/LUCCI 备用列）/
@@ -51,6 +51,12 @@ import bnbemu.server.Room
 //      · LUCCI 列（0x46F544 case 6）读 槽+152（E4，有符号，负值会画减号）。
 private const val RESULT_FRAME_WIN = 0   // "YOU WIN!!"
 private const val RESULT_FRAME_LOSE = 2  // "YOU LOSE!!"（0..4 共 5 帧，2 为失去方，需实机复核）
+
+val AI_LEVEL_TO_LEVEL = mapOf(
+    0 to 3,
+    1 to 10,
+    2 to 52,
+)
 
 fun GameResult(
     winnerTeam: Int = 1,
@@ -117,12 +123,13 @@ fun GameResult(
             Encode4(0) // +168
             Encode1(0) // +172
         } else if (isAI) {
+            val aiPlayerLevel = AI_LEVEL_TO_LEVEL[slot.aILevel] ?: 1
             Encode1(2) // slotType = 2 (AI Bot)
             Encode1(frame) // +68 结果标签帧 —— 输的一方必须写 LOSE 帧，
                            // 写 0 会让电脑对手那行显示 "YOU WIN!!"
             Encode1(0) // +72 KILLS
             Encode1(0) // +76 SAVES
-            Encode2(0) // +132
+            Encode2(aiPlayerLevel) // +132
         } else {
             Encode1(0) // slotType = 0 (Empty)
         }

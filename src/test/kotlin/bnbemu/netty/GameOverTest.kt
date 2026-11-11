@@ -51,6 +51,7 @@ class GameOverTest {
         Room.slots.forEach { slot ->
             slot.user = null
             slot.isAI = false
+            slot.aILevel = 1 // 难度档回到抓包默认，避免单例 Room 被前序用例污染
         }
         Room.slots[0].user = User(cs, id = 1, name = "tester")
         for (i in 1..7) Room.slots[i].isAI = true
@@ -64,6 +65,7 @@ class GameOverTest {
         Room.slots.forEach { slot ->
             slot.user = null
             slot.isAI = false
+            slot.aILevel = 1
         }
         Room.reset()
         ch.finish()
