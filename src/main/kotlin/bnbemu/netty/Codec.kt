@@ -5,6 +5,8 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.handler.codec.ByteToMessageDecoder
 import io.netty.handler.codec.MessageToByteEncoder
 import bnbemu.*
+import bnbemu.crypto.CRC32
+import bnbemu.crypto.CRC8
 import org.tinylog.kotlin.Logger
 
 // ReceivedPacketBase可以省略CipherDegree狀態 所以可以直接用這個

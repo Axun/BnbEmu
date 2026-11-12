@@ -1,5 +1,6 @@
 package bnbemu.data
 
+import bnbemu.crypto.Adler32
 import bnbemu.netty.ssdEncode
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlMap
@@ -12,9 +13,11 @@ import java.nio.charset.StandardCharsets
 // ============================================================================
 // fxdynmapinfo 单一事实源：src/main/resources/data/fxdynmapinfo.json
 // ============================================================================
-// 这份 JSON 的 records 数组同时驱动两处，二者共用同一份内存对象，禁止再生成第二张表：
-//   1. S→C op 210 (packet/DynamicMapInfo.kt)：本模块实时序列化成 24111 B 明文 → SSD 块 → 24123 B 完整包；
-//   2. C→S op 85/92 的 mapId：客户端把 flag==0 的记录按数组顺序装进 CDynamicMapMan，
+// 这份 JSON 的 records 数组同时驱动三处，共用同一份内存对象，禁止再生成第二张表：
+//   1. S→C op 210 (packet/DynamicMapInfo.kt)：本模块实时序列化成明文 → SSD 块 → 完整包；
+//   2. S→C op 212 (packet/FxConfig.kt) 首字段：同一份明文的 SSD 流校验戳（见 checksum），
+//      客户端拿它判断 fxdynmapinfo 快取/下发数据是否为当前版本；op210 内容一变此处必须同步；
+//   3. C→S op 85/92 的 mapId：客户端把 flag==0 的记录按数组顺序装进 CDynamicMapMan，
 //      0-based 下标即 mapId，themeId 等于 sort_order（详见 handler/room/StartGameReq.kt）。
 //
 // 记录顺序具有协议含义，禁止排序、去重、按 name/id 作 key。
@@ -59,10 +62,21 @@ object FxdynMapInfo {
     /** 342 条记录，顺序即协议。进程内只解析一次，改 JSON 后重启生效。 */
     val records: List<FxdynRecord> by lazy { parseRecords(readSourceText()) }
 
-    /** u16 count + 逐条记录，24111 B。 */
+    /** u16 count + 逐条记录；长度随 records 变化（抓包基准 24111 B）。 */
     val plain: ByteArray by lazy { serializePlain(records) }
 
-    /** op 210 的 payload（不含框架写入的 2 B opcode），24121 B。 */
+    /**
+     * S→C op 212 首字段：客户端 COSmartStream +0x14 的 fxdynmapinfo 校验戳（版本戳）。
+     *
+     * 反编译链：sub_532337 (CA.exe.c:258183) 写入 CEffectMan+0x24 → sub_531F79 (:258038)
+     * 以 `sub_78BB50(stream) == this+9` 决定是否解析记录表；sub_78BB50 = 流 +0x14，
+     * 由 sub_78BB60 (:747998) 对 SSD 块 (a2+5, u24 len) 算 sub_74EE50(0, ...)。
+     * 抓包基准 0x36CEE587 已用 cap/fxdynmapinfo_plain.bin (24111 B) 复算一致。
+     * 这里从同一份 plain 实时派生，保证 op210 与 op212 永不脱节。
+     */
+    val checksum: Int by lazy { ssdStreamChecksum(buildBlock(plain)) }
+
+    /** op 210 的 payload（不含框架写入的 2 B opcode），长度随 records 变化。 */
     val packetBlob: ByteArray by lazy {
         buildPacket(plain).let { it.copyOfRange(2, it.size) }
     }
@@ -141,7 +155,7 @@ object FxdynMapInfo {
     }
 
     // ------------------------------------------------------------------
-    // 序列化：records → 24111 B 明文
+    // 序列化：records → 记录表明文
     // ------------------------------------------------------------------
 
     fun serializePlain(records: List<FxdynRecord>): ByteArray {
@@ -185,6 +199,16 @@ object FxdynMapInfo {
         w.raw(plain)
         return w.toByteArray()
     }
+
+    /**
+     * 客户端 sub_78BB60 (CA.exe.c:747998) 的校验值：对 SSD 块从 offset 5 起
+     * （[compress][plain]）取块头 u24 长度，算 Adler-32 变体（a/b 初值均为 0，
+     * 模 65521；标准 zlib.adler32 的 a 初值是 1）。未压缩块前导 0x00 不改变 a/b，
+     * 因此等价于对 plain 本身求值。
+     *
+     * 返回 32 位位模式（可能为负 Int），直接交给 Encode4 即可。
+     */
+    fun ssdStreamChecksum(block: ByteArray): Int = Adler32.computeSsdBlock(block)
 
     /** 完整包：Encode2(opcode) + Encode4(blockLen) + EncodeBuffer(SSD 块)。 */
     fun buildPacket(plain: ByteArray, opcode: Int = OPCODE): ByteArray {

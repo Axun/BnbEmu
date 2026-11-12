@@ -1,4 +1,4 @@
-package bnbemu
+package bnbemu.crypto
 
 import io.netty.buffer.ByteBuf
 

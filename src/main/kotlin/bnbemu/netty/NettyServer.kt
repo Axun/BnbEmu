@@ -18,6 +18,8 @@ import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioDatagramChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import bnbemu.*
+import bnbemu.crypto.CRC32
+import bnbemu.crypto.CRC8
 import bnbemu.packet.ConnEstablished
 import org.tinylog.kotlin.Logger
 import java.net.InetSocketAddress
