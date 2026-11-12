@@ -7,6 +7,8 @@ import bnbemu.debugMode
 import bnbemu.isEN
 import bnbemu.showDecValue
 import bnbemu.packet.decodeName
+import java.io.ByteArrayOutputStream
+import java.util.zip.Deflater
 
 fun interface PKTHandler {
     fun ReceivedPacketBase.handle(c: ClientSocket)
@@ -301,6 +303,58 @@ internal fun ssdEncode(plain: ByteArray): ByteArray {
     }
     if (i < plain.size) {
         out[i] = ((plain[i].toInt() and 0xFF) xor 0x5A).toByte()
+    }
+    return out
+}
+
+/**
+ * zlib level-9 压缩（含标准 2B zlib 头 + deflate 流 + 4B Adler-32 尾），
+ * 与客户端 sub_74C020(..., 9) 一致。
+ */
+internal fun zlibCompress(data: ByteArray): ByteArray {
+    val deflater = Deflater(Deflater.BEST_COMPRESSION)
+    return try {
+        deflater.setInput(data)
+        deflater.finish()
+        val out = ByteArrayOutputStream(data.size)
+        val buf = ByteArray(8192)
+        while (!deflater.finished()) {
+            val n = deflater.deflate(buf)
+            if (n > 0) out.write(buf, 0, n)
+        }
+        out.toByteArray()
+    } finally {
+        deflater.end()
+    }
+}
+
+/**
+ * 组装 SSD 块（对应客户端 sub_78BC60 / sub_78C120 / sub_78BB60）：
+ * - compress=true 且 `compressed.size + 4 < plain.size` 时写入：
+ *   `[0x18][u32le(5 + compressed.size)][0x01][u32le(plain.size)][compressed]`
+ * - 否则写入未压缩块：
+ *   `[0x18][u32le(1 + plain.size)][0x00][plain]`
+ */
+internal fun buildSsdBlock(plain: ByteArray, compress: Boolean = true): ByteArray {
+    val compressed = if (compress && plain.isNotEmpty()) zlibCompress(plain) else null
+    val useCompressed = compressed != null && compressed.size + 4 < plain.size
+    val payloadLen = if (useCompressed) compressed!!.size + 5 else plain.size + 1
+    val out = ByteArray(5 + payloadLen)
+    out[0] = 0x18.toByte()
+    out[1] = (payloadLen and 0xFF).toByte()
+    out[2] = (payloadLen ushr 8 and 0xFF).toByte()
+    out[3] = (payloadLen ushr 16 and 0xFF).toByte()
+    out[4] = (payloadLen ushr 24 and 0xFF).toByte()
+    if (useCompressed) {
+        out[5] = 1
+        out[6] = (plain.size and 0xFF).toByte()
+        out[7] = (plain.size ushr 8 and 0xFF).toByte()
+        out[8] = (plain.size ushr 16 and 0xFF).toByte()
+        out[9] = (plain.size ushr 24 and 0xFF).toByte()
+        System.arraycopy(compressed!!, 0, out, 10, compressed.size)
+    } else {
+        out[5] = 0
+        System.arraycopy(plain, 0, out, 6, plain.size)
     }
     return out
 }

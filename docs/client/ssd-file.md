@@ -63,9 +63,16 @@
 是当时 yaml key 的历史快照，属原始数据，未改动。
 发送点仍是 `handler/JoinSessionReq.kt:53`（C→S op 81 触发的进频道握手推送链）和
 `handler/OnConnEstablished.kt:79`（`inGameServer` 分支）。Kotlin 输出与抓包 24123 B / 24121 B **逐字节一致**
-（`FxdynMapInfoPacketTest` 回归）。**仍没有版本号比对**：Banner 的 `ssdVersion=55`
-（`packet/ConnEstablished.kt:21`）管的是 `fxdynimginfo.ssd`，C→S op 55 `StringTableRevisionReq`
-上报的是字串表/任务字串/过滤词库三个 revision，均不含 `fxdynmapinfo`。
+（`FxdynMapInfoPacketTest` 回归）。**版本号比对 = S→C op 212 首字段**：op 212 的 `Encode4` 是
+`fxdynmapinfo` 数据校验戳，客户端 `sub_532337`（`CA.exe.c:258183`）写入 `CEffectMan+0x24`，
+`sub_531F79`（`:258038`）以 `sub_78BB50(stream) == this+9` 决定是否解析记录表；
+`sub_78BB50` = `COSmartStream +0x14`，由 `sub_78BB60`（`:747998`）对 SSD 块
+`[compress=0][记录表明文]` 算 Adler-32 变体（a/b 初值 0）。抓包基准 `0x36CEE587`
+对应旧 342 条 / 24111 B 明文，已用 `cap/fxdynmapinfo_plain.bin` 复算一致。
+BnbEmu 现由 `data/FxdynMapInfo.checksum` 从**同一份 `plain`** 实时计算（`ssdStreamChecksum`），
+op 210 内容变化会自动同步到 op 212，不会再脱节；当前 1573 条 / 108601 B 对应 `0xF041AFE3`。
+Banner 的 `ssdVersion=55`（`packet/ConnEstablished.kt:21`）管的是 `fxdynimginfo.ssd`，
+C→S op 55 `StringTableRevisionReq` 上报的是字串表/任务字串/过滤词库三个 revision，均不含 `fxdynmapinfo`。
 
 **`mapId` / `themeId` 来源（2026-11-04 反汇编 CA.exe 确认）**：客户端 `CDynamicMapMan` 加载本表后，只把
 `flag==0` 的 **193 条**按文件顺序放进选图数组；**该数组的 0-based 下标就是 C→S op 85 / op 92 的 `mapId`**。

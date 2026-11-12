@@ -1,6 +1,7 @@
 package bnbemu.data
 
 import bnbemu.crypto.Adler32
+import bnbemu.netty.buildSsdBlock
 import bnbemu.netty.ssdEncode
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlMap
@@ -35,7 +36,6 @@ import java.nio.charset.StandardCharsets
 private const val SOURCE_PATH = "data/fxdynmapinfo.json"
 private const val SCHEMA = "bnbemu/fxdynmapinfo@1"
 private const val OPCODE = 210
-private const val BLOCK_MARKER = 0x18
 private const val KEY32 = 0x96CA5395.toInt()
 private const val KEY16 = 0xA569
 
@@ -74,15 +74,17 @@ object FxdynMapInfo {
      * 抓包基准 0x36CEE587 已用 cap/fxdynmapinfo_plain.bin (24111 B) 复算一致。
      * 这里从同一份 plain 实时派生，保证 op210 与 op212 永不脱节。
      */
-    val checksum: Int by lazy { ssdStreamChecksum(buildBlock(plain)) }
+    private val defaultBlock: ByteArray by lazy { buildBlock(plain) }
 
-    /** op 210 的 payload（不含框架写入的 2 B opcode），长度随 records 变化。 */
+    val checksum: Int by lazy { ssdStreamChecksum(defaultBlock) }
+
+    /** op 210 的 payload（不含框架写入的 2 B opcode），默认启用 zlib 压缩，长度随 records 变化。 */
     val packetBlob: ByteArray by lazy {
-        buildPacket(plain).let { it.copyOfRange(2, it.size) }
+        encodePacket(defaultBlock).let { it.copyOfRange(2, it.size) }
     }
 
-    /** 完整 S→C 包，24123 B；仅用于回归验证，实际发送由框架补 opcode。 */
-    fun buildFullPacket(): ByteArray = buildPacket(plain)
+    /** 完整 S→C 包；仅用于回归验证，实际发送由框架补 opcode。 */
+    fun buildFullPacket(): ByteArray = encodePacket(defaultBlock)
 
     /** 读取同一份源 JSON 文本，供回归测试做「解析 → 序列化」往返验证。 */
     fun readSourceText(): String = DataResource.text(SOURCE_PATH)
@@ -189,30 +191,27 @@ object FxdynMapInfo {
         s.substring(i * 2, i * 2 + 2).toInt(16).toByte()
     }
 
-    /** [0x18][u24 LE payloadLen][0x00][compress=0][plain]，共 6+plain.size 字节。 */
-    fun buildBlock(plain: ByteArray): ByteArray {
-        val w = BinWriter()
-        w.u8(BLOCK_MARKER)
-        w.u24le(plain.size + 1)
-        w.u8(0)
-        w.u8(0)
-        w.raw(plain)
-        return w.toByteArray()
-    }
+    /**
+     * 组装 SSD 块：默认启用 zlib level-9 压缩（compress=1），
+     * 仅在 `compressed.size + 4 < plain.size` 不满足时回退 compress=0。
+     */
+    fun buildBlock(plain: ByteArray, compress: Boolean = true): ByteArray = buildSsdBlock(plain, compress)
 
     /**
      * 客户端 sub_78BB60 (CA.exe.c:747998) 的校验值：对 SSD 块从 offset 5 起
-     * （[compress][plain]）取块头 u24 长度，算 Adler-32 变体（a/b 初值均为 0，
-     * 模 65521；标准 zlib.adler32 的 a 初值是 1）。未压缩块前导 0x00 不改变 a/b，
-     * 因此等价于对 plain 本身求值。
+     * （compress=0 为 `[0x00][plain]`，compress=1 为 `[0x01][u32le(plain.size)][zlib]`）
+     * 取块头 u32 长度，算 Adler-32 变体（a/b 初值均为 0，模 65521）。
+     * 客户端在解压前即完成校验，因此必须与实际下发块（默认压缩后）完全一致。
      *
      * 返回 32 位位模式（可能为负 Int），直接交给 Encode4 即可。
      */
     fun ssdStreamChecksum(block: ByteArray): Int = Adler32.computeSsdBlock(block)
 
     /** 完整包：Encode2(opcode) + Encode4(blockLen) + EncodeBuffer(SSD 块)。 */
-    fun buildPacket(plain: ByteArray, opcode: Int = OPCODE): ByteArray {
-        val block = buildBlock(plain)
+    fun buildPacket(plain: ByteArray, opcode: Int = OPCODE, compress: Boolean = true): ByteArray =
+        encodePacket(buildBlock(plain, compress), opcode)
+
+    private fun encodePacket(block: ByteArray, opcode: Int = OPCODE): ByteArray {
         val enc = ssdEncode(block)
         val out = ByteArray(6 + enc.size)
         val op = opcode xor KEY16
@@ -242,13 +241,6 @@ private class BinWriter {
         require(v in 0..0xFFFF) { "u16 越界: $v" }
         u8(v and 0xFF)
         u8(v ushr 8 and 0xFF)
-    }
-
-    fun u24le(v: Int) {
-        require(v in 0..0xFFFFFF) { "u24 越界: $v" }
-        u8(v and 0xFF)
-        u8(v ushr 8 and 0xFF)
-        u8(v ushr 16 and 0xFF)
     }
 
     fun u32le(v: Int) {

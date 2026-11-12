@@ -3,6 +3,7 @@ package bnbemu.packet
 import bnbemu.ACP
 import bnbemu.data.DataResource
 import bnbemu.netty.PKT
+import bnbemu.netty.buildSsdBlock
 import bnbemu.netty.ssdEncode
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -109,22 +110,15 @@ object ItemDef {
     }
 
     /**
-     * 将条目列表序列化组装为明文 SSD 数据块
+     * 将条目列表序列化组装为 SSD 数据块（默认启用 zlib level-9 压缩，compress=1）
      */
-    fun buildBlock(items: List<ItemDefEntry>): ByteArray {
+    fun buildBlock(items: List<ItemDefEntry>, compress: Boolean = true): ByteArray {
         val out = ByteArrayOutputStream()
-        out.u8(0x18)
-        out.u16le(0) // blockLen 占位 (组装完成后回填)
-        out.u8(0); out.u8(0); out.u8(0) // 3 字节保留位
         out.u16le(items.size)
         for (item in items) {
             item.encode(out)
         }
-        val ba = out.toByteArray()
-        val blockLen = (ba.size - 5) and 0xFFFF
-        ba[1] = (blockLen and 0xFF).toByte()
-        ba[2] = ((blockLen shr 8) and 0xFF).toByte()
-        return ba
+        return buildSsdBlock(out.toByteArray(), compress)
     }
 
     /** 组装条目列表为明文块, 再交给统一的 [ssdEncode] 下发 (尾部余数由其负责)。 */
