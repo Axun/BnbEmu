@@ -1,5 +1,6 @@
 package bnbemu.packet.room
 
+import bnbemu.constants.CharacterType
 import bnbemu.constants.MAX_SESSION_SLOTS
 import bnbemu.data.map.MapCatalog
 import bnbemu.netty.PKT
@@ -23,6 +24,9 @@ import kotlin.random.Random
 //
 // spawnRandom 抽成可替換的 RNG, 讓回歸測試能用固定 seed 得到確定性結果。
 internal var spawnRandom: Random = Random.Default
+
+// 这个ID代表客户端选的是问号
+const val RANDOM_CHARACTER_ID = 13
 
 /**
  * 產生本局的出生點分配表, 按「真實槽號」索引 (見 [GameStartMapInfo])。
@@ -111,11 +115,12 @@ fun GameStartMapInfo(
 
     for (i in roster) {
         val slot = Room.slots.getOrNull(i)
-        val bomberId = if (i == 0) {
-            slot?.bomber?.toInt() ?: 0
+        val bomberId = if (slot?.bomber?.toInt() == RANDOM_CHARACTER_ID) {
+            CharacterType.Lucy.value
+        } else if (i == 0) {
+            slot?.bomber?.toInt() ?: CharacterType.Dao.value
         } else {
-            val b = slot?.bomber?.toInt() ?: 5
-            if (b == 0) 5 else b
+            slot?.bomber?.toInt() ?: CharacterType.Boz.value
         }
         val team = if (i == 0) 0 else 8
         val spawn = if (i < spawnPositions.size) spawnPositions[i] else i
