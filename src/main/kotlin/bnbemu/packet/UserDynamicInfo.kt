@@ -36,8 +36,8 @@ import bnbemu.netty.PKT
 //   7   14   E1   CUDI + 3s + 175                  Lucci 上限倍率 (0 视作 1；上限 = 3,000,000 × 它)
 //   8   15   E4   CUDI + 3s + 12                   Lucci 金币值 (与 op 122 同一存储/同一上限钳制)
 //   9   19   E4   CUDI + 3s + 69 / +63             复合槽位 id = 24×大类+子槽，并缓存 值/24 作大类
-//   10  23   E1   CUDI + 3s + 75                   未知
-//   11  24   E4   CUDI + 3s + 87                   装备/道具 id (特性判定 sub_6E5182 → sub_4DA374)
+//   10  23   E1   CUDI + 3s + 75                   仅登出/重置路径读（非 0 才清标志），见 op4 #14
+//   11  24   E4   CUDI + 3s + 87                   权限项 id（查 CPermissionMan 权限表，op48 建表）
 //   12  28   E1   CUDI + 3s + 111                  **角色(bomber) id**，经 CBomberMan 归一化；==13 另置标记
 //   13  29   E2   CUDI + 3s + 123                  **背包等级**，见下方说明
 //   14  31   E1   CUDI + 3s + 129                  未知
@@ -94,7 +94,7 @@ fun UserDynamicInfo(
         Encode4(0)          //  15  #8  Lucci 金币值
         Encode4(0)          //  19  #9  复合槽位 id
         Encode1(0)          //  23  #10 未知
-        Encode4(0)          //  24  #11 装备/道具 id
+        Encode4(0)          //  24  #11 权限项 id (sub_6E5182 按 id 查 CPermissionMan)
         Encode1(bomber)     //  28  #12 角色 ID (皮蛋=0 / 宝宝=5 …)
         Encode2(bagLevel)   //  29  #13 背包等级 (默认 50; 抓包回放需显式传 0)
         Encode1(0)          //  31  #14 未知

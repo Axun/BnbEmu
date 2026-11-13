@@ -149,7 +149,10 @@ private fun ByteArrayOutputStream.ss(s: String) {
 
 - **op 4 末字节 `channelTabCount` = 频道页签数上限（2026-11-08 逆向）**：客户端 `sub_6220A8`
   （`CLoginStage::OnPacket` `sub_625702` 的 op 4 分支 `sub_624728` 调用）解析 `UserInfo` 时把
-  `E2(v31)`→`[CUserInfo+0x204]`、`E1`→`+0x20C`（`0x006226D1` / `0x006226E9`）；
+  `E2(connectTimeoutMs)`→`[CShareContext+0x204]`、`E1`→`+0x20C`（`0x006226D1` / `0x006226E9`）；
+  ⚠️ 单例 `dword_993BB0` 是 `TSingleton<CShareContext>`（0x006D01F1），旧记录写作 CUserInfo 有误。
+  另：`E2(connectTimeoutMs)`=5000 是「正在连接服务器」对话框的等待超时毫秒数（sub_62B710
+  比较 `timeGetTime() - 起始时间 > 该值` 触发取消），完整字段表见 `AskFirstInfoResult.kt`；
   `sub_626742`(`0x00626742`) 以 `+0x20C` 作页索引合法上限。为 0 时 `sub_6296B6` / `sub_628EC6`
   否决所有页索引，注册表 `LastChannelType` 被丢弃、默认页退回 Beginner（改注册表值无效）。
   抓包登录版 = 3、频道版 = 0；模拟器两版统一为 `CHANNEL_TAB_COUNT = 3`

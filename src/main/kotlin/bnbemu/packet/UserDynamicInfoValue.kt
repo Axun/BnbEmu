@@ -16,8 +16,9 @@ import bnbemu.netty.PKT
  *   op 20（同名单例的整包解析 `0x006E6109`）里同一个下标明确是遍历"第几个本机玩家"，
  *   两个槽的容量由 `eh vector constructor iterator(size=0xC, count=2)` 决定，
  *   getter 一律 `if (idx > 1) return 0`。旧注释写的"0=常规 Lucci / 1=段位赛 Lucci"是误判。
- *   抓包 `[E1(0)][E4(5000)]` = 本机玩家 0 的初始 Lucci 5000，与 op 4 的 v31=5000、
- *   passport 0x2E 初始金币完全对应。
+ *   抓包 `[E1(0)][E4(5000)]` = 本机玩家 0 的初始 Lucci 5000，与 passport 0x2E 的初始金币对应。
+ *   （旧注把 op 4 的 5000 也当旁证，实为 CShareContext+516 的「正在连线伺服器」等待逾时毫秒数，
+ *    见 `AskFirstInfoResult.kt` 的 connectTimeoutMs，与金币语义无关，勿再引用。）
  *
  * 命名说明: 客户端里 `CUserDynamicInfo` 的整包解析入口是 op 20（见 `packet/UserDynamicInfo.kt`，
  * 与客户端类同名），本包只是它的一个 setter 端点，故加 `Value` 后缀区分。
