@@ -32,6 +32,21 @@
         - 调用 `Room.addBomb(slotId, gridX, gridY, bombId = bombToken)` 将水泡加入 `Room.bombs` 并启动 2.5s 倒计时；
         - 回显 **S→C op 139 SetBomberEvent**（24B body = `E2(subType) E1(slotId) E4(bombToken) E4(0) E4(0) E1(gridX) E1(gridY) E1(flag0) E1(flag1) E2(bombId) E2(0) E1(0)`）。客户端 `0x0054A3EA -> 0x00534C3D -> 0x0044BD9B` 用第 3 栏 `bombToken` 匹配待确认水泡（`0x0044BE05`），匹配成功后调用 `0x0045976E` 将第 10 栏 `bombId` 写入 `bomb->m_nBombId (+0x90)` 并扣减 `pendingBombs[slotId]`。
     3. **2.5s 到期引爆（仅 S→C op 138 state=0）**：`Room.onTick` 到期后仅广播 `SetBombState(bombId, state=0)`（不发 op 148）；客户端 `0x00534B18 -> 0x00534338` 按 `bombId` 查找到 `bomb+0x90` 匹配的水泡并调用 `0x00565E9F` 引爆、清除棋盘格与危险区、调用 `vtable[+0x0c](0)` 释放槽位水泡容量，AI 随即恢复移动与下一轮放泡。实现见 `handler/room/SetBomberEventReq.kt` + `packet/room/SetBomberEvent.kt` + `server/Room.kt`；回归测试 `tools/test_ai_sync.py`。
+    4. **飞镖引爆水泡（C→S op 121 + op 108 → S→C op 138）**：
+       - `op 121` (`0x00539CC2`，入队点 `0x00465EC8`) 8B = `E1(0) E2(起点Xpx) E2(起点Ypx) E1(方向) E2(射程px)`；
+         `op 108` 6B = `E2(对象混淆ID) E1(gridX) E1(gridY) E2(delayMs)`，`delayMs` = `1200*射程px/1000 - 2*ping`（飞镖飞行时间）。
+       - ⚠️ **飞镖命中绝不本地引爆**：`0x00465EC8` 命中分支只有 `CSendPacket_CtorWithOp(108)+Send`，全函数无 `sub_565E9F`；
+         CGODart 只是本地飞行动画 + 射线命中判定。客户端在等服务端下令：`S→C op138` (`0x005481BD → 0x00534B18 → 0x00534338 → 0x00565E9F`)。
+         曾误把 `0x0046DFAD`（`sub_5B67BA` vtable 调用，水泡自身帧更新撞障碍时本地引爆）当成飞镖路径，已纠正。
+       - ⚠️ `op108` 的 `objId` 是 `sub_44B67A(obj+144)` 客户端混淆 ID，**不是** `bombToken`/`Room.bombs[].id`；
+         必须按 `gridX/gridY` 反查服务端水泡，用 op139 回填过的 id 发 `SetBombState(id, 0)`。
+       - 服务端实现 `Room.onObjectHit`（`server/Room.kt`）：命中格无水泡/越界不处理；找到即**立刻从 `bombs` 移除**
+         （既是同一颗泡重复上报的去重——实测连发两镖会收到两条逐字节相同的 op108，也防 `onTick` 2.5s 二次引爆）；
+         按 `delayMs` 延时广播 op138。`delayMs>0`（飞镖）广播**含发射者本人**（他本地没炸）；
+         `delayMs==0`（客户端已本地引爆的路径）排除发射者，只同步其它端。
+       - handler：`handler/room/ThrowDartReq.kt`（op121，仅解析）、`handler/room/ObjectHitReq.kt`（op108）；
+         `EN_18_recv.yaml` 里旧的 `PlayEmotionReq: 108`（真端 TS 另一版本语义）已注释。
+         回归测试 `ThrowDartReqTest` / `ObjectHitReqTest` / `DartDetonationTest`。
 - **局内炸箱子、爆出道具与拾取道具/障碍物闭环**：
     1. **炸毁可破坏方块上报（C→S op 126 DestroyBoxReq，`0x0054CE36`）**：水泡爆炸在 `0x00476F31` / `0x0047739B` 本地消除方块并生成隐藏道具（`0x00471F4B`）后，发送 5B `E1(gridX) E1(gridY) E1(slotId) E2(nextBoxState)`。服务端 `DestroyBoxReq.kt` 消费即可。
     2. **水泡炸出地面道具列表与角色状态上报（C→S op 154 BoxItemSpawnReport，`0x0053DD08` / `0x0046DB1D`）**：

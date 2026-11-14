@@ -37,7 +37,8 @@ SetGameTypeModReq: 103
 HostAskBanPlayerReq: 104
 RespondToBanPlayerReq: 105
 SetBomberEventReq: 106
-PlayEmotionReq: 108
+#PlayEmotionReq: 108
+ObjectHitReq: 108
 PushMovableBoxReq: 109
 AILevelChangeReq: 88
 #TeamChat: 111
@@ -45,6 +46,7 @@ BombKickThrowReq: 107
 EatItemReq: 110
 EatObstacleReq: 111
 BomberActionReq: 112
+ThrowDartReq: 121
 SetEffectReq: 147
 DropObstacleReq: 148
 EventItemReq: 149
