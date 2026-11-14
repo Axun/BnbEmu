@@ -7,7 +7,7 @@ import bnbemu.netty.PKTHandler
 
 // C→S (EN op 121 / 0x79) —— 局内「发射飞镖 (CGODart / Item/ThrownDart)」上报请求。
 //
-// 逆向结论 (CA.exe, Locale=EN / v18, 2026-11-14 定案):
+// 逆向结论 (CA.exe, Locale=EN / v18):
 //   * 全 .text 唯一发包点 0x00539CC2 (sub_539CC2): CSendPacket_BeginOp(121) 之后依次写
 //     E1(常量 0) + E2 + E2 + E1 + E2 = 8B, 数据取自 CGameMsgCache 的
 //     [cache+92] + 24*idx 待确认队列 (sub_5395D4 填充, sub_53961A 管 200ms 冷却,

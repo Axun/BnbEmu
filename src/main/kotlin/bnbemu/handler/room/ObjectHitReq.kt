@@ -8,7 +8,7 @@ import bnbemu.server.Room
 
 // C→S (EN op 108 / 0x6C) —— 局内「对象命中 / 延时事件」上报请求。
 //
-// 逆向结论 (CA.exe, Locale=EN / v18, 2026-11-14 定案):
+// 逆向结论 (CA.exe, Locale=EN / v18):
 //   * EN 客户端全部 5 个 C→S 108 发包点共用同一 6B 结构 (CSendPacket_CtorWithOp(v, 108)):
 //       0x00465EC8 飞镖命中: delay = 1200*射程px/1000 - 2*ping, 命中格 = 射线 trace 到的那一格
 //       0x0046D546 C2S_Op108_And_Op154_Action1: delay 恒 0, 同函数还发 op154 action=1
@@ -24,9 +24,9 @@ import bnbemu.server.Room
 //       字段序与 op106/op107 的 (gridX 行 0..12, gridY 列 0..14) 一致
 //       (sub_534520(map, gridX, gridY) 与方向增量表 dword_9886E4/9886E8 交叉验证)。
 //     - delayMs = 事件延时; 飞镖路径可按 1200px/s 反推射程 (射程px ≈ delayMs*1000/1200)。
-//   * 实测样本 (2026-11-14 15:50:20) A7 75 5C 5F A5 09
+//   * 实测样本 A7 75 5C 5F A5 09
 //     → objId=540, grid=(6,5), delay=96ms (≈80px = 2 格射程, ping≈0)。
-//   * ⚠️ 2026-11-14 二次逆向修正: 飞镖命中**不会**在客户端本地引爆, 必须等服务端下令。
+//   * ⚠️ 二次逆向修正: 飞镖命中**不会**在客户端本地引爆, 必须等服务端下令。
 //     - 0x00465EC8 命中分支只有 CSendPacket_CtorWithOp(v13, 108) + CSendPacket_Send,
 //       全函数没有任何 sub_565E9F (引爆) 调用; CGODart 只是本地飞行动画 + 射线命中判定,
 //       命中结果通过本包上报, delayMs 正是飞镖飞行时间 (1200px/s, 减 2×ping)。

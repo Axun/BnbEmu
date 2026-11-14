@@ -3,6 +3,7 @@ package bnbemu.server
 import io.netty.channel.EventLoop
 import io.netty.util.concurrent.ScheduledFuture
 import bnbemu.constants.MAX_SESSION_SLOTS
+import bnbemu.debugMode
 import bnbemu.data.map.MapCatalog
 import bnbemu.isEN
 import bnbemu.isJP
@@ -292,6 +293,90 @@ object Room {
     }
 
     fun bombMoveState(bombId: Int): BombMoveState? = bombMoves[bombId]
+
+    // ---- C→S op 108 对象命中上报 → S→C op138 SetBombState(state=0) 引爆  ----
+    //
+    // 飞镖 (CGODart) 命中水泡时客户端只发 op121 (发射) + op108 (命中预告), 全函数没有
+    // sub_565E9F —— **不会本地引爆**, 必须等服务端下令:
+    //   S→C op138 0x005481BD → 0x00534B18 → 0x00534338 (按 bombId 找水泡) → 0x00565E9F 引爆。
+    // op108 的 delayMs = 飞镖飞行时间 (1200*射程px/1000 - 2*ping), 服务端按它延时广播,
+    // 让飞行动画先播完。objId 是客户端对象混淆 ID (sub_44B67A(obj+144)), 不能当 bombId,
+    // 所以只能按 gridX/gridY 在 Room.bombs 里反查服务端自己的 id (即 op139 回填的那个值)。
+    //
+    // · 命中格没有登记水泡 → 不处理 (op108 也可能命中箱子/角色/地面障碍)。
+    // · 找到后立刻从 bombs 移除: 既对同一颗泡的重复上报去重 (实测连发两镖会收到两条
+    //   完全相同的 op108), 也防止 onTick 2.5s 到期再广播一次引爆。
+    // · delayMs > 0 = 飞镖预告路径, 客户端没炸过 → 广播含发射者本人。
+    //   delayMs == 0 = 客户端已本地引爆的路径 (0x0046DFAD / C2S_Op108_And_Op154_Action1),
+    //   只同步其它客户端, 不给发射者重复发引爆包。
+    internal var dartDetonationMaxDelayMs = 500L
+
+    data class DartDetonation(
+        val bombId: Int, val targetObjectId: Int,
+        val gridX: Int, val gridY: Int, val delayMs: Int,
+        val includeSender: Boolean
+    )
+
+    private val dartDetonations = ConcurrentHashMap<Int, DartDetonation>()
+
+    /**
+     * @return 是否真的引爆了一颗水泡 (重复上报 / 命中格无泡都返回 false)。
+     * @param broadcast false = 只改服务端状态, 供单元测试使用, 不排程广播。
+     */
+    fun onObjectHit(
+        targetObjectId: Int,
+        gridX: Int,
+        gridY: Int,
+        delayMs: Int,
+        sender: ClientSocket? = null,
+        broadcast: Boolean = true
+    ): Boolean {
+        if (gridX !in 0..12 || gridY !in 0..14) return false
+
+        val bomb = synchronized(bombs) {
+            val hit = bombs.firstOrNull { it.gridX == gridX && it.gridY == gridY && it.state != 0 }
+            if (hit != null) bombs.remove(hit)
+            hit
+        }
+        if (bomb == null) {
+            if (debugMode) {
+                val known = synchronized(bombs) {
+                    bombs.joinToString { "id=${it.id}@(${it.gridX},${it.gridY})" }
+                }
+                println(
+                    "[Room] op108 hit -> no bomb at ($gridX,$gridY) objId=$targetObjectId " +
+                        "delay=${delayMs}ms bombs=[$known]"
+                )
+            }
+            return false
+        }
+
+        val includeSender = delayMs > 0
+        val delay = delayMs.toLong().coerceIn(0, dartDetonationMaxDelayMs)
+        dartDetonations[bomb.id] = DartDetonation(
+            bomb.id, targetObjectId, gridX, gridY, delayMs, includeSender
+        )
+
+        if (debugMode) {
+            println(
+                "[Room] op108 hit -> detonate bomb=${bomb.id} grid=($gridX,$gridY) " +
+                    "objId=$targetObjectId delay=${delay}ms includeSender=$includeSender"
+            )
+        }
+
+        if (broadcast) {
+            val packet = SetBombState(bomb.id, state = 0)
+            val dispatch = Runnable {
+                uniqueClients
+                    .filter { includeSender || it !== sender }
+                    .forEach { it.ctx.writeAndFlush(packet) }
+            }
+            if (delay == 0L) dispatch.run() else executor.schedule(dispatch, delay, TimeUnit.MILLISECONDS)
+        }
+        return true
+    }
+
+    fun dartDetonationState(bombId: Int): DartDetonation? = dartDetonations[bombId]
 
     // 角色死亡上报处理 (C→S op 154 action=5 -> CA.exe 0x0046DB1D CGOGameBomber::OnDie)
     //
@@ -710,6 +795,7 @@ object Room {
         bombs.clear()
         movableBoxes.clear()
         movableBoxSentAt.clear()
+        dartDetonations.clear()
     }
 
     // 座位上有人 (人类玩家或 AI)：这是"能不能参战"的判据, 只看座位占用, 不看本局死活。
@@ -743,6 +829,7 @@ object Room {
         movableBoxSentAt.clear()
         bombMoves.clear()
         bombMoveSentAt.clear()
+        dartDetonations.clear()
         nextBombId = 0
         lastAirplaneTime = 0L
         resetMatchState()
