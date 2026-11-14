@@ -1,0 +1,3 @@
+[submodule "resource"]
+	path = resource
+	url = ../BnbEmuResource.git

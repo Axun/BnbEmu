@@ -17,9 +17,9 @@ import java.util.zip.Inflater
 
 /**
  * op 210 由 fxdynmapinfo.json 实时构造后的回归基准。
- * 2026-11-12 起 records 扩展为 1573 条（仅保留网格<=51x51、maxPlayer<=8 的国服地图，见 tools/data/convert_cn_maps.py + add_missing_maps.py），
- * 硬编码指纹改为扩展后的产物，文件比对指向 cap/rebuilt/（由 build_fxdynmapinfo.py --emit-only 生成）。
- * cap/ 下 2026-08/09 的原始抓包基准仍保留，仅对应前 342 条记录，作历史对照。
+ * records 的条数/顺序会随地图表调整，因此这里的数量与图名
+ * 一律从 FxdynMapInfo.records 动态派生，不写死具体条数，换表后仍能验证同一份数据源。
+ * cap/ 下 2026-08/09 的原始抓包基准仅对应前 342 条记录，作历史算法对照（见 ssdStreamChecksum）。
  */
 class FxdynMapInfoPacketTest {
 
@@ -49,9 +49,11 @@ class FxdynMapInfoPacketTest {
     @Test
     fun `records 可重建扩展后的明文`() {
         val plain = FxdynMapInfo.plain
-        assertEquals(1573, FxdynMapInfo.records.size)
-        assertTrue(plain.size > 100_000, "1573 条地图明文应超过 100 KB")
-        assertEquals(1573, ((plain[1].toInt() and 0xFF) shl 8) or (plain[0].toInt() and 0xFF))
+        val n = FxdynMapInfo.records.size
+        assertTrue(n > 900, "地图表应已扩展（当前 $n 条）")
+        assertTrue(plain.size > n * 50, "$n 条地图明文应随记录数增长（实得 ${plain.size} B）")
+        assertEquals(n, ((plain[1].toInt() and 0xFF) shl 8) or (plain[0].toInt() and 0xFF),
+            "明文开头的 u16 count 必须等于 records 条数")
     }
 
     @Test
@@ -105,16 +107,19 @@ class FxdynMapInfoPacketTest {
         val original = FxdynMapInfo.parseRecords(text)
         assertArrayEquals(FxdynMapInfo.plain, FxdynMapInfo.serializePlain(original), "解析→序列化须往返一致")
 
-        assertEquals("Cemetery04", original.filter { it.flag == 0 }[176].name)
-        val line = text.lines().first { it.contains("\"flag\":0") && it.contains("\"name\":\"Cemetery04\"") }
-        val changed = text.replaceFirst(line, line.replace("\"name\":\"Cemetery04\"", "\"name\":\"CemeteryXX\""))
+        // 表扩展后 flag==0 下标 176 已不是 Cemetery04，图名从同一份 records 派生
+        val mapId = 176
+        val oldName = original.filter { it.flag == 0 }[mapId].name
+        val newName = "${oldName}XX"
+        val line = text.lines().first { it.contains("\"flag\":0") && it.contains("\"name\":\"$oldName\"") }
+        val changed = text.replaceFirst(line, line.replace("\"name\":\"$oldName\"", "\"name\":\"$newName\""))
         assertNotEquals(text, changed)
 
         val recs = FxdynMapInfo.parseRecords(changed)
         val newPlain = FxdynMapInfo.serializePlain(recs)
         assertFalse(newPlain.contentEquals(FxdynMapInfo.plain), "改记录后下发明文必须变化")
         assertFalse(FxdynMapInfo.buildPacket(newPlain).contentEquals(FxdynMapInfo.buildFullPacket()), "压缩包须同步变化")
-        assertEquals("CemeteryXX", recs.filter { it.flag == 0 }[176].name, "mapId 派生须来自同一份 records")
+        assertEquals(newName, recs.filter { it.flag == 0 }[mapId].name, "mapId 派生须来自同一份 records")
     }
 
     @Test

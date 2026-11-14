@@ -14,10 +14,31 @@ import bnbemu.server.bomber
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
+import bnbemu.data.FxdynMapInfo
 import java.io.File
 import kotlin.random.Random
 
 class GameStartMapInfoTest {
+
+    private lateinit var savedBombers: List<Number>
+
+    /**
+     * op112 的 bomber 现在按槽位从 Room.slots 读取（不再写死角色 5），
+     * 而抓包基准 cap/practice_s2c_op112_167B_0.bin 里 8 个槽位角色都是 5。
+     * 这里显式铺好前置状态并在用例结束后还原，避免依赖进程级单例的默认值。
+     */
+    @BeforeEach
+    fun setUp() {
+        savedBombers = Room.slots.map { it.bomber }
+        Room.slots.forEach { it.bomber = 5 }
+    }
+
+    @AfterEach
+    fun tearDown() {
+        Room.slots.forEachIndexed { i, slot -> slot.bomber = savedBombers[i] }
+    }
 
     @Test
     fun testGameStartMapInfoOpcodeBinding() {
@@ -171,34 +192,44 @@ class GameStartMapInfoTest {
     @Test
     fun testMapRefFollowsFlagZeroOrder() {
         // 协议 mapId = fxdynmapinfo 里 flag==0 记录的 0-based 下标（见 data/map/MapCatalog）
+        // 表扩展后下标已重排（176 不再是 Cemetery04），故逐条比对 records 与 refs，
+        // 只保留「0 = HotRandom」与越界、缺 .bin 这些与条数无关的不变量。
+        val flagZero = FxdynMapInfo.records.filter { it.flag == 0 }
         val refs = MapCatalog.refs
-        assertEquals(193, refs.size, "flag==0 的记录数")
+        assertTrue(refs.size > 200, "flag==0 的记录数")
+        assertEquals(flagZero.size, refs.size)
         assertEquals("HotRandom", refs[0].name)
-        assertEquals("CampRandom", refs[66].name)
-        assertEquals("Patrit14", refs[145].name)
-        assertEquals("Cemetery", refs[172].name)
-        assertEquals("Cemetery03", refs[175].name)
-        assertEquals("Cemetery04", refs[176].name)
-        assertEquals(28, refs[175].themeId, "themeId 即记录的 sort_order")
-        assertEquals(29, refs[176].themeId)
-        assertEquals("Cemetery04", MapCatalog.ref(176)?.name)
-        assertEquals(null, MapCatalog.ref(999), "越界 mapId 不应命中")
+        refs.forEachIndexed { i, ref ->
+            assertEquals(i, ref.mapId)
+            assertEquals(flagZero[i].name, ref.name, "mapId $i 的名字必须与 records 同序")
+            assertEquals(flagZero[i].sortOrder, ref.themeId, "mapId $i 的 themeId 即 sort_order")
+        }
+        val probe = 176
+        assertEquals(refs[probe].name, MapCatalog.ref(probe)?.name)
+        assertEquals(null, MapCatalog.ref(refs.size), "越界 mapId 不应命中")
         assertEquals(null, MapCatalog.of(0), "HotRandom 没有 .bin，模板应为 null")
     }
 
     @Test
     fun testStartGameReqDynamicMapName() {
+        // 表扩展后 mapId 176 的图名变了，期望值一律从 MapCatalog.ref 派生，
+        // 验证的是「handler 用 ref(mapId) 动态取名」而不是某个字符串常量。
+        val selectedMapId = 176
+        val selectedThemeId = 29
+        val expectedName = MapCatalog.ref(selectedMapId)?.name
+            ?: error("mapId $selectedMapId 应在 fxdynmapinfo 的 flag==0 表内")
+
         val ch = EmbeddedChannel()
         val client = ClientSocket()
         ch.pipeline().addLast(client)
 
-        // 构造 StartGameReq 载荷 (mapId=176, themeId=29, subType=0, roomSelectedMapId=176, isCustomMap=0, fileCheckType=1, eventParam=0)
+        // 构造 StartGameReq 载荷 (subType=0, isCustomMap=0, fileCheckType=1, eventParam=0)
         val buf = Unpooled.buffer()
         val sendPkt = SendPacketBase(buf, 3)
-        sendPkt.Encode4(176)
-        sendPkt.Encode2(29)
+        sendPkt.Encode4(selectedMapId)
+        sendPkt.Encode2(selectedThemeId)
         sendPkt.Encode1(0)
-        sendPkt.Encode4(176)
+        sendPkt.Encode4(selectedMapId)
         sendPkt.Encode1(0)
         sendPkt.Encode1(1) // fileCheckType = 1 (无需 CRC)
         sendPkt.Encode4(0) // eventParam
@@ -222,8 +253,8 @@ class GameStartMapInfoTest {
         encBuf.Decode2 // theme
         val mapName = encBuf.DecodeCipherStr
         val mapId = encBuf.Decode4
-        assertEquals(176, mapId)
-        assertEquals("Cemetery04", mapName)
+        assertEquals(selectedMapId, mapId)
+        assertEquals(expectedName, mapName, "op112 的 mapName 必须来自 MapCatalog.ref(mapId)")
     }
 
     @Test
@@ -232,13 +263,13 @@ class GameStartMapInfoTest {
         val client = ClientSocket()
         ch.pipeline().addLast(client)
 
-        // 构造 StartGameReq 载荷，未知 mapId=999
+        // 构造 StartGameReq 载荷，未知 mapId=9999
         val buf = Unpooled.buffer()
         val sendPkt = SendPacketBase(buf, 3)
-        sendPkt.Encode4(999)
+        sendPkt.Encode4(9999)
         sendPkt.Encode2(10)
         sendPkt.Encode1(0)
-        sendPkt.Encode4(999)
+        sendPkt.Encode4(9999)
         sendPkt.Encode1(0)
         sendPkt.Encode1(1)
         sendPkt.Encode4(0)
@@ -259,7 +290,7 @@ class GameStartMapInfoTest {
         encBuf.Decode2 // theme
         val mapName = encBuf.DecodeCipherStr
         val mapId = encBuf.Decode4
-        assertEquals(999, mapId)
+        assertEquals(9999, mapId)
         assertEquals("Cemetery03", mapName, "Fallback mapName should be Cemetery03")
     }
 
@@ -343,7 +374,7 @@ class GameStartMapInfoTest {
         val saved = spawnRandom
         try {
             spawnRandom = Random(20261106)
-            // mapId 176 = Cemetery04，8 人圖
+            // mapId 176 = Forest19（当前表），8 人圖；容量由 MapCatalog 按 .bin 决定
             val draws = List(32) { assignSpawnPositions(176, (0..7).toList()).toList() }
             draws.forEach { spawns ->
                 assertEquals((0..7).toList(), spawns.sorted(), "出生點必須是 0..7 的排列: 不重複、不越界")

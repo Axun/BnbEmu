@@ -47,6 +47,34 @@ def discover_new_files(workdir, known):
     return sorted(found, key=str.lower)
 
 
+def confirm_remove_missing(entries, workdir, auto_yes=False):
+    """检查缺失文件；存在时交互确认是否从清单移除，未确认则退出。"""
+    missing = [
+        e for e in entries
+        if not os.path.exists(os.path.join(workdir, e['file'].replace('/', os.sep)))
+    ]
+    if not missing:
+        return entries, 0
+
+    print('发现 %d 个文件缺失:' % len(missing))
+    for e in missing[:20]:
+        print('  -', e['file'])
+    if len(missing) > 20:
+        print('  ... 还有 %d 个' % (len(missing) - 20))
+
+    if not auto_yes:
+        try:
+            ans = input('是否从打包清单中移除这些条目并同步更新 %s? [y/N]: ' % MANIFEST_NAME)
+        except (EOFError, KeyboardInterrupt):
+            ans = ''
+        if ans.strip().lower() not in ('y', 'yes'):
+            sys.exit('已取消（文件缺失）')
+
+    missing_files = {e['file'] for e in missing}
+    kept = [e for e in entries if e['file'] not in missing_files]
+    return kept, len(missing)
+
+
 def verify_output(idd_path, idx_path, key, entries, workdir):
     """按真端逻辑重新读回新包，逐块与目录文件比对。"""
     dec = decrypt_idx(open(idx_path, 'rb').read(), key)
@@ -97,6 +125,7 @@ def main():
     ap.add_argument('--key', default=None, help='覆盖 idx 加密 key，默认用 manifest 记录的')
     ap.add_argument('--no-verify', action='store_true', help='跳过回读校验')
     ap.add_argument('--force', action='store_true', help='允许覆盖已存在的输出 idd/idx')
+    ap.add_argument('-y', '--yes', action='store_true', help='缺失文件时自动确认移除，不提示')
     args = ap.parse_args()
 
     workdir = os.path.abspath(args.dir)
@@ -109,7 +138,16 @@ def main():
     src = manifest['source']
     key = num(args.key if args.key else src['key'])
 
-    entries = [dict(e) for e in manifest['entries']]
+    kept_manifest_entries, removed_count = confirm_remove_missing(
+        manifest['entries'], workdir, auto_yes=args.yes
+    )
+    if removed_count:
+        manifest['entries'] = kept_manifest_entries
+        with open(manifest_path, 'w', encoding='utf-8') as fp:
+            json.dump(manifest, fp, ensure_ascii=False, indent=2)
+        print('已从 %s 移除 %d 个缺失条目' % (MANIFEST_NAME, removed_count))
+
+    entries = [dict(e) for e in kept_manifest_entries]
     known = {e['file'] for e in entries}
     for rel in discover_new_files(workdir, known):
         entries.append({
@@ -200,7 +238,7 @@ def main():
         sys.exit('VERIFY FAILED (%d)' % len(problems))
 
     # 完全未改动时，回包应与原文件逐字节一致
-    if (rebuilt == 0 and not any(e.get('new') for e in entries)
+    if (rebuilt == 0 and removed_count == 0 and not any(e.get('new') for e in entries)
             and ori_valid and os.path.exists(src.get('idx', ''))):
         same_idx = open(src['idx'], 'rb').read() == open(idx_out, 'rb').read()
         same_idd = (ori_size == os.path.getsize(idd_out)

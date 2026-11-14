@@ -11,14 +11,14 @@ import kotlin.random.Random
 // 地图目录服务（真端 CGameMapTmplList 的 Kotlin 版）
 // ============================================================================
 // 职责边界：
-//   · 只做「数据」：载入 data/maps/*.bin、按名字/按协议 mapId 建索引、主题聚合。
+//   · 只做「数据」：载入 Map/*.bin、按名字/按协议 mapId 建索引、主题聚合。
 //   · 不碰协议：谁要用人数上限/等级门槛/会员限制，来查这里，不要自己读字节。
 //   · 门面与解析都在本包：handler → MapCatalog → MapTemplate/MapBinReader。
 //
 // 两种「地图标识」在此收口，禁止别处再各自 join：
 //   · 协议 mapId（C→S op 85/92 的 4 字节字段）= fxdynmapinfo.json 里 flag==0 记录的
 //     0-based 下标，由 FxdynMapInfo.records 决定；
-//   · 地图元数据 = data/maps/<name>.bin，由真端 Map/* 文件决定。
+//   · 地图元数据 = Map/<name>.bin，由真端 Map/* 文件决定。
 //   of(mapId) 是两者唯一的连接点。
 // ============================================================================
 
@@ -34,7 +34,7 @@ data class MapRef(val mapId: Int, val name: String, val themeId: Int)
 
 object MapCatalog {
 
-    private const val DIR = "data/maps"
+    private const val DIR = "resource/fx/Map"
 
     /** 图名（"Bula00"）→ 模板，按名字字典序，保证遍历顺序确定。 */
     val byName: Map<String, MapTemplate> by lazy { loadAll() }
@@ -114,7 +114,7 @@ object MapCatalog {
     }
 
     /**
-     * 枚举 data/maps 下的 .bin 文件名（不含扩展名）。
+     * 枚举 Map 下的 .bin 文件名（不含扩展名）。
      *
      * jar 内无法列目录，故三条路径依次尝试：classpath 目录（file:/jar:）→ 源码树 → 工作目录。
      */

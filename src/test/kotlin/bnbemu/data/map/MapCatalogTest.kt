@@ -1,5 +1,6 @@
 package bnbemu.data.map
 
+import bnbemu.data.FxdynMapInfo
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -17,7 +18,7 @@ class MapCatalogTest {
 
     @Test
     fun `全部地图载入且头字段落在真端实测范围内`() {
-        assertEquals(173, MapCatalog.all.size, "data/maps 下应有 173 张图")
+        assertTrue(MapCatalog.all.size > 200, "resource/fx/Map 下应有图")
 
         for (t in MapCatalog.all) {
             val h = t.header
@@ -56,14 +57,24 @@ class MapCatalogTest {
     @Test
     fun `mapId 经 fxdynmapinfo 的 flag 为零序 join`() {
         // 客户端 CDynamicMapMan 只装 flag==0 记录，其 0-based 下标就是 op 85/92 的 mapId
-        assertEquals("Cemetery04", MapCatalog.of(176)?.name)
-        assertEquals("Wriggle01", MapCatalog.of(8)?.name)
+        // 此处不再写死 mapId→图名，直接逐条比对 records 与 refs，换表也不会失效。
+        val flagZero = FxdynMapInfo.records.filter { it.flag == 0 }
+        val refs = MapCatalog.refs
+        assertEquals(flagZero.size, refs.size, "refs 必须逐条对应 flag==0 记录")
+        refs.forEachIndexed { i, ref ->
+            assertEquals(i, ref.mapId)
+            assertEquals(flagZero[i].name, ref.name, "mapId $i 的名字须来自同一份 records")
+            assertEquals(flagZero[i].sortOrder, ref.themeId, "mapId $i 的 themeId 即 sort_order")
+        }
 
-        // HotRandom 这类随机按钮条目没有自己的 .bin，属正常缺失
+        // 有 .bin 的条目能 join 到同名模板；HotRandom 这类随机按钮条目没有自己的 .bin
+        val withBin = refs.filter { it.name in MapCatalog.byName }
+        assertTrue(withBin.isNotEmpty(), "至少应有一张图能 join 到 .bin")
+        withBin.forEach { assertEquals(it.name, MapCatalog.of(it.mapId)?.name) }
         assertNull(MapCatalog.of(0), "HotRandom 没有地图文件，应返回 null")
         assertEquals(8, MapCatalog.maxPlayerOf(0), "查不到时退回 8 槽兜底")
         assertTrue(MapCatalog.missing.contains("HotRandom"))
-        assertFalse(MapCatalog.missing.contains("Cemetery04"))
+        assertFalse(MapCatalog.missing.contains(withBin.first().name))
     }
 
     @Test
@@ -75,16 +86,24 @@ class MapCatalogTest {
 
     @Test
     fun `出生点排列只在该图实际存在的出生点里洗牌`() {
-        // Wriggle01 是 4 人图：真端 spawns = min(4, 8) = 4，给 0..3 的排列
-        val four = MapCatalog.spawnPermutation(8)
+        // 从当前表里找真实存在 .bin 的 4 人图 / 8 人图，不写死 mapId
+        val fourId = MapCatalog.refs.first {
+            it.name in MapCatalog.byName && MapCatalog.maxPlayerOf(it.mapId) == 4
+        }.mapId
+        val eightId = MapCatalog.refs.first {
+            it.name in MapCatalog.byName && MapCatalog.maxPlayerOf(it.mapId) == 8
+        }.mapId
+
+        // 真端 spawns = min(4, 8) = 4，给 0..3 的排列
+        val four = MapCatalog.spawnPermutation(fourId)
         assertEquals(4, four.size, "4 人图不应发 8 个出生点编号")
         assertArrayEquals(intArrayOf(0, 1, 2, 3), four.sortedArray())
 
-        val eight = MapCatalog.spawnPermutation(176)
+        val eight = MapCatalog.spawnPermutation(eightId)
         assertEquals(8, eight.size)
         assertArrayEquals(IntArray(8) { it }, eight.sortedArray(), "8 个出生点各用一次，不重不漏")
 
-        assertEquals(8, MapCatalog.spawnPermutation(9999).size, "未知 mapId 退回 8 槽")
+        assertEquals(8, MapCatalog.spawnPermutation(MapCatalog.refs.size).size, "越界 mapId 退回 8 槽")
     }
 
     @Test
