@@ -100,12 +100,6 @@ object PassportServer {
         0x12FFBCAE, 0x5F5FBA34, 0x10F5AC99, 0xB1C1DD01.toInt()
     )
 
-    /** S→C 0x002E 固定 65 位元組尾部 (含 u32 5000) */
-    internal val SUFFIX_2E = (
-        "000000000000000001000000000000000000000000000000000101000088130000" +
-        "0000000000000000000000000000000000000000000000000000000000000000"
-    ).toBA()
-
     data class PassportAccount(val username: String, val charName: String, val userId: Int)
 
     /** 預設/已註冊帳號列表 (保留抓包帳號以 100% 通過抓包斷言) */
@@ -293,12 +287,11 @@ object PassportServer {
     ): ByteArray {
         val prefix = ByteArray(32).apply { this[15] = 1 }
         val nameBytes = encodeStr(charName)
-        val buf = ByteBuffer.allocate(4 + prefix.size + 4 + nameBytes.size + SUFFIX_2E.size).order(ByteOrder.LITTLE_ENDIAN)
+        val buf = ByteBuffer.allocate(4 + prefix.size + 4 + nameBytes.size).order(ByteOrder.LITTLE_ENDIAN)
         buf.putInt(returnCode)
         buf.put(prefix)
         buf.putInt(userId)
         buf.put(nameBytes)
-        buf.put(SUFFIX_2E)
         return buildFrame(0x002E, buf.array())
     }
 

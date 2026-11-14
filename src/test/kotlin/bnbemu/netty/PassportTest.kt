@@ -24,10 +24,49 @@ class PassportTest {
         0x12FFBCAE, 0x5F5FBA34, 0x10F5AC99, 0xB1C1DD01.toInt()
     )
 
-    private val SUFFIX_2E = (
+    /**
+     * 抓包裡 0x002E 回包尾部的 65B 固定塊（兩個帳號逐位元組相同）。
+     *
+     * 客戶端 0x002E 的反序列化器（nmconew.dll!0x1004E810）只消費前 37B，尾塊不參與解析，
+     * 因此 [PassportServer.buildReply2E] 已不再下發它；此常數僅用於把「生產 payload」
+     * 與「真實抓包 payload」逐位元組對齊，作為回歸基準保留。
+     */
+    private val HISTORICAL_2E_TAIL = (
         "000000000000000001000000000000000000000000000000000101000088130000" +
         "0000000000000000000000000000000000000000000000000000000000000000"
     ).toBA()
+
+    /** 幀頭 [len:u16 BE][cmd:u16 BE] 裡的 cmd */
+    private fun frameCmd(frame: ByteArray): Int =
+        ((frame[2].toInt() and 0xFF) shl 8) or (frame[3].toInt() and 0xFF)
+
+    /**
+     * 取出 S→C 幀裡的明文 payload，並順帶斷言幀/容器自述的長度、魔數、flags、key 與 Adler-32 全部自洽。
+     * 只適用於本測試涉及的明文容器（flags=0）。
+     */
+    private fun containerPayload(frame: ByteArray): ByteArray {
+        val contLen = ((frame[0].toInt() and 0xFF) shl 8) or (frame[1].toInt() and 0xFF)
+        assertEquals(frame.size - 4, contLen, "幀頭自述長度與實際長度不符")
+
+        val c = frame.copyOfRange(4, frame.size)
+        assertEquals(0x18, c[0].toInt() and 0xFF, "容器魔數應為 0x18")
+        assertEquals(0, c[4].toInt() and 0xFF, "S→C 回應應為明文容器 (flags=0)")
+
+        val bodyLen = ((c[1].toInt() and 0xFF) shl 16) or ((c[2].toInt() and 0xFF) shl 8) or (c[3].toInt() and 0xFF)
+        assertEquals(c.size - 4, bodyLen, "容器自述長度 (=12B 頭 + payload) 與實際長度不符")
+
+        val uncompLen = ((c[5].toInt() and 0xFF) shl 16) or ((c[6].toInt() and 0xFF) shl 8) or (c[7].toInt() and 0xFF)
+        assertEquals(0, ByteBuffer.wrap(c, 8, 4).order(ByteOrder.BIG_ENDIAN).int, "明文容器 key 應為 0")
+
+        val payload = c.copyOfRange(16, c.size)
+        assertEquals(uncompLen, payload.size, "uncompLen 與 payload 長度不符")
+        assertEquals(
+            Adler32().apply { update(payload) }.value.toInt(),
+            ByteBuffer.wrap(c, 12, 4).order(ByteOrder.BIG_ENDIAN).int,
+            "Adler-32 校驗值不符"
+        )
+        return payload
+    }
 
     fun decryptPcbc(cipher: ByteArray, key: Int): ByteArray {
         val numDwords = cipher.size / 4
@@ -104,18 +143,6 @@ class PassportTest {
         return buildFrame(0x000C, buf.array())
     }
 
-    fun buildReply2E(returnCode: Int = 0, userId: Int = 7215, charName: String = "ffdf"): ByteArray {
-        val prefix = ByteArray(32).apply { this[15] = 1 }
-        val nameBytes = encodeStr(charName)
-        val buf = ByteBuffer.allocate(4 + prefix.size + 4 + nameBytes.size + SUFFIX_2E.size).order(ByteOrder.LITTLE_ENDIAN)
-        buf.putInt(returnCode)
-        buf.put(prefix)
-        buf.putInt(userId)
-        buf.put(nameBytes)
-        buf.put(SUFFIX_2E)
-        return buildFrame(0x002E, buf.array())
-    }
-
     @Test
     fun testReplay0CMatchesCapture() {
         val wantLogin = File("cap/passport_login_s0_s2c.bin").readBytes()
@@ -133,13 +160,32 @@ class PassportTest {
 
     @Test
     fun testReplay2EMatchesCapture() {
-        val wantLogin = File("cap/passport_login_s1_s2c.bin").readBytes()
-        val gotLogin = buildReply2E(0, 7215, "ffdf")
-        assertArrayEquals(wantLogin, gotLogin)
+        // 直接測生產實現（不再複製一份帶尾塊的 buildReply2E，否則測不到真實路徑）。
+        // 生產端已不下發 65B 尾塊，故斷言「生產 payload == 抓包 payload - 歷史尾塊」：
+        // 漏發/多發任何一個字節都會立刻失敗，同時保留與真實抓包逐位元組對照的價值。
+        val tail = HISTORICAL_2E_TAIL
+        val cases = listOf(
+            Triple("cap/passport_login_s1_s2c.bin", 7215, "ffdf"),
+            Triple("cap/passport_tst_s2_s2c.bin", 7307, "kcworm1"),
+        )
 
-        val wantTst2 = File("cap/passport_tst_s2_s2c.bin").readBytes()
-        val gotTst2 = buildReply2E(0, 7307, "kcworm1")
-        assertArrayEquals(wantTst2, gotTst2)
+        for ((file, userId, charName) in cases) {
+            val wantFrame = File(file).readBytes()
+            val gotFrame = PassportServer.buildReply2E(0, userId, charName)
+
+            assertEquals(0x002E, frameCmd(wantFrame), "$file: 抓包 cmd 應為 0x002E")
+            assertEquals(0x002E, frameCmd(gotFrame), "$file: 生產回包 cmd 應為 0x002E")
+
+            val wantPayload = containerPayload(wantFrame)
+            val gotPayload = containerPayload(gotFrame)
+
+            assertTrue(gotPayload.size <= wantPayload.size, "$file: 生產 payload 不應長於抓包 payload")
+            assertEquals(
+                wantPayload.size, gotPayload.size + tail.size,
+                "$file: 生產 payload 與抓包 payload 只應相差歷史固定尾塊"
+            )
+            assertArrayEquals(wantPayload, gotPayload + tail, "$file: payload 逐位元組對照")
+        }
     }
 
     @Test
