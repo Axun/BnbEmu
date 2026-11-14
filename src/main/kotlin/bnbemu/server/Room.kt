@@ -732,6 +732,46 @@ object Room {
     // 是否已经下发过本局结算 (防止重复结算)
     internal var gameOverSent = false
 
+    // 发射型水泡 (坦克炮泡) 的「落地激活」延时。
+    // op139 的 sub_4598AB 会把泡置成 +192=0 未激活 / +292=1 飞行中, 必须等发射动画播完
+    // 再补 S→C op138 state=1 (sub_534B18 -> sub_45976E) 才能被之后的 state=0 引爆。
+    // 立即发会截断动画; 这里刻意不改 expireAt, 引信仍从收到 C→S op106 起算 2.5s。
+    var launchedBombActivationDelayMs = 500L
+
+    // 已排程但尚未执行的落地激活 (bombId -> future), 供调试、去重与 reset 取消。
+    private val launchedBombActivations = ConcurrentHashMap<Int, ScheduledFuture<*>>()
+    fun launchedBombActivationPending(bombId: Int): Boolean = launchedBombActivations.containsKey(bombId)
+
+    /** 排程延时激活; 到点由 [activateLaunchedBomb] 检查水泡是否还活着再决定发不发。 */
+    fun scheduleLaunchedBombActivation(bombId: Int) {
+        val delay = launchedBombActivationDelayMs.coerceAtLeast(0)
+        launchedBombActivations[bombId]?.cancel(false)
+        launchedBombActivations[bombId] = executor.schedule(
+            { activateLaunchedBomb(bombId) },
+            delay, TimeUnit.MILLISECONDS
+        )
+    }
+
+    /**
+     * 落地激活: 下发 S→C op 138 SetBombState(bombId, state=1)。
+     * 幂等: 排程记录被消费掉才执行, 重复触发 (或 reset 后迟到的任务) 直接跳过。
+     * @return 是否真的下发; 水泡已被提前引爆 (飞镖/钉子 onObjectHit 或 onTick 到期移除) 时跳过并返回 false。
+     */
+    fun activateLaunchedBomb(bombId: Int): Boolean {
+        launchedBombActivations.remove(bombId) ?: return false
+        val stillAlive = synchronized(bombs) {
+            bombs.any { it.id == bombId && it.state != 0 }
+        }
+        if (!stillAlive) {
+            if (debugMode) {
+                println("[Room] launched bomb $bombId 已被提前引爆, 跳过落地激活")
+            }
+            return false
+        }
+        BC(SetBombState(bombId, state = 1))
+        return true
+    }
+
     fun addBomb(
         slotId: Int,
         gridX: Int,
@@ -830,6 +870,8 @@ object Room {
         bombMoves.clear()
         bombMoveSentAt.clear()
         dartDetonations.clear()
+        launchedBombActivations.values.forEach { it.cancel(false) }
+        launchedBombActivations.clear()
         nextBombId = 0
         lastAirplaneTime = 0L
         resetMatchState()
