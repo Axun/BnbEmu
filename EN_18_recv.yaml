@@ -17,8 +17,8 @@ GuildMarkRevision: 38
 UserSimpleInfoReq: 64
 MyInfoReq: 65
 UserRestrictReq: 66
-UserInfoDetailReq: 67
-SessionInfoDetailReq: 68
+RoomDetailInfoReq: 67
+UserInfoDetailReq: 68
 UserLocationReq: 69
 GuildInfoReq: 70
 JoinSessionReq: 81
