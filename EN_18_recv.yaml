@@ -21,6 +21,7 @@ RoomDetailInfoReq: 67
 UserInfoDetailReq: 68
 UserLocationReq: 69
 GuildInfoReq: 70
+JoinFreeSessionReq: 77
 JoinSessionReq: 81
 AJoinSessionReq: 82
 EnterLobbyStageReq: 83

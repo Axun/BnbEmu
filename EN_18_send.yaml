@@ -28,7 +28,7 @@ CreateSessionResult: 80
 JoinSessionResult: 81
 AutoJoinSessionResult: 82
 EnterSessionResult: 83
-# op 84 = JoinFreeSessionResult (快速加入房间结果, 客户端 sub_507CC7)。待以后实现
+JoinFreeSessionResult: 84
 RoomDetailInfo: 85
 CreatePracticeSessionResult: 89
 SetPlayer: 100
