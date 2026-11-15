@@ -41,8 +41,22 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
         c.send(SelectMap(result = 0, themeId = 0, mapId = 253))  // 海盗随机
     }
 
-    // 106×8
-    repeat(8) { slot -> c.send(PracticeSlotReady(slot)) }
+    // 106×8 —— 按服务端权威的 Room.slots[].state 回灌「封闭 / 开放」位。
+    //
+    // 客户端 CSlotStage::OnPacket 的 op106 处理器 (0x004EFCBE) 实际做的事:
+    //   v5 = Decode1((slot<<4)|state)
+    //   sub_687914(ctx, slot, &meta)            读该槽 3B meta
+    //   LOBYTE(meta) = (v5 ^ meta) & 1 ^ meta  只把 meta[0] 的 bit0 设成 state&1
+    //   sub_687169(ctx, slot, meta)            写回, 随后 sub_4EF87F 逐槽按 bit0 选
+    //                                         "PRE_Bt_Slot-Open / -Close" 按钮贴图
+    // 即 state&1 == 1 ⇔ FLAG_CLOSED (封闭)。旧实现 8 个槽一律发 state=2，等于每次
+    // 重放进房链都把玩家踢掉的槽位重新开放 —— 这就是「踢掉几个电脑、打一局回来
+    // 槽位不再封闭」的根因。链里后续的 104/105/114 分别只改 meta[2]/meta[1]/UI 子对象
+    // (0x4EFB48 / 0x4EFBF6 / 0x4EFD42 均不碰 bit0)，所以开头设一次就能保住。
+    repeat(8) { slot ->
+        val closed = (Room.slots[slot].state.toInt() and FLAG_CLOSED) != 0
+        c.send(PracticeSlotReady(slot, state = if (closed) 1 else 2))
+    }
     // 每槽先发 [114, 104, 105]，随后补「下一槽」的 AI 槽属性包 103 (槽号 = 当前组 + 1)。
     // 只有槽 0 是真人，槽 1..7 全是 AI，op 103 从不用于真人槽。
     repeat(8) { slot ->

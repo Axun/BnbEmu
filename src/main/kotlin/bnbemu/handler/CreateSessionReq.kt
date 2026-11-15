@@ -92,6 +92,9 @@ val CreateSessionReq = PKTHandler { c ->
             Room.slots[i].apply {
                 this.user = null
                 isAI = true
+                // 新房一律从「开放」起算。Room 是单例，不重置就会继承上一间房被踢槽位的
+                // FLAG_CLOSED，导致进房链自相矛盾：106 发 state=1 封闭、103 又发 isAI=true。
+                state = 0
                 // 新建房是本局设置的起点：难度档回到默认，避免全局 Room 单例
                 // 把上一次房间设置的 aILevel 带进新房 (sendRoomEntryChain 现按 slots 回灌)。
                 aILevel = DEFAULT_AI_LEVEL
