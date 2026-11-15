@@ -1,7 +1,6 @@
-@file:JvmName("CreateSessionReqKt")
-
 package bnbemu.handler
 
+import bnbemu.constants.CharacterType
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode4
 import bnbemu.netty.DecodeCipherStr
@@ -93,10 +92,10 @@ val CreateSessionReq = PKTHandler { c ->
             Room.slots[i].apply {
                 this.user = null
                 isAI = true
-                // 新建房是本局设置的起点：难度档回到抓包默认 1，避免全局 Room 单例
+                // 新建房是本局设置的起点：难度档回到默认，避免全局 Room 单例
                 // 把上一次房间设置的 aILevel 带进新房 (sendRoomEntryChain 现按 slots 回灌)。
-                aILevel = 1
-                bomber = 5
+                aILevel = DEFAULT_AI_LEVEL
+                bomber = CharacterType.Boz.value
                 color = 7
             }
         }

@@ -38,7 +38,7 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
         SetPlayer(slotId = 0, user = user),
     )
     if (init) {
-        c.send(SelectMap(result = 0, themeId = 0, mapId = 141))  // 海盗随机
+        c.send(SelectMap(result = 0, themeId = 0, mapId = 253))  // 海盗随机
     }
 
     // 106×8
@@ -60,8 +60,6 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
         //    表现为「对局结束后设置的 AI 等级回到 1」，并且会把玩家踢掉的 AI 加回来。
         //    现在改为读 Room.slots 的服务端权威状态回灌；客户端不保存房间设置，
         //    重放进房链时服务端必须把 isAI / aILevel 一并带回。
-        //    首次建房由 CreateSessionReq 把 1..7 初始化成 isAI=true / aILevel=1，
-        //    因此这 7 条 op 103 与 tst.pcap stream4 基准仍逐字节一致。
         if (slot < 7) {
             val idx = slot + 1
             val s = Room.slots[idx]

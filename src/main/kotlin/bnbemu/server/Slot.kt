@@ -6,6 +6,8 @@ const val FLAG_CLOSED = 0x1
 const val FLAG_CHIEF = 0x2
 const val FLAG_READY = 0x4
 
+const val DEFAULT_AI_LEVEL = 2
+
 /**
  * 槽位在本局内的生命状态。
  * ⚠️ 与 [Slot.state]（meta[0] 的房间旗标 FLAG_CLOSED / CHIEF / READY）无关，那个是房间座位状态。
@@ -25,7 +27,7 @@ class Slot(
     var user: User? = null,
     val meta: ByteArray = ByteArray(3), // [0]:狀態, [1]:角色, [2]:顏色
     var isAI: Boolean = false,
-    var aILevel: Int = 1,
+    var aILevel: Int = DEFAULT_AI_LEVEL,
     var gridX: Int = 0,
     var gridY: Int = 0,
     // 本局生命状态：开局由 Room.resetMatchState 按"座位上有人"重置，
