@@ -85,11 +85,16 @@ public static class LauncherUpdater
         ];
     }
 
-    /// <summary>查一次远端；没有新版本（或清单还没建好）返回 null，网络错误往上抛。</summary>
+    /// <summary>
+    /// 查一次远端；没有新版本返回 null，网络错误往上抛。
+    /// 「所有源都没有清单」单独抛错：否则还没发布过版本时界面会显示「已是最新」，
+    /// 分不清是真最新还是根本没查到——排查更新问题时这两个结论差得很远。
+    /// </summary>
     public static async Task<LauncherUpdate?> CheckAsync(AppConfig cfg, CancellationToken ct = default)
     {
         if (!CanSelfUpdate) throw new InvalidOperationException(UnsupportedReason!);
 
+        var sawFeed = false;
         Exception? last = null;
         foreach (var feed in FeedUrls(cfg))
         {
@@ -97,6 +102,7 @@ public static class LauncherUpdater
             {
                 var update = await FetchFeedAsync(feed, ct);
                 if (update is null) continue;                     // 这个源还没有清单，试下一个
+                sawFeed = true;
                 return CompareVersion(CurrentVersion, update.Version) < 0 ? update : null;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -110,6 +116,7 @@ public static class LauncherUpdater
         }
 
         if (last is not null) throw last;
+        if (!sawFeed) throw new InvalidOperationException("所有更新源都还没有 latest.json（这个版本之前应该还没发过启动器 release）");
         return null;
     }
 
