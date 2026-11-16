@@ -8,11 +8,11 @@
 
 ---
 
-# 协议逆向结论（2026-08，Locale=EN）
+# 协议逆向结论（Locale=EN）
 
 > 依据 cap/*.pcap 三个抓包（start / login / enter-channel，抓包对象即 66.135.19.7），
 > 188 个加密包按下列格式全部通过 CRC8 校验（CRC8 当 oracle 逆向）；另有 enter-channel.pcap
-> 登录连线收尾 5 帧半截流（跨 pcap 截断，2026-08-30 经 brute_c2s/brute_s2c 暴力对齐 seq 补解，
+> 登录连线收尾 5 帧半截流（跨 pcap 截断，经 brute_c2s/brute_s2c 暴力对齐 seq 补解，
 > 内含 op 6→op 7 关键交互，见"关键观察"）。
 > 权威参照：`tools/decode_final.py`（解码器 + 协议注释）、`cap/decoded_dump.txt`（逐包明文）。
 > 加密原语与项目实现完全一致，当年对不上的只有帧封装和 opcode 表，均已修正并落地到代码。
@@ -34,14 +34,14 @@
 
 ## 端口拓扑（tshark SYN 实测）
 - 游戏 TCP **3838**：登录、频道、房间全部业务都在这一个端口；项目原 3838/4848/4849 多端口分服布局与真实不符
-- TCP **47611**：Nexon passport 登录协议（nmco_session，UTF-16），客户端先在此验证账号密码换取票据再连 3838。2026-10-07 已彻底逆向 nmconew.dll 破译；协议帧封装、0x18 容器流、PCBC 加密算法及业务字段等所有具体实现细节已全部记录在源码注释中，详见 `src/main/kotlin/bnbemu/netty/PassportServer.kt`。
+- TCP **47611**：Nexon passport 登录协议（nmco_session，UTF-16），客户端先在此验证账号密码换取票据再连 3838。已彻底逆向 nmconew.dll 破译；协议帧封装、0x18 容器流、PCBC 加密算法及业务字段等所有具体实现细节已全部记录在源码注释中，详见 `src/main/kotlin/bnbemu/netty/PassportServer.kt`。
   ⚠️ 客户端二进制侧的 47611 地址在 nmconew.dll/nmcogame.dll 的 **UTF-16LE 表**（各 8 槽），patch_ip.py 已补齐该编码的替换（此前只补 ASCII 导致打过补丁仍连远端 passport）。
 
 ## opcode（已补全进 EN_18_recv/send.yaml）
 - 可信命名（抓包时序验证）：C→S 2 AskFirstInfo、7 OnConnEstablished、15 ChannelsStateReq、
   64 UserSimpleInfoReq、81 JoinSessionReq；S→C 1 MultiServerInit、2 FirstInfoInit、7 ResConnectToSvr、
   11 ChannelsExtraInfo、13 ChannelsState、14 ChannelsGameState、20 UserDynamicInfo、
-  81 JoinSessionResult、200 FxStockInit、210 DynamicMapInfo
+  81 JoinSessionResult、200 MyPageSlots、210 DynamicMapInfo
 - 已实现绑定（原名 Unk_* 占位）：C→S 0 AskFirstSession（首连打开）、
   55 StringTableRevisionReq（登录后上报本地 3 份 SSD 版本号 [StringTable, QuestString, CurseFilter]，触发回频道列表）、
   11 EnterChannelReq（进频道）、15 ChannelsStateReq（频道状态轮询，回 op 13）、
@@ -61,8 +61,8 @@
   293(E1(0))/78 QuestConfigTable（任务配置表，E4(count)+条目列表，空为 E4(0)）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、
   81 JoinSessionResult（**大厅名册**，已结构化 `packet/JoinSessionResult.kt` 的 `RosterEntry`，
   `E4(人数)+N×[E1槽位+E4账号数值+E2名长+令牌]`，账号数值=passport 0x2E 同值）、
-  413 UserInventoryInfo（**玩家背包槽位/容量初始化**，614B 50槽，CUserInventoryMan/ 198 / 200 FxStockInit / 274 UserItemUpdate×2（**道具槽位更新**，CUserItemMan）/ 212 FxConfig（**特效与角色可用性配置**，CFxContext）/ 210 DynamicMapInfo / 65 ShopCatalog(50KB) / 204 / 66 / 14(9B 变体) / 20 / 261 ShopVersion（**商城目录版本校验与开关**，CShopItemMan，不一致触发客户端发 276）/ 247
-  （进频道握手推送，多为原样重放；其中 210 已改由 `src/main/resources/data/fxdynmapinfo.json` 实时生成，顺序与触发见 JoinSessionReq.kt）
+  413 UserInventoryInfo（**玩家背包槽位/容量初始化**，614B 50槽，CUserInventoryMan/ 198 / 200 MyPageSlots / 274 UserItemUpdate×2（**道具槽位更新**，CUserItemMan）/ 212 FxConfig（**特效与角色可用性配置**，CFxContext）/ 210 DynamicMapInfo / 65 ShopCatalog(50KB) / 204 / 66 / 14(9B 变体) / 20 / 261 ShopVersion（**商城目录版本校验与开关**，CShopItemMan，不一致触发客户端发 276）/ 247 CoupleStateSync
+  进频道握手推送，
 - 尚无 handler/packet（yaml 里 Unk_* 占位）：
   S→C 86（大厅期周期推送，⚠️ 非"进房后"）
 - 大厅逻辑参见 `docs/agents-notes-lobby.md`
@@ -110,8 +110,8 @@
    用户列表据此显示）→ 进入大厅期
    ⚠️ 线序 = seq 顺序；dump_flow.py 按时间戳排序会因 TCP 合包失真（如 122 实际紧跟 97，却显示在 60 之后）
 6. 进频道：C 发 op 11（4B 频道 hash）→ S 回 [11 ChannelsExtraInfo 218B, 13 44B, 12 27B, 11, 13]
-7. 进频道握手（2026-08-31 时序对齐钉死，已实现）：C 收齐 72 用户列表后自动发 **op 81 空包** →
-   S 跟发整条**进频道握手推送** [310, 302,] 413, 198, 200 FxStockInit, 274×2, 122 UserDynamicInfo, 212,
+7. 进频道握手：C 收齐 72 用户列表后自动发 **op 81 空包** →
+   S 跟发整条**进频道握手推送** [310, 302,] 413, 198, 200 MyPageSlots, 274×2, 122 UserDynamicInfo, 212,
    210 DynamicMapInfo, 87 RoomList, 65 50KB, 204, 66, 14(9B 变体), 20, 261, 247, 423, 81 名册, 72
    （分三波下发：客户端**等推送才继续发** 274/274/281 → 等 → 276，缺推送客户端卡"正在连接"对话框）；
    之后大厅期 S 周期推 op 81 名册 / 72 / 122 UserDynamicInfo / 87 / 86（86 尚未实现）

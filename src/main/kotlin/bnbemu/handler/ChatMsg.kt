@@ -34,7 +34,12 @@ val ChatMsg = PKTHandler { c ->
     // 目前僅記錄，供後續確定 S→C 顯示 opcode 後接上廣播
     println("[ChatMsg] 收到聊天 type=$chatType 文字=\"$text\"")
 
-    // 调试命令（仅 debugMode，聊天框输入，前缀 / 或 ! 都可以）：
+    // 调试命令（仅 debugMode，聊天框输入；前缀推荐 !，别用 /）：
+    // ⚠️ / 开头的整行会被客户端本地吃掉：CA.exe 0x004EB22D 先判首字节 == 47 ('/')，
+    //    命中就转 CChatCommand 命令表（0x008785C0：/who /w /st /start ...），
+    //    查不到只弹 "NotValidCommand"，然后直接 return，**op 18 根本不会发出**。
+    //    客户端只按这一个字节分流，其它任何字符都原样进 op 18，因此 ! / !! / # / @ / ~ / . 都可用。
+    // 命令列表（前缀后接命令名，如 !die 3）：
     //   die  <slot>                -> 广播 S->C op159（单字节 BomberDie，只置状态17/音效0x37，实测无感）
     //   list <slot> [slot...]      -> 广播 S->C op146 state=5「死亡名单」（实测：当场死亡 + 死亡音 0x2A）
     //   trap <slot> [x y]          -> op146 state=2「困住」；不给坐标就用该槽最后上报的位置
@@ -43,7 +48,8 @@ val ChatMsg = PKTHandler { c ->
     //   st   <state> <slot> [x y]  -> 广播任意 state 的 op146，用来试每个 state 的语义
     // 详见 packet/room/SetBomberState.kt 的 state 表。
     if (debugMode) {
-        // 前缀无关：去掉行首的非字母数字（/ ! . 等）后按命令名匹配
+        // 前缀无关：剥掉行首所有非字母（! # @ ~ 等，也支持 !! 这种多字符前缀）后按命令名匹配。
+        // ⚠️ 副作用：不带前缀的纯 "die 3" 也会命中，普通聊天可能误触发；建议一律带前缀。
         val cmd = text.trim().dropWhile { !it.isLetter() }
 
         val die = DEBUG_DIE.find(cmd)
@@ -86,7 +92,7 @@ val ChatMsg = PKTHandler { c ->
     }
 }
 
-// 命令名固定不带前缀（ChatMsg 里已把行首的 / ! 等符号剥掉）
+// 命令名固定不带前缀（ChatMsg 里已把行首的 ! # @ ~ 等符号剥掉；/ 前缀到不了服务端）
 private val DEBUG_DIE = Regex("^die" + BLANK + "(\\d+)")
 private val DEBUG_LIST = Regex("^list" + BLANK + "([\\d,\\s]+)")
 private val DEBUG_ST = Regex("^st" + BLANK + "(\\d+)" + BLANK + "(\\d+)(.*)")
