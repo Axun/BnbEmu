@@ -1,0 +1,123 @@
+name: launcher-release
+
+# 打 tag 即发布：launcher-v1.2.3
+#   1. 单文件自包含 exe（launcher/BnbLauncher 的 csproj 里已经是 SelfContained + PublishSingleFile）
+#   2. 生成 latest.json（版本 / 大小 / SHA-256 / 下载地址）
+#   3. 版本 release 放 exe + latest.json
+#   4. 滚动 release `launcher-latest` 覆盖上传 latest.json —— 客户端默认读这个固定路径
+#
+# 为什么不用 /releases/latest/download/latest.json：本仓库还有客户端资源的 release，
+# 那个 "latest" 随时会被客户端那条抢走，启动器就再也查不到更新了。
+
+on:
+  push:
+    tags:
+      - "launcher-v*"
+
+permissions:
+  contents: write
+
+env:
+  DOTNET_VERSION: "9.0.x"
+  # 低于这个版本的启动器会被强制更新（界面不给「稍后」，服务/客户端也点不了）。
+  # 平时留 0.0.0；哪天引导流程或服务端约定改到旧版跑不通了，在这里抬到对应版本再发一版。
+  MIN_VERSION: "0.0.0"
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: 解析版本号
+        id: ver
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if ($tag -notmatch '^launcher-v(?<v>\d+\.\d+\.\d+.*)$') {
+            throw "tag 必须形如 launcher-v1.2.3，当前是 $tag"
+          }
+          $ver = $Matches['v']
+          "version=$ver" >> $env:GITHUB_OUTPUT
+          Write-Output "版本：$ver"
+
+      - name: 发布单文件 exe
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          # 必须指名 csproj：目录里还有个 .sln，dotnet publish 认到解决方案时会忽略 -o 并给出 NETSDK1194
+          dotnet publish launcher/BnbLauncher/BnbLauncher.csproj -c Release -o out -p:Version=$ver -p:FileVersion=$ver.0
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish 失败" }
+          if (-not (Test-Path "out/BnbLauncher.exe")) { throw "没有产出 out/BnbLauncher.exe" }
+          Get-Item "out/BnbLauncher.exe" | Select-Object Name, Length | Format-Table
+
+      - name: 生成 latest.json
+        shell: pwsh
+        run: |
+          $ver  = "${{ steps.ver.outputs.version }}"
+          $tag  = "${{ github.ref_name }}"
+          $repo = "${{ github.repository }}"
+          $exe  = "out/BnbLauncher.exe"
+
+          $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $size = (Get-Item -LiteralPath $exe).Length
+          $notes = (git log -1 --pretty=%s) -replace '"', "'"
+
+          $feed = [ordered]@{
+            version    = $ver
+            minVersion = "${{ env.MIN_VERSION }}"
+            notes      = $notes
+            page       = "https://github.com/$repo/releases/tag/$tag"
+            exe        = [ordered]@{
+              url    = "https://github.com/$repo/releases/download/$tag/BnbLauncher.exe"
+              size   = $size
+              sha256 = $hash
+            }
+          }
+
+          $json = ($feed | ConvertTo-Json -Depth 5) + "`n"
+          [IO.File]::WriteAllText("$PWD/out/latest.json", $json)
+          Get-Content "out/latest.json"
+
+      - name: 上传版本 release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $ver = "${{ steps.ver.outputs.version }}"
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            # --latest=false：把「Latest」留给客户端资源那条 release
+            gh release create $tag --title "启动器 $ver" --latest=false `
+              --notes "启动器 $ver。已经装了旧版的用户不需要手动下载：启动器会自己发现并更新。"
+            if ($LASTEXITCODE -ne 0) { throw "创建 release 失败" }
+          }
+
+          gh release upload $tag out/BnbLauncher.exe out/latest.json --clobber
+          if ($LASTEXITCODE -ne 0) { throw "上传资产失败" }
+
+      - name: 更新滚动更新源 launcher-latest
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $repo = "${{ github.repository }}"
+
+          gh release view launcher-latest *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create launcher-latest --title "启动器更新源（滚动，勿删）" --latest=false `
+              --notes "这里只放 latest.json，客户端自更新默认读这个固定地址；每次发版覆盖上传，不要删这条 release。"
+            if ($LASTEXITCODE -ne 0) { throw "创建滚动 release 失败" }
+          }
+
+          gh release upload launcher-latest out/latest.json --clobber
+          if ($LASTEXITCODE -ne 0) { throw "上传 latest.json 失败" }
+
+          Write-Output "更新清单：https://github.com/$repo/releases/download/launcher-latest/latest.json"

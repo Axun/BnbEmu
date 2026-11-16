@@ -1,0 +1,101 @@
+<Window x:Class="BnbLauncher.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Settings"
+        Width="560" Height="748" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource WindowBgBrush}"
+        FontFamily="Microsoft YaHei UI, Segoe UI"
+        Icon="/Assets/app.ico"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True"
+        ShowInTaskbar="False">
+
+    <Grid Margin="20,18,20,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="2,0,2,12">
+            <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextPrimaryBrush}" />
+            <TextBlock Text="Click Save to apply; settings are written to launcher.config.json in this folder"
+                       Style="{StaticResource CaptionText}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <Border Grid.Row="1" Style="{StaticResource Card}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="Source Repository" Style="{StaticResource CardTitleText}" />
+                    <Grid Margin="0,10,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Owner" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                            <TextBox x:Name="OwnerBox" Style="{StaticResource LightTextBox}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Repo" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                            <TextBox x:Name="RepoBox" Style="{StaticResource LightTextBox}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="4">
+                            <TextBlock Text="Branch" Style="{StaticResource MutedText}" Margin="0,0,0,4" />
+                            <TextBox x:Name="BranchBox" Style="{StaticResource LightTextBox}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,14" />
+
+                    <TextBlock Text="JDK Vendor" Style="{StaticResource CardTitleText}" />
+                    <ComboBox x:Name="VendorBox" Margin="0,8,0,0" Style="{StaticResource LightComboBox}" Height="32" FontSize="13">
+                        <ComboBoxItem Content="Amazon Corretto 21" Tag="Corretto" />
+                        <ComboBoxItem Content="Azul Zulu 21" Tag="Zulu" />
+                    </ComboBox>
+
+                    <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,14" />
+
+                    <TextBlock Text="Startup Behavior" Style="{StaticResource CardTitleText}" />
+                    <CheckBox x:Name="AutoCheckBox" Content="Check for updates on startup (notify only, no automatic download)" FontSize="13"
+                              Foreground="{StaticResource TextBodyBrush}" Margin="0,10,0,0" />
+                    <CheckBox x:Name="AutoLauncherCheckBox" Content="Check for launcher updates on startup (shown in the top banner)" FontSize="13"
+                              Foreground="{StaticResource TextBodyBrush}" Margin="0,8,0,0" />
+                    <CheckBox x:Name="AutoStartBox" Content="Start the background server automatically when the runtime is ready" FontSize="13"
+                              Foreground="{StaticResource TextBodyBrush}" Margin="0,8,0,0" />
+
+                    <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,14" />
+
+                    <TextBlock Text="Network" Style="{StaticResource CardTitleText}" />
+                    <TextBlock Text="GitHub token (optional): leave empty for public repositories; required for private ones, and also used as the git HTTPS password."
+                               Style="{StaticResource MutedText}" Margin="0,4,0,6" TextWrapping="Wrap" />
+                    <TextBox x:Name="TokenBox" Style="{StaticResource LightTextBox}" />
+                    <TextBlock Text="HTTPS proxy (optional): leave empty to auto-detect environment variables / system proxy / git global config; libgit2 does not support SOCKS."
+                               Style="{StaticResource MutedText}" Margin="0,10,0,6" TextWrapping="Wrap" />
+                    <TextBox x:Name="ProxyBox" Style="{StaticResource LightTextBox}" />
+                    <TextBlock Text="Launcher update feed (optional): URL of latest.json. Leave empty to try the rolling Release tag (launcher-latest), then the repository raw file; a mirror can be used."
+                               Style="{StaticResource MutedText}" Margin="0,10,0,6" TextWrapping="Wrap" />
+                    <TextBox x:Name="FeedBox" Style="{StaticResource LightTextBox}" />
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="2" Margin="2,12,2,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Content="Cancel" Style="{StaticResource SecondaryButton}" MinWidth="80" Click="OnCancelClick" />
+                <Button Content="Save" Style="{StaticResource PrimaryButton}" MinWidth="88" Margin="8,0,0,0"
+                        Click="OnSaveClick" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

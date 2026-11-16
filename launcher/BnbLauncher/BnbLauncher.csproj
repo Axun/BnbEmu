@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>BnbLauncher</AssemblyName>
+    <RootNamespace>BnbLauncher</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Version>1.1.0</Version>
+    <FileVersion>1.1.0.0</FileVersion>
+    <Product>BnbEmu Launcher</Product>
+    <Company>krrr</Company>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+
+    <!--
+      NativeAOT 说明：
+        .NET 9 的 WPF 不支持裁剪 / NativeAOT，开启会直接报
+        error NETSDK1168: 启用剪裁时，不支持或不推荐使用 WPF。
+        （Desktop 栈只有 WPF/WinForms 可用，两者都不支持 AOT；Avalonia 才支持。）
+      因此这里用「自包含 + 单文件」发布：产物是一个 exe，目标机器无需安装 .NET 运行时，
+      效果上仍然是「拷走即用」。若将来 WPF 支持 AOT，把下面三个属性改成
+      PublishAot=true / SelfContained=true / PublishSingleFile=false 即可尝试。
+    -->
+    <PublishAot>false</PublishAot>
+    <PublishTrimmed>false</PublishTrimmed>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- 单文件下 WPF 的资源加载依赖此开关，关闭会启动即崩 -->
+    <IncludeAllContentForSelfExtract>false</IncludeAllContentForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      源码获取全部交给 libgit2（clone / fetch / pull），不再依赖目标机器装 git，
+      也不再走 GitHub 的 zip 打包下载与 REST API（没有 60 次/小时限速）。
+      LibGit2Sharp.NativeBinaries 会带一份自包含的 libgit2.dll，
+      单文件发布时由 self-extract 释放到临时目录（csproj 已开 IncludeNativeLibrariesForSelfExtract）。
+    -->
+    <PackageReference Include="LibGit2Sharp" Version="0.32.0" />
+  </ItemGroup>
+
+</Project>

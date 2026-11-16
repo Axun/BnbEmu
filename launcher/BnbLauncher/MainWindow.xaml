@@ -1,0 +1,503 @@
+<Window x:Class="BnbLauncher.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="BnbEmu Launcher"
+        Width="1080" Height="780" MinWidth="880" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource WindowBgBrush}"
+        FontFamily="Microsoft YaHei UI, Segoe UI"
+        Icon="Assets/app.ico"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+
+    <Grid Margin="22,18,22,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- ═══ 顶栏 ═══ -->
+        <Grid Grid.Row="0" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal">
+                <!-- 应用徽标 = exe 图标（Assets/app.ico）中分辨率最高的一帧。
+                     不能直接在 XAML 里写 Source="Assets/app.ico"：WPF 对多尺寸 ico
+                     默认取第一帧（16×16），放大到 40px 会发虚；真正取帧见 MainWindow.xaml.cs。 -->
+                <Image x:Name="AppLogo" Width="40" Height="40" Stretch="Uniform"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="BnbEmu Launcher" FontSize="19" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" />
+                    <TextBlock FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,1,0,0">
+                        <Run Text="Game server · " /><Run Text="{Binding RepoDisplay, Mode=OneWay}" />
+                    </TextBlock>
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button Content="GitHub" Style="{StaticResource GhostButton}" Command="{Binding OpenRepoCommand}"
+                        Margin="0,0,2,0" />
+                <Button Content="Open Folder" Style="{StaticResource GhostButton}" Command="{Binding OpenFolderCommand}"
+                        Margin="0,0,2,0" />
+                <Button Content="Settings" Style="{StaticResource SecondaryButton}" Command="{Binding OpenSettingsCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- ═══ 启动器自更新横幅 ═══ -->
+        <!-- 只在发现新版本时出现，一直留到更新完成：不做「稍后」，
+             否则用户点了之后本次运行内就再也找不到入口了。
+             强制更新（当前版本低于清单的 minVersion）时 CanStart / CanLaunchClient 一起变 false。 -->
+        <StackPanel Grid.Row="1">
+
+        <Border Margin="0,0,0,12" CornerRadius="10" Padding="14,10"
+                Background="#FFFBEB" BorderBrush="#F0D9A4" BorderThickness="1"
+                Visibility="{Binding UpdateBannerVisibility}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock Text="{Binding UpdateTitle}" FontSize="13" FontWeight="SemiBold"
+                               Foreground="#92400E" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding UpdateDetail}" FontSize="12" Foreground="#A16207"
+                               TextWrapping="Wrap" Margin="0,3,0,0" />
+                </StackPanel>
+
+                <Button Grid.Column="1" Content="{Binding UpdateActionText}" MinWidth="132" Margin="14,0,0,0"
+                        Style="{StaticResource PrimaryButton}" VerticalAlignment="Center"
+                        Command="{Binding UpdateActionCommand}" />
+            </Grid>
+        </Border>
+
+        <!-- ═══ 卡片区 ═══ -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="1*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="1*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 源码卡片 -->
+            <Border Grid.Column="0" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Source" Style="{StaticResource CardTitleText}" />
+                            <TextBlock Text="·" Style="{StaticResource CardTitleText}" Margin="6,0" />
+                            <TextBlock Text="{Binding RepoDisplay}" Style="{StaticResource MutedText}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <!-- 卡头右侧：状态徽标。检测按钮（刷新图标）就长在徽标里，尺寸跟着 12px 文案走；
+                             「上次检测」时间只在检测失败时临时摆在徽标左边。 -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding LastCheckShortText}" Style="{StaticResource MutedText}"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"
+                                       ToolTip="Last check time"
+                                       Visibility="{Binding CheckFailedVisibility}" />
+                            <!-- 前景色设在 Border 上给状态文字继承；图标按钮不继承，单独绑一次 -->
+                            <Border Background="{Binding SourceBadgeBg}" CornerRadius="11" Padding="9,1,4,1"
+                                    TextElement.Foreground="{Binding SourceBadgeFg}">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding SourceBadgeText}" FontSize="12" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" />
+                                    <!-- 前景色必须显式绑一次：Button 的前景色会被主题默认值顶掉，不继承 Border -->
+                                    <Button Style="{StaticResource BadgeIconButton}" Margin="4,0,0,0"
+                                            Command="{Binding CheckUpdateCommand}"
+                                            Foreground="{Binding SourceBadgeFg}"
+                                            AutomationProperties.Name="Check for updates">
+                                        <Button.ToolTip>
+                                            <ToolTip Style="{StaticResource HintToolTip}" Placement="Top">
+                                                <StackPanel>
+                                                    <TextBlock Text="Check for updates" FontWeight="SemiBold" />
+                                                    <TextBlock Text="Queries the remote repository for new commits. Read-only: nothing is downloaded or modified locally."
+                                                               TextWrapping="Wrap" Opacity="0.72" Margin="0,3,0,0" />
+                                                    <!-- 「上次检测」时间放在这里：只有想知道的人才会悬停上来 -->
+                                                    <TextBlock Text="{Binding LastCheckText}" FontSize="11"
+                                                               Opacity="0.5" Margin="0,5,0,0" />
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </Button.ToolTip>
+                                        <!-- 刷新图标：来自 Assets/refresh.svg（viewBox 1024×1024），
+                                             WPF 不能直接吃 SVG，这里把它的 path 原样搬成 Path.Data。
+                                             原图线宽 32/1024，缩到 16px 只剩 0.5px 太细，
+                                             故用同色 Stroke 补到 48 加粗（去掉 StrokeThickness 即还原原始粗细）。
+                                             旋转中心取墨迹中心 (512,528)/1024 = 0.5,0.5156，避免自转时晃动。 -->
+                                        <Grid Width="16" Height="16" RenderTransformOrigin="0.5,0.5156">
+                                            <Grid.RenderTransform>
+                                                <RotateTransform />
+                                            </Grid.RenderTransform>
+                                            <Viewbox Width="16" Height="16">
+                                                <Canvas Width="1024" Height="1024">
+                                                    <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                          Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                          StrokeThickness="48" StrokeLineJoin="Round"
+                                                          Data="M 832,512 a 32,32 0 0,0 -32,32 c 0,158.784 -129.216,288 -288,288 s -288,-129.216 -288,-288 s 129.216,-288 288,-288 c 66.208,0 129.536,22.752 180.608,64 H 608 a 32,32 0 0,0 0,64 h 160 a 32,32 0 0,0 32,-32 V 192 a 32,32 0 0,0 -64,0 v 80.96 A 350.464,350.464 0 0,0 512,192 C 317.92,192 160,349.92 160,544 s 157.92,352 352,352 s 352,-157.92 352,-352 a 32,32 0 0,0 -32,-32 Z" />
+                                                </Canvas>
+                                            </Viewbox>
+                                            <Grid.Style>
+                                                <Style TargetType="Grid">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsChecking}" Value="True">
+                                                            <DataTrigger.EnterActions>
+                                                                <BeginStoryboard x:Name="CheckSpin">
+                                                                    <Storyboard>
+                                                                        <DoubleAnimation
+                                                                            Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                            From="0" To="360" Duration="0:0:1.1" RepeatBehavior="Forever" />
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </DataTrigger.EnterActions>
+                                                            <DataTrigger.ExitActions>
+                                                                <RemoveStoryboard BeginStoryboardName="CheckSpin" />
+                                                            </DataTrigger.ExitActions>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Grid.Style>
+                                        </Grid>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Grid.Row="1" Margin="0,12,0,0">
+                        <TextBlock Text="{Binding SourceTitle}" FontSize="18" FontWeight="SemiBold"
+                                   Foreground="{StaticResource TextPrimaryBrush}" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding SourceMessage}" Style="{StaticResource CaptionText}"
+                                   Margin="0,4,0,0" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding SourceMessage}" />
+                        <TextBlock Text="{Binding RemoteLine}" Style="{StaticResource MutedText}"
+                                   Margin="0,8,0,0" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding RemoteLine}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,14,0,0">
+                        <Button Command="{Binding UpdateSourceCommand}" MinWidth="104">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasUpdate}" Value="True">
+                                            <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                            <Setter Property="Foreground" Value="White" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                            <TextBlock Text="{Binding UpdateButtonText}" />
+                        </Button>
+                        <Button Content="Commit Details" Style="{StaticResource SecondaryButton}" Margin="8,0,0,0"
+                                Command="{Binding ShowCommitsCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- 环境卡片 -->
+            <!-- JDK 供应商不在这里选：主界面和「设置」两处都能改，用户很难分辨哪次生效，
+                 统一收到设置对话框里（Views/SettingsWindow.xaml 的「JDK 供应商」）。 -->
+            <Border Grid.Column="2" Style="{StaticResource Card}">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Runtime" Style="{StaticResource CardTitleText}" />
+                        <TextBlock Text="· all installed in the launcher folder" Style="{StaticResource MutedText}" Margin="6,0,0,0"
+                                   VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- JDK -->
+                    <Grid Grid.Row="1" Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel ToolTip="{Binding JdkHomeText}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="JDK 21" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                                <Border Background="{Binding JdkBadgeBg}" CornerRadius="8" Padding="7,2" Margin="8,0,0,0">
+                                    <TextBlock Text="{Binding JdkBadgeText}" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{Binding JdkBadgeFg}" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="{Binding JdkText}" Style="{StaticResource CaptionText}" Margin="0,3,0,0"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="Reinstall" Style="{StaticResource LinkButton}"
+                                VerticalAlignment="Center" Command="{Binding InstallJdkCommand}" />
+                    </Grid>
+
+                    <Border Grid.Row="2" Height="1" Background="{StaticResource DividerBrush}" Margin="0,12" />
+
+                    <!-- Maven -->
+                    <Grid Grid.Row="3">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel ToolTip="{Binding MavenHomeText}">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Maven" FontSize="13" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}" />
+                                <Border Background="{Binding MavenBadgeBg}" CornerRadius="8" Padding="7,2" Margin="8,0,0,0">
+                                    <TextBlock Text="{Binding MavenBadgeText}" FontSize="11" FontWeight="SemiBold"
+                                               Foreground="{Binding MavenBadgeFg}" />
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="{Binding MavenText}" Style="{StaticResource CaptionText}" Margin="0,3,0,0"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="Reinstall" Style="{StaticResource LinkButton}"
+                                VerticalAlignment="Center" Command="{Binding InstallMavenCommand}" />
+                    </Grid>
+
+                    <Border Grid.Row="4" Height="1" Background="{StaticResource DividerBrush}" Margin="0,12" />
+
+                    <!-- 客户端：只报"有没有准备好"，细节和状态圆点留在下方客户端卡片里，
+                         不重复放 ClientDetail（那行说明比这行长，撑高卡片） -->
+                    <Grid Grid.Row="5">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Client" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                            <Border Background="{Binding ClientBadgeBg}" CornerRadius="8" Padding="7,2" Margin="8,0,0,0">
+                                <TextBlock Text="{Binding ClientBadgeText}" FontSize="11" FontWeight="SemiBold"
+                                           Foreground="{Binding ClientBadgeFg}" />
+                            </Border>
+                        </StackPanel>
+
+                        <Button Grid.Column="1" Content="Repack" Style="{StaticResource LinkButton}"
+                                VerticalAlignment="Center" Margin="10,0,0,0" Command="{Binding RepackClientCommand}">
+                            <Button.ToolTip>
+                                <ToolTip Style="{StaticResource HintToolTip}" Placement="Top">
+                                    <StackPanel>
+                                        <TextBlock Text="Force repack resources" FontWeight="SemiBold" />
+                                        <TextBlock Text="Repacks fx / CharTE / EmoTE under resource into idd/idx. Normally they are repacked only when the source folders change; this forces a rebuild."
+                                                   TextWrapping="Wrap" Opacity="0.72" Margin="0,3,0,0" />
+                                    </StackPanel>
+                                </ToolTip>
+                            </Button.ToolTip>
+                        </Button>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+        </StackPanel>
+
+        <!-- ═══ 服务 / 客户端控制条 ═══ -->
+        <!-- 两张等宽卡片同处一行，统一用"两行"结构：第一行 状态圆点 + 状态文案，第二行 灰色副信息，
+             按钮在右侧垂直居中。两行是为了让两张卡片的节奏一致（也跟上方 JDK / Maven / 客户端
+             那几行的"主文案 + 说明"对齐），否则一张一行一张两行，顶边齐了底边就会一高一低。 -->
+        <Grid Grid.Row="2" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!-- 服务卡片 -->
+            <Border Grid.Column="0" Style="{StaticResource Card}" Padding="18,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="9" Height="9" Fill="{Binding ServerDot}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding ServerText}" Margin="8,0,0,0" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <!-- 第二行放端口，和右边客户端卡片的资源说明对称；
+                             17px 缩进让副信息跟上面状态文字的起始位置对齐 -->
+                        <TextBlock Text="Port 3838 (game) · 47611 (passport)" Style="{StaticResource MutedText}"
+                                   Margin="17,3,0,0" TextTrimming="CharacterEllipsis"
+                                   ToolTip="3838 = login / channel / room traffic, 47611 = Nexon passport login protocol" />
+                    </StackPanel>
+
+                    <!-- 启动/停止合并为一个状态按钮：文案与配色随 ServerState 切换 -->
+                    <Button Grid.Column="1" Content="{Binding ServerButtonText}" MinWidth="108" Margin="12,0,0,0"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Command="{Binding ToggleServerCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowStopStyle}" Value="True">
+                                        <Setter Property="Background" Value="White" />
+                                        <Setter Property="BorderBrush" Value="#F0C9C9" />
+                                        <Setter Property="Foreground" Value="{StaticResource DangerBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- 客户端卡片：状态圆点 + 状态文案 + 下面一行说明都留在这儿，
+                 「重新打包」在运行环境卡片里，这里只放启动动作 -->
+            <Border Grid.Column="2" Style="{StaticResource Card}" Padding="18,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse Width="9" Height="9" Fill="{Binding ClientDot}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding ClientText}" Margin="8,0,0,0" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <TextBlock Text="{Binding ClientDetail}" Style="{StaticResource MutedText}"
+                                   Margin="17,3,0,0" TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding ClientDetail}" />
+                    </StackPanel>
+
+                    <Button Grid.Column="1" Content="{Binding ClientButtonText}" MinWidth="108" Margin="12,0,0,0"
+                            HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Command="{Binding LaunchClientCommand}"
+                            Style="{StaticResource PrimaryButton}">
+                        <Button.ToolTip>
+                            <ToolTip Style="{StaticResource HintToolTip}" Placement="Top">
+                                <StackPanel>
+                                    <TextBlock Text="Launch Client" FontWeight="SemiBold" />
+                                    <TextBlock Text="On first run the client folder is prepared first (pull the resource submodule, copy exe/dll, pack resources), then CA.exe is launched."
+                                               TextWrapping="Wrap" Opacity="0.72" Margin="0,3,0,0" />
+                                </StackPanel>
+                            </ToolTip>
+                        </Button.ToolTip>
+                    </Button>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ═══ 日志标题栏 ═══ -->
+        <Grid Grid.Row="3" Margin="2,18,2,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Run Log" FontSize="13" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <CheckBox Content="Auto-scroll" IsChecked="{Binding AutoScroll}" FontSize="12"
+                          Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"
+                          Margin="0,0,12,0" />
+                <Button Content="Clear" Style="{StaticResource LinkButton}" Command="{Binding ClearLogCommand}" />
+                <TextBlock Text="|" Foreground="#D5DAE1" Margin="8,0" VerticalAlignment="Center" />
+                <Button Content="Copy All" Style="{StaticResource LinkButton}" Command="{Binding CopyLogCommand}" />
+                <TextBlock Text="|" Foreground="#D5DAE1" Margin="8,0" VerticalAlignment="Center" />
+                <Button Content="Log Folder" Style="{StaticResource LinkButton}" Command="{Binding OpenLogFolderCommand}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- ═══ 日志区 ═══ -->
+        <!-- 阴影放在底层空 Border 上，与上面几张卡片共用 CardShadowEffect。
+             不直接给外层容器加 Effect：那会把整个 ListBox 子树先渲成纹理再模糊，
+             日志高频追加 / 自动滚动时会持续重算，白白拖慢渲染。 -->
+        <Grid Grid.Row="4">
+            <Border Background="{StaticResource LogBgBrush}" BorderBrush="{StaticResource CardBorderBrush}"
+                    BorderThickness="1" CornerRadius="10" Effect="{StaticResource CardShadowEffect}" />
+            <ListBox x:Name="LogList" Style="{StaticResource LogList}" ItemsSource="{Binding Logs}"
+                     Margin="14,10" ScrollViewer.CanContentScroll="True">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock TextWrapping="Wrap" Margin="0,1.5">
+                            <Run Text="{Binding Time, Mode=OneWay}" Foreground="#A3AAB6" />
+                            <Run Text="{Binding LevelText, Mode=OneWay}" Foreground="{Binding LevelBrush, Mode=OneWay}" />
+                            <Run Text="{Binding Tag, Mode=OneWay}" Foreground="{Binding TagBrush, Mode=OneWay}"
+                                 FontWeight="SemiBold" />
+                            <Run Text=" " />
+                            <Run Text="{Binding Text, Mode=OneWay}" Foreground="{Binding TextBrush, Mode=OneWay}" />
+                        </TextBlock>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </Grid>
+
+        <!-- ═══ 状态栏 ═══ -->
+        <Grid Grid.Row="5" Margin="2,10,2,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Grid Width="14" Height="14" VerticalAlignment="Center" HorizontalAlignment="Left"
+                  Visibility="{Binding SpinnerVisibility}">
+                <Ellipse Width="14" Height="14" Stroke="#E2E6EC" StrokeThickness="2" />
+                <Path Data="M 7,0.7 A 6.3,6.3 0 1 1 0.7,7" Stroke="{StaticResource AccentBrush}" StrokeThickness="2"
+                      StrokeStartLineCap="Round" StrokeEndLineCap="Round">
+                    <Path.RenderTransform>
+                        <RotateTransform x:Name="SpinTx" CenterX="7" CenterY="7" />
+                    </Path.RenderTransform>
+                </Path>
+                <Grid.Triggers>
+                    <EventTrigger RoutedEvent="FrameworkElement.Loaded">
+                        <BeginStoryboard>
+                            <Storyboard RepeatBehavior="Forever">
+                                <DoubleAnimation Storyboard.TargetName="SpinTx" Storyboard.TargetProperty="Angle"
+                                                 From="0" To="360" Duration="0:0:0.9" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </EventTrigger>
+                </Grid.Triggers>
+            </Grid>
+
+            <ProgressBar Style="{StaticResource ThinProgressBar}" Width="90" Height="4" Margin="0,0,10,0"
+                         VerticalAlignment="Center" HorizontalAlignment="Left" Minimum="0" Maximum="100"
+                         Value="{Binding ProgressValue, Mode=OneWay}" Visibility="{Binding ProgressBarVisibility}" />
+
+            <TextBlock Grid.Column="1" Text="{Binding StatusLine}" Style="{StaticResource MutedText}"
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+
+            <TextBlock Grid.Column="2" Text="{Binding AppVersionText}" Style="{StaticResource MutedText}"
+                       VerticalAlignment="Center" ToolTip="{Binding BaseDirText}" />
+        </Grid>
+    </Grid>
+</Window>

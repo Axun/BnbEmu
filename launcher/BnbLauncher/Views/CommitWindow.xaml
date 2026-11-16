@@ -1,0 +1,101 @@
+<Window x:Class="BnbLauncher.CommitWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Commits"
+        Width="780" Height="600" MinWidth="560" MinHeight="400"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource WindowBgBrush}"
+        FontFamily="Microsoft YaHei UI, Segoe UI"
+        Icon="/Assets/app.ico"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True"
+        ShowInTaskbar="False">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
+
+    <Grid Margin="20,18,20,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="2,0,2,14">
+            <TextBlock Text="Commits" FontSize="18" FontWeight="SemiBold"
+                       Foreground="{StaticResource TextPrimaryBrush}" />
+            <TextBlock Text="{Binding Subtitle}" Style="{StaticResource CaptionText}" Margin="0,4,0,0" />
+            <!-- 有更新时可在「本次更新」与「完整提交历史」之间切换；两份列表都不截断 -->
+            <StackPanel Orientation="Horizontal" Margin="0,10,0,0"
+                        Visibility="{Binding ShowScopeSwitch, Converter={StaticResource BoolToVis}}">
+                <Button x:Name="ContextTab" Content="{Binding ContextTabText}"
+                        Style="{StaticResource PrimaryButton}" FontSize="12" Padding="10,4"
+                        Click="OnShowContextClick" />
+                <Button x:Name="AllTab" Content="{Binding AllTabText}"
+                        Style="{StaticResource SecondaryButton}" FontSize="12" Padding="10,4"
+                        Margin="8,0,0,0" Click="OnShowAllClick" />
+            </StackPanel>
+        </StackPanel>
+
+        <Border Grid.Row="1" Style="{StaticResource Card}" Padding="18,6">
+            <!-- 完整历史可能上千条，CommitList 开了虚拟化，不要换回普通 ScrollViewer + ItemsControl -->
+            <Grid>
+                <ListBox x:Name="CommitList" Style="{StaticResource CommitList}"
+                         ItemsSource="{Binding Commits}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,0,0,1" Padding="0,11">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Background="#EEF2F6" CornerRadius="5" Padding="7,2"
+                                            VerticalAlignment="Top" Margin="0,1,0,0">
+                                        <TextBlock Text="{Binding ShortSha, Mode=OneWay}" FontFamily="Consolas"
+                                                   FontSize="11.5" Foreground="#475569" />
+                                    </Border>
+
+                                    <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                                        <TextBlock Text="{Binding Title, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextPrimaryBrush}" TextWrapping="Wrap" />
+                                        <TextBlock FontSize="11.5" Foreground="{StaticResource TextSecondaryBrush}"
+                                                   Margin="0,4,0,0">
+                                            <Run Text="{Binding Author, Mode=OneWay}" /><Run Text=" · " /><Run
+                                                Text="{Binding DateText, Mode=OneWay}" /><Run Text=" · " /><Run
+                                                Text="{Binding RelativeText, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <TextBlock Text="Source is not cloned yet. Clone it to see the full commit history."
+                           Style="{StaticResource CaptionText}" HorizontalAlignment="Center"
+                           VerticalAlignment="Center" IsHitTestVisible="False"
+                           Visibility="{Binding IsEmpty, Converter={StaticResource BoolToVis}}" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2" Margin="2,12,2,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Style="{StaticResource MutedText}" VerticalAlignment="Center">
+                <Run Text="{Binding Count, Mode=OneWay}" /><Run Text=" commits" />
+            </TextBlock>
+
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button Content="Copy List" Style="{StaticResource SecondaryButton}" Click="OnCopyClick" />
+                <Button Content="Close" Style="{StaticResource PrimaryButton}" Margin="8,0,0,0" MinWidth="88"
+                        Click="OnCloseClick" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
