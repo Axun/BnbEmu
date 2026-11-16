@@ -1,0 +1,11 @@
+{
+  "version": "1.1.0",
+  "minVersion": "0.0.0",
+  "notes": "启动器 1.1.0：自带更新，从 GitHub Release 读清单，退出后替换 exe",
+  "page": "https://github.com/krrr/BnbEmu/releases/tag/launcher-v1.1.0",
+  "exe": {
+    "url": "https://github.com/krrr/BnbEmu/releases/download/launcher-v1.1.0/BnbLauncher.exe",
+    "size": 61272935,
+    "sha256": "61b0cb01db6e3f41b12e346758bc02753ce9804d26be35b786510751115454c7"
+  }
+}

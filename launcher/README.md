@@ -118,6 +118,9 @@ git push origin launcher-v1.1.0
 建版本 release（资产 `BnbLauncher.exe` + `latest.json`）→ 再把 `latest.json` 覆盖上传到
 滚动 release `launcher-latest`。客户端默认读后者，路径固定。
 
+仓库里的 `launcher/latest.json` 是**兜底副本**（第一个源 404 时才会走到 raw），
+workflow 不会自动提交它——想让兜底也生效，发版后手工同步一份。内容和 release 里那份一致即可。
+
 两个约定：
 
 - **不要**用 `/releases/latest/download/latest.json` 当清单地址：本仓库还有客户端资源的
