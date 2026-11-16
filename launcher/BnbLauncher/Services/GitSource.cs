@@ -1,8 +1,13 @@
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using BnbLauncher.Models;
 using LibGit2Sharp;
 
 namespace BnbLauncher.Services;
+
+/// <summary>工作区状态：有没有未提交改动，以及这些改动的内容指纹。</summary>
+public readonly record struct WorkTreeState(bool Dirty, string Fingerprint);
 
 /// <summary>检查更新的结果。</summary>
 public sealed class SourceStatus
@@ -170,6 +175,62 @@ public static class GitSource
             return false;
         }
     }
+
+    /// <summary>
+    /// 与「编译输入」相关的工作区改动指纹：只看 src\ 与 pom.xml，
+    /// 用「路径 + 状态 + 大小 + 修改时间」汇总成哈希。
+    ///
+    /// 为什么不直接看 IsDirty：用户在 runtime\source 里手改源码是被支持的（启动器同步前会先确认），
+    /// 如果他改完编译过一次、随后反复点启动，光看「脏」会每次都触发全量重编。
+    /// 记下指纹就能区分「改过了没重编」和「已经编译过这批改动」。
+    /// 反过来，服务运行期可能在源码根目录写日志/缓存，这些不在过滤范围里，不会让指纹抖动。
+    /// </summary>
+    public static WorkTreeState ReadWorkTree()
+    {
+        if (!Exists) return new WorkTreeState(false, "no-repo");
+
+        try
+        {
+            using var repo = new Repository(AppPaths.SourceDir);
+            var entries = repo.RetrieveStatus(StatusOptions())
+                .Where(e => !e.State.HasFlag(FileStatus.Ignored))
+                .Select(e => e.FilePath.Replace('\\', '/').TrimEnd('/'))
+                .Where(IsBuildInput)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(p => p, StringComparer.Ordinal)
+                .Select(p =>
+                {
+                    var full = Path.Combine(AppPaths.SourceDir, p.Replace('/', Path.DirectorySeparatorChar));
+                    try
+                    {
+                        if (Directory.Exists(full)) return p + "|dir";
+                        var info = new FileInfo(full);
+                        // 删除的条目没有文件，用固定标记占位，仍然参与指纹
+                        return info.Exists ? $"{p}|{info.Length}|{info.LastWriteTimeUtc.Ticks}" : p + "|missing";
+                    }
+                    catch
+                    {
+                        return p + "|error";
+                    }
+                })
+                .ToList();
+
+            if (entries.Count == 0) return new WorkTreeState(false, "clean");
+
+            var joined = string.Join("\n", entries);
+            var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(joined)));
+            return new WorkTreeState(true, hash[..16].ToLowerInvariant());
+        }
+        catch
+        {
+            return new WorkTreeState(false, "unknown");
+        }
+    }
+
+    /// <summary>会影响到编译产物的路径：Kotlin 源与构建脚本，其余改动不需要重编。</summary>
+    private static bool IsBuildInput(string path)
+        => path.Equals("pom.xml", StringComparison.OrdinalIgnoreCase)
+           || path.StartsWith("src/", StringComparison.OrdinalIgnoreCase);
 
     // ── 检查更新 ────────────────────────────────────────────────────────
 

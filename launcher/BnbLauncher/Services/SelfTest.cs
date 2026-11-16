@@ -99,6 +99,8 @@ public static class SelfTest
         AttachToConsole();
 
         var runServer = args.Any(a => a.Equals("--server", StringComparison.OrdinalIgnoreCase));
+        // 只跑构建、不启动服务：端口被别的实例占着时也能验证编译链路
+        var runBuild = args.Any(a => a.Equals("--build", StringComparison.OrdinalIgnoreCase));
         var logFile = Path.Combine(AppPaths.LogsDir, $"selftest-{DateTime.Now:yyyyMMdd-HHmmss}.log");
         var report = new StringBuilder();
         var exitCode = 0;
@@ -150,14 +152,14 @@ public static class SelfTest
             if (maven is null) throw new InvalidOperationException("No usable Maven found");
             Say($"[mvn] OK {maven.Version} @ {maven.Home}");
 
-            // 2.5) 用与服务启动完全相同的命令行验证一遍（引号 / JAVA_HOME / 本地仓库）
+            // 2.5) 用与编译完全相同的命令行验证一遍（引号 / JAVA_HOME / 本地仓库）
             if (jdk is not null)
             {
                 var (code, output) = await ProcessUtil.RunAsync(
                     Environment.GetEnvironmentVariable("COMSPEC") ?? "cmd.exe",
-                    ServerRunner.BuildArguments(maven, "-v"),
+                    ServerBuild.BuildMvnArguments(maven, "-v"),
                     AppPaths.SourceDir,
-                    ServerRunner.BuildEnvironment(jdk, maven),
+                    ServerBuild.BuildMvnEnvironment(jdk, maven),
                     TimeSpan.FromSeconds(90));
 
                 var firstLine = output.Split('\n').Select(l => l.Trim())
@@ -192,7 +194,20 @@ public static class SelfTest
                 Say($"[git] upToDate={status.UpToDate} ahead={status.Ahead} diverged={status.Diverged}");
             }
 
-            // 4) 服务
+            // 4) 构建状态：不带 --server 时也能看出下次启动会不会重编
+            if (jdk is not null)
+            {
+                var needBuild = ServerBuild.NeedsBuild(jdk, out var buildReason);
+                var stamp = ServerBuild.ReadStamp();
+                var sha = stamp?.Sha ?? "";
+                var stampText = stamp is null
+                    ? "(none)"
+                    : $"{sha[..Math.Min(7, sha.Length)]} · {stamp.ClassCount} classes · {stamp.BuiltAt}";
+                Say($"[build] needBuild={needBuild}: {buildReason}");
+                Say($"[build] stamp = {stampText}");
+            }
+
+            // 4.5) 服务
             if (runServer)
             {
                 if (jdk is null || maven is null) throw new InvalidOperationException("Runtime not ready");
@@ -204,6 +219,13 @@ public static class SelfTest
                 }
                 else
                 {
+                    // 先走和界面完全相同的构建判定，自检因此也覆盖「能不能编出来」
+                    var outcome = await ServerBuild.EnsureAsync(jdk, maven, line => Say("[build] " + line),
+                        force: false, CancellationToken.None);
+                    Say(outcome.Compiled
+                        ? $"[build] compiled in {outcome.Elapsed.TotalSeconds:0.0}s ({outcome.Reason})"
+                        : $"[build] skipped: {outcome.Reason}");
+
                     var runner = new ServerRunner();
                     var lines = new List<string>();
                     runner.Output += line =>
@@ -211,8 +233,8 @@ public static class SelfTest
                         lock (lines) lines.Add(line);
                     };
 
-                    Say("[server] start: " + maven.MvnCmd);
-                    runner.Start(jdk, maven);
+                    Say("[server] start: java -cp <target classes + deps> " + AppPaths.ServerMainClass);
+                    runner.Start(jdk);
                     Say($"[server] pid = {runner.ProcessId}");
 
                     var ready = false;
@@ -238,6 +260,16 @@ public static class SelfTest
 
                     if (!ready) exitCode = 1;
                 }
+            }
+            else if (runBuild)
+            {
+                if (jdk is null || maven is null) throw new InvalidOperationException("Runtime not ready");
+
+                var outcome = await ServerBuild.EnsureAsync(jdk, maven, line => Say("[build] " + line),
+                    force: false, CancellationToken.None);
+                Say(outcome.Compiled
+                    ? $"[build] compiled in {outcome.Elapsed.TotalSeconds:0.0}s ({outcome.Reason})"
+                    : $"[build] skipped: {outcome.Reason}");
             }
         }
         catch (Exception ex)

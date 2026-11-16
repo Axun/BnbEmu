@@ -4,7 +4,14 @@ using System.Text;
 
 namespace BnbLauncher.Services;
 
-/// <summary>在 runtime\source 里执行 mvn compile exec:java，并把输出逐行转发给 UI。</summary>
+/// <summary>
+/// 用 JDK 直接启动服务端（java -cp "target\classes;依赖 jar" bnbemu.MainKt）。
+///
+/// 以前是 mvn compile exec:java：每次启动都让 kotlin-maven-plugin 全量重编（十几秒），
+/// 而且 exec:java 不开新进程，服务跑在 Maven 的 JVM 里，MAVEN_OPTS 的 -Xmx1024m 实际上
+/// 成了服务的堆上限。现在编译交给 ServerBuild（只在源码变动时发生），运行时完全绕开 Maven：
+/// 启动只剩 JVM + Netty 的固定开销，堆和 GC 参数也回到自己手里。
+/// </summary>
 public sealed class ServerRunner : IDisposable
 {
     private Process? _proc;
@@ -18,21 +25,24 @@ public sealed class ServerRunner : IDisposable
     public int ProcessId => _proc?.Id ?? 0;
     public string LastCommand { get; private set; } = "";
 
-    public void Start(JdkInfo jdk, MavenInfo maven)
+    public void Start(JdkInfo jdk)
     {
         if (IsRunning) throw new InvalidOperationException("The server is already running.");
 
-        if (!File.Exists(maven.MvnCmd))
-            throw new FileNotFoundException("mvn.cmd not found", maven.MvnCmd);
-        if (!Directory.Exists(AppPaths.SourceDir))
-            throw new DirectoryNotFoundException("Source folder not found. Download the source first.");
+        var java = Path.Combine(jdk.Home, "bin", "java.exe");
+        if (!File.Exists(java))
+            throw new FileNotFoundException("java.exe not found", java);
+        if (!File.Exists(AppPaths.ServerMainClassFile))
+            throw new InvalidOperationException("The server has not been compiled yet.");
+        if (!File.Exists(AppPaths.ServerClasspathFile))
+            throw new InvalidOperationException("The dependency classpath snapshot is missing.");
 
-        var goals = $"-B -Dstyle.color=never -Dmaven.repo.local=\"{AppPaths.M2RepoDir}\" compile exec:java";
+        var classpath = ServerBuild.ClasspathArgument();
 
         var psi = new ProcessStartInfo
         {
-            FileName = Environment.GetEnvironmentVariable("COMSPEC") ?? "cmd.exe",
-            Arguments = BuildArguments(maven, goals),
+            FileName = java,
+            // 服务端用 File("Config.yaml") 这类相对路径读配置，工作目录必须是源码目录
             WorkingDirectory = AppPaths.SourceDir,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -42,9 +52,17 @@ public sealed class ServerRunner : IDisposable
             StandardErrorEncoding = Encoding.UTF8,
         };
 
-        foreach (var (key, value) in BuildEnvironment(jdk, maven)) psi.Environment[key] = value;
+        // ArgumentList 会替每个参数正确加引号（classpath 里有空格也不会散架），
+        // 也就不再需要以前那套 cmd /s /c 的引号规则。
+        psi.ArgumentList.Add("-Xmx1024m");
+        psi.ArgumentList.Add("-Dfile.encoding=UTF-8");
+        psi.ArgumentList.Add("-Dsun.stdout.encoding=UTF-8");
+        psi.ArgumentList.Add("-Dsun.stderr.encoding=UTF-8");
+        psi.ArgumentList.Add("-cp");
+        psi.ArgumentList.Add(classpath);
+        psi.ArgumentList.Add(AppPaths.ServerMainClass);
 
-        LastCommand = maven.MvnCmd + " " + goals;
+        LastCommand = java + " -cp <" + classpath.Split(';').Length + " entries> " + AppPaths.ServerMainClass;
 
         _stopping = false;
         _proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
@@ -71,26 +89,8 @@ public sealed class ServerRunner : IDisposable
         if (!_stopping) Exited?.Invoke(code);
     }
 
-    /// <summary>
-    /// cmd 的 /s /c 引号规则：整条命令再包一层引号，mvn 路径单独包引号
-    /// （路径里可能有空格）。最终形如：/d /s /c ""C:\...\mvn.cmd" -B …"
-    /// </summary>
-    public static string BuildArguments(MavenInfo maven, string goals)
-        => "/d /s /c \"" + "\"" + maven.MvnCmd + "\" " + goals + "\"";
-
-    public static Dictionary<string, string> BuildEnvironment(JdkInfo jdk, MavenInfo maven)
+    public async Task StopAsync(int timeoutMs = 8000)
     {
-        var path = Environment.GetEnvironmentVariable("PATH") ?? "";
-        return new Dictionary<string, string>
-        {
-            ["PATH"] = jdk.Home + "\\bin;" + maven.Home + "\\bin;" + path,
-            ["JAVA_HOME"] = jdk.Home,
-            ["MAVEN_OPTS"] = "-Dfile.encoding=UTF-8 -Dsun.stdout.encoding=UTF-8 -Dsun.stderr.encoding=UTF-8 -Xmx1024m",
-            ["MAVEN_SKIP_RC"] = "true",
-        };
-    }
-
-    public async Task StopAsync(int timeoutMs = 8000)    {
         var proc = _proc;
         if (proc is null) return;
 
@@ -106,7 +106,7 @@ public sealed class ServerRunner : IDisposable
         {
             if (!proc.HasExited)
             {
-                // taskkill 兜底：Job Object 失效时也能带走 cmd → mvn → java 整棵树
+                // taskkill 兜底：Job Object 失效时也能带走整个进程树
                 await ProcessUtil.RunAsync("taskkill", $"/PID {proc.Id} /T /F",
                     timeout: TimeSpan.FromSeconds(5));
             }

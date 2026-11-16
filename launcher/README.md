@@ -19,8 +19,12 @@ Windows 桌面启动器（WPF / .NET 9 / C#）：用 git 拉取 BnbEmu 最新源
 - **提交详情**：列出本地版本到远端之间的所有提交（sha / 说明 / 作者 / 时间），可复制
 - **JDK 21 自动安装**：可选用 Amazon Corretto 21 或 Azul Zulu 21，缺失时自动下载解压到 `runtime/jdk`
 - **Maven 自动安装**：从 Apache 官方镜像取最新的 3.9.x，解压到 `runtime/maven`；本地仓库固定为 `runtime/m2repo`
-- **后台服务**：在 `runtime/source` 里执行 `mvn compile exec:java`，输出实时汇入界面日志；
-  用 Job Object 托管进程树，启动器退出时不会留下孤儿 java 进程
+- **后台服务**：编译与运行分离。只有源码提交 / pom.xml / JDK 变化（或在源码里手改过）时才在
+  `runtime/source` 执行一次 `mvn compile`，产物记进 `runtime/build/build-stamp.json`；
+  平时启动直接用 `java -cp "target\classes;依赖 jar" bnbemu.MainKt`，不再每次都让 Kotlin 全量重编
+  （老版本 `mvn compile exec:java` 每次要十几秒，而且服务跑在 Maven 的 JVM 里，堆上限被 MAVEN_OPTS 限制）。
+  编译前会清空 `target\classes`，避免源文件删除后残留 class 被 ClassGraph 扫成幽灵 handler。
+  服务进程仍用 Job Object 托管，启动器退出时不会留下孤儿 java 进程
 - **启动器自己会更新**：从 GitHub Release 读 `latest.json`，发现新版本在顶部提示；
   下载后校验 SHA-256，退出后由脚本把 exe 换掉（旧版本留作 `.prev` 可回退），`runtime` 目录完全不动
 - **不污染系统**：JDK / Maven / 源码 / 客户端 / Maven 仓库 / 日志全部在启动器目录内
@@ -39,7 +43,9 @@ Windows 桌面启动器（WPF / .NET 9 / C#）：用 git 拉取 BnbEmu 最新源
     jdk\                    # JDK 21
     maven\                  # Maven 3.9.x
     m2repo\                 # Maven 本地仓库
+    build\                  # 服务端构建产物：server-cp.txt（依赖 classpath）、build-stamp.json（编译凭证）
     source\                 # BnbEmu 源码（标准 git 仓库，含 .git）
+      target\classes\       # 编译输出；每次重编前整个清空
       resource\             # 客户端资源（git 子模块，按需初始化）
     client\                 # 客户端运行目录（启动器拼出来的）
       CA.exe + *.dll + *.fft + nm.bik
@@ -160,6 +166,7 @@ dotnet publish BnbLauncher -c Release -o dist
 
 ```powershell
 .\BnbLauncher.exe --selftest            # 检查远端分支 + 准备 JDK/Maven + clone（本地无仓库时）
+.\BnbLauncher.exe --selftest --build    # 再按需编译一次服务端（不启动服务，端口被占时也能验编译）
 .\BnbLauncher.exe --selftest --server   # 再把服务真正跑一遍（约 3 分钟）后停止
 
 .\BnbLauncher.exe --check-update        # 只查启动器自身有没有新版本（不发版也能验清单）

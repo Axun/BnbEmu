@@ -99,6 +99,7 @@ public static class JsonStore
 
 [JsonSerializable(typeof(AppConfig))]
 [JsonSerializable(typeof(AppState))]
+[JsonSerializable(typeof(BuildStamp))]
 [JsonSerializable(typeof(UpdateFeed))]
 [JsonSerializable(typeof(PendingUpdate))]
 [JsonSerializable(typeof(AzulPackageDto[]))]

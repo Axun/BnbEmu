@@ -348,10 +348,23 @@
                                        Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center" />
                         </StackPanel>
                         <!-- 第二行放端口，和右边客户端卡片的资源说明对称；
-                             17px 缩进让副信息跟上面状态文字的起始位置对齐 -->
-                        <TextBlock Text="Port 3838 (game) · 47611 (passport)" Style="{StaticResource MutedText}"
-                                   Margin="17,3,0,0" TextTrimming="CharacterEllipsis"
-                                   ToolTip="3838 = login / channel / room traffic, 47611 = Nexon passport login protocol" />
+                             17px 缩进让副信息跟上面状态文字的起始位置对齐。
+                             Rebuild 只在产物可疑（杀软/手动删过 target）时才需要用，
+                             平时启动会自己判断要不要编译 -->
+                        <Grid Margin="17,3,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Port 3838 (game) · 47611 (passport)"
+                                       Style="{StaticResource MutedText}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="3838 = login / channel / room traffic, 47611 = Nexon passport login protocol" />
+                            <Button Grid.Column="1" Content="Rebuild" Style="{StaticResource LinkButton}"
+                                    Margin="10,0,0,0" VerticalAlignment="Center"
+                                    Command="{Binding ForceRebuildCommand}"
+                                    ToolTip="Delete target\classes and compile the server again from scratch" />
+                        </Grid>
                     </StackPanel>
 
                     <!-- 启动/停止合并为一个状态按钮：文案与配色随 ServerState 切换 -->
@@ -489,7 +502,8 @@
                 </Grid.Triggers>
             </Grid>
 
-            <ProgressBar Style="{StaticResource ThinProgressBar}" Width="90" Height="4" Margin="0,0,10,0"
+            <!-- 粗细由 ThinProgressBar 自己定（8px），这里别再写 Height 覆盖它 -->
+            <ProgressBar Style="{StaticResource ThinProgressBar}" Width="90" Margin="0,0,10,0"
                          VerticalAlignment="Center" HorizontalAlignment="Left" Minimum="0" Maximum="100"
                          Value="{Binding ProgressValue, Mode=OneWay}" Visibility="{Binding ProgressBarVisibility}" />
 

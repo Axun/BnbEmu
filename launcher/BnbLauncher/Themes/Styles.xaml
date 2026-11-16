@@ -328,20 +328,74 @@
     </Style>
 
     <!-- ── 细进度条（仅确定进度时使用） ────────────────────────────── -->
+    <!-- 填充区做成理发店灯柱：白 / 主题绿相间的 45° 斜条，条纹自己匀速流动。
+         关键点是「独立于进度」——进度只决定填充多宽，纹理不等比例拉伸、也不随 Value 跳，
+         所以动画挂在画刷的 Transform 上（而不是绑 Value / 宽度），进度归零时条纹照转。 -->
     <Style x:Key="ThinProgressBar" TargetType="ProgressBar">
-        <Setter Property="Height" Value="4" />
+        <Setter Property="Height" Value="8" />
         <Setter Property="Background" Value="#E5E7EB" />
         <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ProgressBar">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="2" ClipToBounds="True">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="4" ClipToBounds="True">
                         <Grid>
                             <Rectangle x:Name="PART_Track" />
-                            <Rectangle x:Name="PART_Indicator" Fill="{TemplateBinding Foreground}"
-                                       HorizontalAlignment="Left" RadiusX="2" RadiusY="2" />
+                            <!-- 圆角留给 Rectangle 自己（RadiusX/Y），填充色就是带状画刷，
+                                 这样斜条天然被圆角裁掉，不用额外 Clip 几何。 -->
+                            <Rectangle x:Name="PART_Indicator" HorizontalAlignment="Left"
+                                       RadiusX="4" RadiusY="4">
+                                <Rectangle.Fill>
+                                    <!-- 一个平铺单元 10×10，底色铺绿、上面压白条。
+                                         白条必须画两块：主斜带（x+y∈[5,10]）+ 右上角三角（x+y∈[15,20]）。
+                                         只画主斜带的话，相邻 tile 拼接处会错开半格，斜条在边界断开。 -->
+                                    <DrawingBrush TileMode="Tile" Stretch="Fill"
+                                                  Viewport="0,0,10,10" ViewportUnits="Absolute"
+                                                  AlignmentX="Left" AlignmentY="Top">
+                                        <DrawingBrush.Transform>
+                                            <TranslateTransform X="0" />
+                                        </DrawingBrush.Transform>
+                                        <DrawingBrush.Drawing>
+                                            <DrawingGroup>
+                                                <!-- 绿色取 Foreground（模板里不能用 TemplateBinding 给画刷赋值，
+                                                     所以用 Binding 绑到 TemplatedParent），换 Foreground 就换整条色带 -->
+                                                <GeometryDrawing Brush="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}">
+                                                    <GeometryDrawing.Geometry>
+                                                        <RectangleGeometry Rect="0,0,10,10" />
+                                                    </GeometryDrawing.Geometry>
+                                                </GeometryDrawing>
+                                                <GeometryDrawing Brush="White">
+                                                    <GeometryDrawing.Geometry>
+                                                        <PathGeometry Figures="M 5,0 L 10,0 L 0,10 L 0,5 Z M 5,10 L 10,10 L 10,5 Z" />
+                                                    </GeometryDrawing.Geometry>
+                                                </GeometryDrawing>
+                                            </DrawingGroup>
+                                        </DrawingBrush.Drawing>
+                                    </DrawingBrush>
+                                </Rectangle.Fill>
+                            </Rectangle>
                         </Grid>
                     </Border>
+                    <ControlTemplate.Triggers>
+                        <!-- 位移正好一个 tile 宽（10px）后回到原点，所以循环接缝看不出来。
+                             0.6s 走 10px ≈ 17px/s，条子窄，再快就像在抖。
+                             用 IsVisible 开关而不是 Loaded：进度条绝大多数时间都是 Collapsed，
+                             收起时把动画时钟一起停掉，别让一个看不见的 60fps 动画白转。 -->
+                        <Trigger Property="IsVisible" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard x:Name="StripeScroll">
+                                    <Storyboard RepeatBehavior="Forever">
+                                        <DoubleAnimation Storyboard.TargetName="PART_Indicator"
+                                                         Storyboard.TargetProperty="(Shape.Fill).(Brush.Transform).(TranslateTransform.X)"
+                                                         From="0" To="10" Duration="0:0:0.6" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <RemoveStoryboard BeginStoryboardName="StripeScroll" />
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

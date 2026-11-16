@@ -14,6 +14,7 @@ namespace BnbLauncher.Services;
 ///       jdk\                   JDK 21（Amazon Corretto 或 Azul Zulu）
 ///       maven\                 Apache Maven 3.9.x
 ///       m2repo\                Maven 本地仓库（避免污染 %USERPROFILE%\.m2）
+///       build\                 服务端构建产物（依赖 classpath 快照 + 编译凭证）
 ///       source\                BnbEmu 源码
 ///       client\                客户端运行目录（exe/dll 从 resource\other 复制，idd/idx 现打包）
 ///       update\                启动器自身更新的暂存区（new.exe / pending.json）
@@ -32,6 +33,27 @@ public static class AppPaths
     public static string M2RepoDir => Path.Combine(RuntimeDir, "m2repo");
     public static string CacheDir => Path.Combine(RuntimeDir, "cache");
     public static string LogsDir => Path.Combine(BaseDir, "logs");
+
+    // ── 服务端构建产物 ──────────────────────────────────────────────────
+    // 编译只在源码/pom/JDK 变化时发生，平时用 javac 的输出直接 java -cp 启动，
+    // 因此「产物可用」这件事需要一份落盘的凭证，见 ServerBuild。
+    public static string BuildDir => Path.Combine(RuntimeDir, "build");
+
+    /// <summary>runtime scope 依赖的 classpath 快照（分号分隔的绝对路径）。</summary>
+    public static string ServerClasspathFile => Path.Combine(BuildDir, "server-cp.txt");
+
+    /// <summary>上次成功编译的记录；只有编译成功才会写，失败/中断一律没有。</summary>
+    public static string BuildStampFile => Path.Combine(BuildDir, "build-stamp.json");
+
+    /// <summary>mvn 的编译输出目录（每次编译前整个删掉，避免残留 class）。</summary>
+    public static string ServerClassesDir => Path.Combine(SourceDir, "target", "classes");
+
+    public const string ServerMainClass = "bnbemu.MainKt";
+
+    /// <summary>主类编译产物，用来确认 classes 目录不是空壳。</summary>
+    public static string ServerMainClassFile => Path.Combine(ServerClassesDir, "bnbemu", "MainKt.class");
+
+    public static string PomFile => Path.Combine(SourceDir, "pom.xml");
 
     /// <summary>客户端运行目录：由 resource 子模块里的 exe/dll 与打包出来的 idd/idx 拼成。</summary>
     public static string ClientDir => Path.Combine(RuntimeDir, "client");
@@ -76,6 +98,7 @@ public static class AppPaths
         Directory.CreateDirectory(LogsDir);
         Directory.CreateDirectory(M2RepoDir);
         Directory.CreateDirectory(UpdateDir);
+        Directory.CreateDirectory(BuildDir);
     }
 
     /// <summary>源码是否已落地（用 pom.xml 作为完整性标记）。</summary>

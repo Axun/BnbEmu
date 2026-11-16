@@ -132,6 +132,7 @@ public sealed class MainViewModel : ObservableObject
     private string _mavenBadgeText = "Missing";
     private ServerState _serverState = ServerState.Stopped;
     private int _serverPid;
+    private CancellationTokenSource? _buildCts;
     private ClientState _clientState = ClientState.NotPrepared;
     private int _clientPid;
     private bool _autoScroll = true;
@@ -157,6 +158,8 @@ public sealed class MainViewModel : ObservableObject
         InstallMavenCommand = new AsyncRelayCommand(InstallMavenAsync, () => !IsBusy && !IsServerRunning);
         // 启动/停止共用一个按钮：由 ServerState 决定点击时执行哪个动作
         ToggleServerCommand = new AsyncRelayCommand(ToggleServerAsync, () => CanStart || IsServerRunning);
+        ForceRebuildCommand = new AsyncRelayCommand(ForceRebuildAsync,
+            () => !IsBusy && !IsServerRunning && AppPaths.SourceExists);
         LaunchClientCommand = new AsyncRelayCommand(LaunchClientAsync, () => CanLaunchClient);
         RepackClientCommand = new AsyncRelayCommand(() => PrepareClientAsync(forceRepack: true),
             () => !IsBusy && !IsClientRunning && AppPaths.SourceExists);
@@ -188,6 +191,7 @@ public sealed class MainViewModel : ObservableObject
     public ICommand InstallJdkCommand { get; }
     public ICommand InstallMavenCommand { get; }
     public ICommand ToggleServerCommand { get; }
+    public ICommand ForceRebuildCommand { get; }
     public ICommand LaunchClientCommand { get; }
     public ICommand RepackClientCommand { get; }
     public ICommand OpenFolderCommand { get; }
@@ -1163,6 +1167,7 @@ public sealed class MainViewModel : ObservableObject
                 return;
             }
 
+            // 端口检查放在编译之前：端口冲突时不该让用户先白等十几秒编译
             var busy = PortProbe.BusyPorts(3838, 47611);
             if (busy.Length > 0)
             {
@@ -1176,15 +1181,27 @@ public sealed class MainViewModel : ObservableObject
                     StatusText = "Port in use";
                     return;
                 }
+
+                // 端口被占很可能意味着另一个实例正跑在同一份源码上；编译会清空
+                // target\classes，正在运行的 JVM 之后再懒加载类就会失败。
+                _log.Warn("BUILD", "Port is busy — if another instance runs from this folder, stop it before recompiling.");
             }
 
-            ServerState = ServerState.Starting;
-            StatusText = "Starting server (the first run downloads Maven dependencies and may be slow)…";
-            _log.Info("SERVER", "Starting: " + _maven.MvnCmd);
-            _log.Info("SERVER", $"Working directory: {AppPaths.SourceDir}");
-            _log.Info("SERVER", $"Local repository: {AppPaths.M2RepoDir}");
+            var jdk = _jdk;
+            var maven = _maven;
 
-            _server.Start(_jdk, _maven);
+            // 判定 + 按需编译。产物齐全时这里只花几十毫秒（git 状态 + 文件比对），
+            // 真正需要编译时才会出现十几秒的全量 Kotlin 编译，所以必须有可见进度。
+            _log.Info("BUILD", "Checking build state…");
+            await RunBuildAsync(jdk, maven, force: false, "Preparing server…");
+
+            ServerState = ServerState.Starting;
+            StatusText = "Starting server…";
+            _log.Info("SERVER", $"Launching {AppPaths.ServerMainClass} with {jdk.Display}");
+            _log.Info("SERVER", $"Working directory: {AppPaths.SourceDir}");
+            _log.Info("SERVER", $"Classpath: {AppPaths.ServerClassesDir} + {AppPaths.ServerClasspathFile}");
+
+            _server.Start(jdk);
             _serverPid = _server.ProcessId;
             ServerState = ServerState.Running;
             StatusText = "Server running";
@@ -1196,6 +1213,72 @@ public sealed class MainViewModel : ObservableObject
             StatusText = "Launch failed";
             _log.Error("SERVER", "Launch failed: " + ex.Message);
             MessageBox.Show(ex.Message, "Failed to Start Server", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    /// <summary>
+    /// 跑一次「判定 + 按需编译」，负责 Busy 状态与日志；
+    /// 失败时把异常抛给调用方（由它决定弹窗文案）。
+    /// </summary>
+    private async Task<BuildOutcome> RunBuildAsync(JdkInfo jdk, MavenInfo maven, bool force, string busyText)
+    {
+        IsBusy = true;
+        BusyText = busyText;
+        IsIndeterminate = true;
+        _buildCts = new CancellationTokenSource();
+
+        try
+        {
+            var outcome = await ServerBuild.EnsureAsync(jdk, maven,
+                line => _log.Info("BUILD", line), force, _buildCts.Token);
+
+            if (outcome.Compiled)
+                _log.Success("BUILD", $"Compiled in {outcome.Elapsed.TotalSeconds:0.0}s ({outcome.Reason})");
+            else
+                _log.Info("BUILD", "Skip compile: " + outcome.Reason);
+
+            return outcome;
+        }
+        finally
+        {
+            _buildCts.Dispose();
+            _buildCts = null;
+            IsBusy = false;
+            BusyText = "";
+            IsIndeterminate = false;
+        }
+    }
+
+    /// <summary>
+    /// 界面上的「重新编译」：跳过判定，清空产物重新编译一次。
+    /// 怀疑产物损坏（杀软/手动删过 target）但判定仍然认为可用时用得上。
+    /// </summary>
+    private async Task ForceRebuildAsync()
+    {
+        if (IsServerRunning) return;
+
+        if (_jdk is null) await EnsureJavaAsync(true, false, CancellationToken.None);
+        if (_maven is null) await EnsureMavenAsync(true, CancellationToken.None);
+        if (_jdk is null || _maven is null) return;
+
+        var jdk = _jdk;
+        var maven = _maven;
+
+        try
+        {
+            await RunBuildAsync(jdk, maven, force: true, "Rebuilding server…");
+            StatusText = "Rebuilt";
+        }
+        catch (OperationCanceledException)
+        {
+            _log.Warn("BUILD", "Rebuild cancelled");
+            StatusText = "Rebuild cancelled";
+        }
+        catch (Exception ex)
+        {
+            _log.Error("BUILD", "Rebuild failed: " + ex.Message);
+            StatusText = "Rebuild failed";
+            MessageBox.Show(ex.Message, "Rebuild Failed", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -1496,6 +1579,8 @@ public sealed class MainViewModel : ObservableObject
     public async Task ShutdownAsync()
     {
         try { _opCts?.Cancel(); } catch { }
+        // 正在编译时退出：取消会把 mvn 的整棵进程树杀掉，不留下跑到一半的编译
+        try { _buildCts?.Cancel(); } catch { }
 
         // 客户端是独立进程，退出启动器时故意不杀它，只解绑事件
         _client.Dispose();

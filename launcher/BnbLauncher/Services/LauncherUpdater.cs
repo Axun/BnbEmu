@@ -223,8 +223,11 @@ public static class LauncherUpdater
             File.Move(stagedExe, AppPaths.StagedUpdatePath, overwrite: true);
         }
 
-        // 脚本内容全是 ASCII、路径全靠 %~dp0 和相对名，所以不存在「中文目录被 cmd 按 GBK 读坏」的问题
-        File.WriteAllText(AppPaths.UpdateScriptPath, ApplyScript, new UTF8Encoding(false));
+        // 脚本内容全是 ASCII、路径全靠 %~dp0 和相对名，所以不存在「中文目录被 cmd 按 GBK 读坏」的问题。
+        // 换行固定成 CRLF：batch 文件用裸 LF 时，部分 Windows 版本上 goto 标签会找不到，
+        // 而源码本身可能被 git 以 LF 检出（autocrlf），不能依赖字面量里的换行。
+        var script = ApplyScript.Replace("\r\n", "\n").Replace("\n", "\r\n");
+        File.WriteAllText(AppPaths.UpdateScriptPath, script, new UTF8Encoding(false));
 
         JsonStore.Save(AppPaths.PendingUpdatePath, new PendingUpdate
         {
