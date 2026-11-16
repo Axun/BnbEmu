@@ -6,6 +6,7 @@ import bnbemu.packet.DynamicMapInfo
 import bnbemu.packet.FxConfig
 import bnbemu.packet.ItemDef
 import bnbemu.packet.JoinSessionResult
+import bnbemu.packet.MyPageSlots
 import bnbemu.packet.RoomList
 import bnbemu.packet.SessionList
 import bnbemu.packet.ShopCatalog
@@ -22,7 +23,6 @@ import bnbemu.packet.defaultUserInventoryItems
 import bnbemu.packet.inventoryEntries
 import bnbemu.packet.UserInventoryInfo
 import bnbemu.packet.UserItemUpdate
-import bnbemu.packet.shop.FxStockInit
 
 // C→S op 81 進頻道自動空包 —— ⚠️ 不是「進房」請求
 // =================================================
@@ -31,7 +31,7 @@ import bnbemu.packet.shop.FxStockInit
 // 載荷: 空 (ln=2 僅 opcode)
 // 行為: 真實伺服器不回 81 的逐包回應, 而是跟發整條「進頻道握手推送」(2026-08-31 時序對齊確認:
 //       客戶端發 81 後會等這條推送才繼續發 274/281/276, 缺它客戶端卡「正在連接」對話框):
-//         seq=100~121: [413 UserInventoryInfo, 198, 200 FxStockInit, 274 UserItemUpdate×2, 122 UserDynamicInfo, 212 FxConfig, 210 DynamicMapInfo]
+//         seq=100~121: [413 UserInventoryInfo, 198, 200 MyPageSlots, 274 UserItemUpdate×2, 122 UserDynamicInfo, 212 FxConfig, 210 DynamicMapInfo]
 //         seq=124~127: [87 RoomList, 65 ShopCatalog(50KB)]          ← 客戶端 274/274/281 之後
 //         seq=130~148: [204, 66, 14(9B 變體), 20, 261 ShopVersion, 247, 423]
 //         seq=151~154: [81 名冊, 72 用戶列表]            ← 之後大廳期週期重發 (週期未實作)
@@ -102,7 +102,7 @@ val JoinSessionReq = PKTHandler { c ->
         //    → 商城点购买恒弹 "Your item bag is full. Purchase an item bag?"。
         //    把 413 挪到 198 之后，运行时直读 dyn+0x1EC = 50 → 容量 400，购买可正常进入流程。
         //    另: op 60 (ItemDef) 仍需在 413 之前，客户端按 itemId 查定义表，查不到整条丢弃。
-        UserInventory(listOf(inventory, inventory)), FxStockInit(),
+        UserInventory(listOf(inventory, inventory)), MyPageSlots(),
         UserItemUpdate(0, charItemId), UserItemUpdate(1, charItemId),
         UserDynamicInfoValue(0, lucci), FxConfig(), DynamicMapInfo(),
         RoomList(), ShopCatalog(),

@@ -71,7 +71,7 @@ Airplane: 376
 MapEventSync: 172
 AirplaneItemProb: 375
 FirstSessionNotify: 193
-FxStockInit: 200
+MyPageSlots: 200
 UserInventory: 198
 UserItemList: 320
 StringTableInit: 205

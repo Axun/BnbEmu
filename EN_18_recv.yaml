@@ -65,7 +65,6 @@ TakeHouseReq: 161
 ShobuariReq: 162
 NotifyUDPLossReq: 185
 UserInventoryReq: 209
-AskFxStock: 213
 AskStringTable: 215
 UserItemListReq: 264
 AskPackageMap: 220
