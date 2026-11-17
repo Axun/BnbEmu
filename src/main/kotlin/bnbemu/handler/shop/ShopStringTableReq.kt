@@ -2,7 +2,7 @@ package bnbemu.handler.shop
 
 import bnbemu.netty.PKTHandler
 
-import bnbemu.packet.ShopStringTable
+import bnbemu.packet.shop.ShopStringTable
 
 // ============================================================================
 // C→S op 278 (0x116): 商城 stringtable.ini 快取版本同步/請求

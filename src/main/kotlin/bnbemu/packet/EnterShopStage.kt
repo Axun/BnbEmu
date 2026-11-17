@@ -1,6 +1,7 @@
 package bnbemu.packet
 
 import bnbemu.netty.PKT
+import bnbemu.packet.shop.ShopCatalog
 
 /**
  * S->C op 17: 进入商城阶段 (EnterShopStage)

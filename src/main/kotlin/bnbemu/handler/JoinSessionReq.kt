@@ -10,10 +10,10 @@ import bnbemu.packet.JoinSessionResult
 import bnbemu.packet.MyPageSlots
 import bnbemu.packet.RoomList
 import bnbemu.packet.SessionList
-import bnbemu.packet.ShopCatalog
-import bnbemu.packet.ShopPackageMap
-import bnbemu.packet.ShopStringTable
-import bnbemu.packet.ShopVersion
+import bnbemu.packet.shop.ShopCatalog
+import bnbemu.packet.shop.ShopPackageMap
+import bnbemu.packet.shop.ShopStringTable
+import bnbemu.packet.shop.ShopVersion
 import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.UserDynamicInfo
 import bnbemu.packet.UserDynamicInfoValue

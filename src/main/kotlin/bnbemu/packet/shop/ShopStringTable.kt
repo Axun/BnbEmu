@@ -1,4 +1,4 @@
-package bnbemu.packet
+package bnbemu.packet.shop
 
 import bnbemu.netty.PKT
 import bnbemu.netty.buildSsdBlock

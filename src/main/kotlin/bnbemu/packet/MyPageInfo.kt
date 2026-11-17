@@ -1,6 +1,7 @@
 package bnbemu.packet
 
 import bnbemu.netty.PKT
+import bnbemu.packet.shop.ShopCatalog
 
 // ============================================================================
 // S→C op 227: 個人資料摘要 / 戰績與商城版本 (進頻道批次回應之一, seq=88, 35B)

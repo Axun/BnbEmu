@@ -2,7 +2,7 @@ package bnbemu.handler.shop
 
 import bnbemu.netty.PKTHandler
 
-import bnbemu.packet.ShopPackageMap
+import bnbemu.packet.shop.ShopPackageMap
 
 // ============================================================================
 // C→S op 258 (0x102): 商城 packagemap.ini 快取版本同步/請求

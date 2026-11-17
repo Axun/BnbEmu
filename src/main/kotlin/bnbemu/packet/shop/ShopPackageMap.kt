@@ -1,8 +1,10 @@
-package bnbemu.packet
+package bnbemu.packet.shop
 
 import bnbemu.netty.PKT
 import bnbemu.netty.buildSsdBlock
 import bnbemu.netty.ssdEncode
+import bnbemu.packet.u16le
+import bnbemu.packet.u32le
 import java.io.ByteArrayOutputStream
 
 /**

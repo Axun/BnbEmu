@@ -17,6 +17,7 @@ import bnbemu.packet.ClientStage
 import bnbemu.packet.DEFAULT_BAG_LEVEL
 import bnbemu.packet.PracticeSetSlotAI
 import bnbemu.packet.bomberCharCard
+import bnbemu.packet.shop.ShopCatalog
 import bnbemu.server.Room
 import bnbemu.server.User
 import bnbemu.server.bomber
@@ -158,7 +159,7 @@ class ShopTest {
         assertEquals(0, f3)
         assertEquals(0, f4)
         assertEquals(0, f5)
-        assertEquals(bnbemu.packet.ShopCatalog.CATALOG_HASH, catalogRev)
+        assertEquals(ShopCatalog.CATALOG_HASH, catalogRev)
         assertEquals(0, rev2)
         assertEquals(0, rev3)
         assertEquals("", msg)

@@ -1,10 +1,13 @@
-package bnbemu.packet
+package bnbemu.packet.shop
 
 import bnbemu.ACP
 import bnbemu.crypto.Adler32
 import bnbemu.data.DataResource
 import bnbemu.netty.PKT
 import bnbemu.netty.ssdEncode
+import bnbemu.packet.u16le
+import bnbemu.packet.u32le
+import bnbemu.packet.u8
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
