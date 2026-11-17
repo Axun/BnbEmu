@@ -55,3 +55,14 @@
   发完 `CSendPacket_Send` 立刻 `SetStage`，**无等待锁、不期待 S→C op 80**；
   EN 建房走 op 75、进房结果走 op 83，`packet/CreateSessionResult.kt` 无任何发送点，
   所以 `ShopToRoomReq` 只消费 `E2+E4`、不回包是安全的。
+- **商城三份本地缓存（S→C op 65 / 66 / 204 与 C→S op 276 / 258 / 278）**：
+  `CShopItemMan`（单例 `dword_994D08`）按 `EnterShopStage` 的三个版本号校验本地 ssi 缓存，缺失/不符就各自请求：
+  `fxstock.ini` ↔ op 65（`sub_670965`）/ C→S 276；`packagemap.ini` ↔ op 66（`sub_670BD6`）/ C→S 258；
+  `stringtable.ini` ↔ op 204（`sub_670A9D`）/ C→S 278。三者封包同构：
+  `E4(块大小) + ssdEncode(0x18 智能流块)`，块 = `[0x18][u32le 体长][压缩标志][体]`。
+  - op 66 体 = `u16le(条数) + N × [u32le(套餐 itemId) + u32le(子商品 itemId)]`，供 `sub_666D3A`/`sub_666CCE`
+    把套餐（item 类别 11 / 0x15–0x1A）展开成单品；实现 `packet/ShopPackageMap.kt`（`PackageMapEntry`）。
+  - op 204 体 = `u16le(条数) + N × [u32le(id) + u32le(字串长) + 原文]`；实现 `packet/ShopStringTable.kt`。
+  - 空表块恒为 `18 03 00 00 00 00 00 00`，所以抓包里 op 66 与 op 204 除 opcode 外逐字节相同。
+  - ⚠️ 空表落盘 `adler32Zero(体) = 0`，而 `sub_670D66` / `sub_670E05` 要求版本号非 0，客户端每次进商城
+    都会重发 258/278 再要一次缓存——预期行为，服务端必须每次回包。

@@ -44,7 +44,7 @@ val EnterShopReq = PKTHandler { c ->
   1. **S→C op 259 EnterShopResult**（`Encode1(if (success) 1 else 0)`）：由 `CShopConnectionMan::OnPacket` (`0x005BE76B`) 处理，
      校验通过后将等待锁 `[esi + 0x10] = 0` 清除，并触发客户端向服务端同步请求：**C→S op 37 ShopUserSyncReq**、**C→S op 317 ShopSyncReq** 及 **C→S op 97 UserStageStateReq** (`Encode1(1)`)。
   2. **S→C op 17 EnterShopStage**（⚠️ 原 YAML 误配为 op 18，实测与逆向 `0x00502B72` 确认真实为 op 17，32 字节）：
-     包含 `E1(mode) + E1(subMode) + E4(f3) + E4(f4) + E4(f5) + E4(catalogRevision) + E4(rev2) + E4(rev3) + EStr(msg) + E4(bonusCount)`。
+     包含 `E1(mode) + E1(subMode) + E4(f3) + E4(f4) + E4(f5) + E4(catalogRevision) + E4(packagemapRev) + E4(stringTableRev) + EStr(msg) + E4(bonusCount)`。
      客户端 `0x004FB0BE` 收到后调用 `CMainSystem::Instance().SetStage(14)` (`0x0068DC53`) 切换至 `CShopStageNew`（商城舞台），并将 `[CShopConnectionMan + 0x10] = 1`（置 `IsInShop() = true`）。
   3. **商城本地缓存校验与请求（C→S op 276 / 258 / 278）与商城空白修复**：
      客户端 `CShopItemMan` 依次校验本地 3 份配置缓存：
@@ -54,8 +54,8 @@ val EnterShopReq = PKTHandler { c ->
      - 修复方案：
        1. `ShopCatalog.CATALOG_HASH` 基于当前注入后的数据块动态计算其实际 `adler32Zero`（`0x361998E1`），`EnterShopStage`、`ShopVersion` 与 `MyPageInfo` 均统一引用此动态版本哈希，实现客户端本地版本一致命中；
        2. 若客户端本地缓存缺失或不一致主动发送 **C→S op 276** 时，服务端在 `Unk_276` 中回送 **S→C op 65 `ShopCatalog()`**；
-       3. `0x00670D66` 校验 `packagemap.ini`（rev3）缺失发送 **C→S op 258** 时回应 **S→C op 66 `Unk66()`**；
-       4. `0x00670E05` 校验 `stringtable.ini`（rev2）缺失发送 **C→S op 278** 时回应 **S→C op 204 `Unk204()`**。
+       3. `0x00670D66` 校验 `packagemap.ini`（EnterShopStage 第 7 个 E4）缺失发送 **C→S op 258** 时回应 **S→C op 66 `ShopPackageMap()`**；
+       4. `0x00670E05` 校验 `stringtable.ini`（第 8 个 E4）缺失发送 **C→S op 278** 时回应 **S→C op 204 `ShopStringTable()`**。
      紧接着客户端发送 **C→S op 297** 登记 4B 会话令牌完成就绪同步。
   实现见 `handler/shop/EnterShopReq.kt` + `packet/EnterShopResult.kt` + `packet/EnterShopStage.kt` + `handler/Unk_276.kt` + `handler/shop/ShopSyncReq.kt` + `handler/shop/ShopUserSyncReq.kt` + `handler/shop/ShopPackageMapReq.kt` + `handler/shop/ShopStringTableReq.kt`.
 - **退出商城流程与防止误弹账号信息对话框（2026-11-02 逆向 CA.exe 确认）**：

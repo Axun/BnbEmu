@@ -11,10 +11,10 @@ import bnbemu.packet.MyPageSlots
 import bnbemu.packet.RoomList
 import bnbemu.packet.SessionList
 import bnbemu.packet.ShopCatalog
+import bnbemu.packet.ShopPackageMap
+import bnbemu.packet.ShopStringTable
 import bnbemu.packet.ShopVersion
-import bnbemu.packet.Unk204
 import bnbemu.packet.WelcomeNotice
-import bnbemu.packet.Unk66
 import bnbemu.packet.UserDynamicInfo
 import bnbemu.packet.UserDynamicInfoValue
 import bnbemu.packet.UserInventory
@@ -106,7 +106,7 @@ val JoinSessionReq = PKTHandler { c ->
         UserItemUpdate(0, charItemId), UserItemUpdate(1, charItemId),
         UserDynamicInfoValue(0, lucci), FxConfig(), DynamicMapInfo(),
         RoomList(), ShopCatalog(),
-        Unk204(), Unk66(), ChannelsGameState(tailOnes = 2),
+        ShopStringTable(), ShopPackageMap(), ChannelsGameState(tailOnes = 2),
         // ⚠️ op 20 (UserDynamicInfo) 是本機玩家動態檔案快照, 第 12 欄 = 角色 ID, 必須按當前角色生成!
         UserDynamicInfo(bomber, c.users.firstOrNull()?.level ?: 5), ShopVersion(), CoupleStateSync(), WelcomeNotice(),
         UserInventoryInfo(),

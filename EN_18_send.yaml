@@ -85,7 +85,7 @@ ChannelsNotice: 12
 PermissionInfo: 48
 ItemDef: 60
 ShopCatalog: 65
-Unk66: 66
+ShopPackageMap: 66
 SessionList: 72
 UserInfoResult: 73
 QuestConfigTable: 78
@@ -95,7 +95,7 @@ RoomList: 87
 ChangeStage: 97
 # op 122 = CUserDynamicInfo 的單值同步 (CUserDynamicInfo::Set 0x006E4E23, key = 本機玩家槽 0/1)
 UserDynamicInfoValue: 122
-Unk204: 204
+ShopStringTable: 204
 FxConfig: 212
 MyPageInfo: 227
 CoupleStateSync: 247

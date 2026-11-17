@@ -14,7 +14,8 @@ import bnbemu.netty.PKT
  *   4. Decode4 (**lucci**)     —— CUserDynamicInfo +3s+12 **Lucci 金币** (`sub_6E4E23`)
  *   5. Decode4 (userField30)   —— CUserDynamicInfo +3s+30 未知        (`sub_6E4B37`)
  *   6. Decode4 (catalogRevision) —— CShopItemMan::CheckRevision (`sub_670CBE`)
- *   7. Decode4 (rev2) / 8. Decode4 (rev3)                          (`sub_670D66` / `sub_670E05`)
+ *   7. Decode4 (packagemapRev)  —— packagemap.ini 版本号 (`sub_670D66` → 不一致发 C→S op 258)
+ *   8. Decode4 (stringTableRev) —— stringtable.ini 版本号 (`sub_670E05` → 不一致发 C→S op 278)
  *   9. DecodeStr (msg) / 10. Decode4 (bonusCount)
  *   - 阶段切换: 校验后 `SetStage(14)` (0x0068DC53) 切到 CShopStageNew,
  *     并置 `[CShopConnectionMan + 0x10] = 1` (IsInShop = true)
@@ -29,8 +30,8 @@ fun EnterShopStage(
     Encode4(lucci)      //  4 Lucci 金币 (CUserDynamicInfo +3s+12)
     Encode4(0)          //  5 CUserDynamicInfo +3s+30
     Encode4(shopVersion)//  6 catalogRevision
-    Encode4(0)          //  7 rev2
-    Encode4(0)          //  8 rev3
+    Encode4(0)          //  7 packagemap.ini 版本号 (0 = 空表，客户端每次进商城重发 op 258)
+    Encode4(0)          //  8 stringtable.ini 版本号 (同理重发 op 278)
     EncodeStr("")       //  9 msg
     Encode4(0)          // 10 bonusCount
 }
