@@ -6,17 +6,12 @@ import bnbemu.netty.PKTHandler
 
 import bnbemu.packet.ResConnectToSvr
 
-// 選擇頻道
+// 選擇頻道后发送。真實抓包請求 = E1(10) + E4(2), live 客戶端發 E4(0)
 // server = CLoginPool::OnReqConnectToSvr
 val ReqConnectToSvr = PKTHandler { c ->
-    val ChannelID = Decode1 // 10
-    // 真實抓包請求 = E1(10) + E4(2), live 客戶端發 E4(0), 含義不明 —— 回應中原樣回顯
-    val flags = Decode4
+    val channelId = Decode1 // 频道号，只存不校验
+    // 同一频道号在频道列表内的第几个条目（0-based 子序号），一定要原样回显
+    val idx = Decode4
 
-//    if (ChannelID != 11) { // 11 = 商城
-//        val ClientVer = Decode2 // 5
-//    }
-
-    val res = 1
-    c send ResConnectToSvr(res, ChannelID, flags)
+    c send ResConnectToSvr(true, channelId, idx)
 }
