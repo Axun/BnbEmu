@@ -32,10 +32,9 @@
 - 密码学原语与项目实现一致，勿动：simpleStreamEncrypt3(key=seq)（常量 0x53351D9C / 0x63CAACE3，逐包重启）；
   CRC8 poly 0x07，key = seq&0xFF，算在**明文** payload 上
 
-## 端口拓扑（tshark SYN 实测）
-- 游戏 TCP **3838**：登录、频道、房间全部业务都在这一个端口；项目原 3838/4848/4849 多端口分服布局与真实不符
-- TCP **47611**：Nexon passport 登录协议（nmco_session，UTF-16），客户端先在此验证账号密码换取票据再连 3838。已彻底逆向 nmconew.dll 破译；协议帧封装、0x18 容器流、PCBC 加密算法及业务字段等所有具体实现细节已全部记录在源码注释中，详见 `src/main/kotlin/bnbemu/netty/PassportServer.kt`。
-  ⚠️ 客户端二进制侧的 47611 地址在 nmconew.dll/nmcogame.dll 的 **UTF-16LE 表**（各 8 槽），patch_ip.py 已补齐该编码的替换（此前只补 ASCII 导致打过补丁仍连远端 passport）。
+## 端口拓扑
+- 游戏 TCP **3838**：登录、频道、房间全部业务都在这一个端口
+- TCP **47611**：Nexon passport 登录协议，客户端先在此验证账号密码换取票据再连 3838。详见 `PassportServer.kt`。
 
 ## opcode（已补全进 EN_18_recv/send.yaml）
 - 可信命名（抓包时序验证）：C→S 2 AskFirstInfo、7 OnConnEstablished、15 ChannelsStateReq、
@@ -61,7 +60,7 @@
   293(E1(0))/78 QuestConfigTable（任务配置表，E4(count)+条目列表，空为 E4(0)）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、
   81 JoinSessionResult（**大厅名册**，已结构化 `packet/JoinSessionResult.kt` 的 `RosterEntry`，
   `E4(人数)+N×[E1槽位+E4账号数值+E2名长+令牌]`，账号数值=passport 0x2E 同值）、
-  413 UserInventoryInfo（**玩家背包槽位/容量初始化**，614B 50槽，CUserInventoryMan/ 198 / 200 MyPageSlots / 274 UserItemUpdate×2（**道具槽位更新**，CUserItemMan）/ 212 FxConfig（**特效与角色可用性配置**，CFxContext）/ 210 DynamicMapInfo / 65 ShopCatalog(50KB) / 204 ShopStringTable / 66 ShopPackageMap / 14(9B 变体) / 20 / 261 ShopVersion（**商城目录版本校验与开关**，CShopItemMan，不一致触发客户端发 276）/ 247 CoupleStateSync
+  413 UserInventoryInfo（**玩家背包槽位/容量初始化**，614B 50槽，CUserInventoryMan/ 198 / 200 MyPageSlots / 274 UserItemUpdate×2（**道具槽位更新**，CUserItemMan）/ 212 FxConfig（**特效与角色可用性配置**，CFxContext）/ 210 DynamicMapInfo / 65 ShopCatalog(≈6.8KB 压缩块，明文 50KB) / 204 ShopStringTable / 66 ShopPackageMap / 14(9B 变体) / 20 / 261 ShopVersion（**商城目录版本校验与开关**，CShopItemMan，不一致触发客户端发 276）/ 247 CoupleStateSync
   进频道握手推送，
 - 尚无 handler/packet（yaml 里 Unk_* 占位）：
   S→C 86（大厅期周期推送，⚠️ 非"进房后"）
@@ -112,7 +111,7 @@
 6. 进频道：C 发 op 11（4B 频道 hash）→ S 回 [11 ChannelsExtraInfo 218B, 13 44B, 12 27B, 11, 13]
 7. 进频道握手：C 收齐 72 用户列表后自动发 **op 81 空包** →
    S 跟发整条**进频道握手推送** [310, 302,] 413, 198, 200 MyPageSlots, 274×2, 122 UserDynamicInfo, 212,
-   210 DynamicMapInfo, 87 RoomList, 65 50KB, 204, 66, 14(9B 变体), 20, 261, 247, 423, 81 名册, 72
+   210 DynamicMapInfo, 87 RoomList, 65 6.8KB(压缩块), 204, 66, 14(9B 变体), 20, 261, 247, 423, 81 名册, 72
    （分三波下发：客户端**等推送才继续发** 274/274/281 → 等 → 276，缺推送客户端卡"正在连接"对话框）；
    之后大厅期 S 周期推 op 81 名册 / 72 / 122 UserDynamicInfo / 87 / 86（86 尚未实现）
 

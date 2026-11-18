@@ -49,11 +49,14 @@ val EnterShopReq = PKTHandler { c ->
   3. **商城本地缓存校验与请求（C→S op 276 / 258 / 278）与商城空白修复**：
      客户端 `CShopItemMan` 依次校验本地 3 份配置缓存：
      - `0x00670CBE` 校验 `fxstock.ini`（catalogRevision）：
-       客户端调用 `0x0074EE50` 计算本地文件的 Adler-32 哈希（以 0 为初始值计算数据体 `adler32Zero`）。
-       ⚠️ **商城页面全部空白的根本原因**：此前服务端各处硬编码 `catalogVersion = 0x75D92163`（此为原版 573 项基础数据块的哈希）。因服务端注入了蓝妹妹道具卡（574 项），实际数据块哈希变为 `0x361998E1`。客户端比对 `0x361998E1 != 0x75D92163` 后，在 `0x00670D2A` 将载入标志 `[esi + 0x28]`（商品库存）、`[esi + 0x2c]`（字串表）、`[esi + 0x30]`（套餐图）全部清零并标记失效，同时向服务端发送 **C→S op 276** 重新请求目录！因旧版服务端未应答 op 276，导致客户端 `CShopItemMan` 库存永久处于未加载状态，商城各分类页面均无法显示任何商品。
-     - 修复方案：
-       1. `ShopCatalog.CATALOG_HASH` 基于当前注入后的数据块动态计算其实际 `adler32Zero`（`0x361998E1`），`EnterShopStage`、`ShopVersion` 与 `MyPageInfo` 均统一引用此动态版本哈希，实现客户端本地版本一致命中；
-       2. 若客户端本地缓存缺失或不一致主动发送 **C→S op 276** 时，服务端在 `Unk_276` 中回送 **S→C op 65 `ShopCatalog()`**；
+       客户端 `sub_78C590` 读盘后经 `sub_78C120`（`CA.exe.c:748271`）把 `body+5`（即
+       `[0x01][rawSize][zlib]`）交给 `sub_78BB60` 算 Adler-32（初值 0），得到的是**压缩块**的戳；
+       而网络下发的 op 65 是未压缩块，两者不是同一个值。
+       1. `ShopCatalog.CATALOG_HASH` 改为 `CACHE_BLOCK`（与客户端 `sub_78BC60` 写盘同构的压缩块）的
+          `computeSsdBlock`，`EnterShopStage`、`ShopVersion` 与 `MyPageInfo` 统一引用 —— 客户端读盘即命中，
+          不再每次进频道/进商城都发 276；
+       2. 首次登录（本地无 `fxstock.ini`）或目录变更后客户端仍会发 **C→S op 276**，服务端回
+          **S→C op 65 `ShopCatalog()`** 兜底；
        3. `0x00670D66` 校验 `packagemap.ini`（EnterShopStage 第 7 个 E4）缺失发送 **C→S op 258** 时回应 **S→C op 66 `ShopPackageMap()`**；
        4. `0x00670E05` 校验 `stringtable.ini`（第 8 个 E4）缺失发送 **C→S op 278** 时回应 **S→C op 204 `ShopStringTable()`**。
      紧接着客户端发送 **C→S op 297** 登记 4B 会话令牌完成就绪同步。

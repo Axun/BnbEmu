@@ -32,7 +32,7 @@ import bnbemu.packet.UserItemUpdate
 // 行為: 真實伺服器不回 81 的逐包回應, 而是跟發整條「進頻道握手推送」(2026-08-31 時序對齊確認:
 //       客戶端發 81 後會等這條推送才繼續發 274/281/276, 缺它客戶端卡「正在連接」對話框):
 //         seq=100~121: [413 UserInventoryInfo, 198, 200 MyPageSlots, 274 UserItemUpdate×2, 122 UserDynamicInfo, 212 FxConfig, 210 DynamicMapInfo]
-//         seq=124~127: [87 RoomList, 65 ShopCatalog(50KB)]          ← 客戶端 274/274/281 之後
+//         seq=124~127: [87 RoomList, 65 ShopCatalog(6.8KB 压缩块)]   ← 客戶端 274/274/281 之後
 //         seq=130~148: [204, 66, 14(9B 變體), 20, 261 ShopVersion, 247 CoupleStateSync, 423]
 //         seq=151~154: [81 名冊, 72 用戶列表]            ← 之後大廳期週期重發 (週期未實作)
 // S→C op 81 JoinSessionResult 名冊 (大廳期週期推送, 非 81 請求的回應)
@@ -105,7 +105,7 @@ val JoinSessionReq = PKTHandler { c ->
         UserInventory(listOf(inventory, inventory)), MyPageSlots(),
         UserItemUpdate(0, charItemId), UserItemUpdate(1, charItemId),
         UserDynamicInfoValue(0, lucci), FxConfig(), DynamicMapInfo(),
-        RoomList(), ShopCatalog(),
+        RoomList(),
         ShopStringTable(), ShopPackageMap(), ChannelsGameState(tailOnes = 2),
         // ⚠️ op 20 (UserDynamicInfo) 是本機玩家動態檔案快照, 第 12 欄 = 角色 ID, 必須按當前角色生成!
         UserDynamicInfo(bomber, c.users.firstOrNull()?.level ?: 5), ShopVersion(), CoupleStateSync(), WelcomeNotice(),
