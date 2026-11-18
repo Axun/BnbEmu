@@ -21,7 +21,7 @@ EnterShopStage: 17
 UserDynamicInfo: 20
 Whisper: 27
 SystemMsg: 30
-MultiServerTail: 51
+CurseFilterTable: 51
 FirstInfoTail: 67
 UserSimpleInfo: 70
 CreateSessionResult: 80

@@ -101,13 +101,26 @@ JSON 是 YAML 1.2 子集，现有 kaml 可直接解析，**未新增依赖**。
 | 文件名 | 内部全称 / 对应类 | 作用 | 对应协议下发 |
 | :--- | :--- | :--- | :--- |
 | `multisvr.ssd` | `CMultiServer` | 登录服务器与各区服 IP:Port 列表 | 首连推送 S→C op 1 (`MultiServerInit`) |
-| `filterstr.ssd` | 敏感词库 | 聊天与起名的屏蔽词列表 | 首连推送 S→C op 51 (`MultiServerTail`) |
+| `filterstr.ssd` | `CCurseFilter` 敏感词库 | 聊天与起名的屏蔽词列表 | 首连推送 S→C op 51 (`CurseFilterTable`) |
 | `csysstr.ssd` | 系统字串表 | 客户端界面文本与任务字串 | 首连推送 S→C op 2 (`FirstInfoInit`) |
 | `fxdynmapinfo.ssd` | `CDynamicMapMan` | 动态地图配置（活动地图属性、分组） | 进频道握手 S→C op 210 无条件推送（2026-11-04 正名 `DynamicMapInfo`，旧名 `EnableShop`；内容由 JSON 实时生成） |
 | `channel2_000.ssd` | 频道列表缓存 | 各频道 ID、状态与人数上限 | 进频道连线 S→C op 11 |
 | **`fxdynimginfo.ssd`** | `CDynamicImgInfo` | **动态广告与运营图像信息表** | **由握手 Banner 中的 `55` 控制版本** |
 
-#### (5) JSON 单一事实源与字节级可复现性（2026-11-04）
+#### (4.1) `filterstr.ssd` 词条流
+
+块明文（抓包 26 B） = `u16 LE count` + `count × [ u8 group ][ u32 LE len + word ][ u32 LE len + extra ]`。
+依据客户端 `sub_6B920C`（`CA.exe.c:605472`）：`sub_78BB40` 判流空即返回（`ReadPos == Len`），
+`ReadUInt16` 取条数，逐条 `ReadUInt8` + 两次 `CISmartStream::ReadString`（`sub_78CE60`，u32 LE 串长）。
+条目 0x20 B = 两个 CMyStr；落桶 = `(首字符小写化) % 6`（`sub_6B8BA1`），`group` 0/1/2 选三组数组之一
+（`this+37`/`this+19`/`this+55`，即 `sub_6B8FD2` 的 a8 场景参数）。
+匹配只比较 `word`（`_mbsnbicmp` 大小写不敏感），`extra` 存进条目 +16 后从不读取。
+抓包内容 = 1 条 `group=0 / "Channel 1" / "Normal"`，块 32 B、包 39 B —— op 51 是**单块**包，
+没有 op 1 那样的结尾第二个 `Encode1`。早期笔记把它当「频道名资料块」是误读。
+Kotlin 侧 `packet/CurseFilterTable.kt`（`EN_CURSE_FILTER` 词表 + `curseFilterStream`）重建的包体
+与 `cap/firstconn_s2c_op51.bin` 逐字节一致，回归见 `CurseFilterTableTest`。
+
+#### (5) JSON 单一事实源与字节级可复现性
 
 为把 op 210 从「抓包常量回放」改成动态生成（三步均已完成），现以
 **`src/main/resources/data/fxdynmapinfo.json`（schema `bnbemu/fxdynmapinfo@1`）为唯一事实源**：

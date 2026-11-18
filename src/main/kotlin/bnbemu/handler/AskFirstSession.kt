@@ -5,7 +5,7 @@ import bnbemu.packet.FirstInfoInit
 import bnbemu.packet.FirstInfoTail
 import bnbemu.packet.FirstSessionNotify
 import bnbemu.packet.MultiServerInit
-import bnbemu.packet.MultiServerTail
+import bnbemu.packet.CurseFilterTable
 
 // 會話連線(首連)打開請求: EN 客戶端連上 3838 後發的第一個業務包
 // (start.pcap stream 0, op 0, payload 22B = 5×Encode4, 內容伺服器端不使用)
@@ -19,6 +19,6 @@ val AskFirstSession = PKTHandler { c ->
         FirstInfoInit(),
         FirstInfoTail(),
         MultiServerInit(),
-        MultiServerTail(),
+        CurseFilterTable(),
     )
 }

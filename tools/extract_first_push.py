@@ -10,9 +10,12 @@ cap/firstconn_s2c_op*.bin, 并生成:
 
 SSD 资料块编码 (op1/op2/op51 的 Encode4(len) 后跟随的子块):
   每 dword 以 BE 读取、XOR 0x96CA5395、按 LE 写回 (即 Encode4 的字节序交换形式)。
-  op1 子块解码 = multisvr.ssd 缓存体: 18290000 | 000001 06 00 00 00 "PopTag" |
-  0b000000 "Main Server" | 00000000 | 0100 | IPv4 | port；op51 = filterstr.ssd
-  ("Channel 1"/"Normal")。子块内的 IP 由 --ip 参数改写 (默认 127.0.0.1)。
+  op1 子块解码 = multisvr.ssd 缓存体: [0x18][u32 LE 41][compress=0] + info 流, info 流 =
+    01 | 06 00 00 00 "PopTag" | 0b 00 00 00 "Main Server" | 00000000 | 0100 |
+    IPv4(顺序 4B) | port(u16 LE) | flag | current            (字符串长度前缀恒 u32 LE)
+  ⚠️ "Main Server" 是 strIp 栏的显示文案, 不是 IP; 真正的登录地址是 IPv4 那 4 字节。
+  op1 侧 Kotlin 已改为程序化生成 (packet/MultiServerInit.kt), 本工具只用于核对与改写基准;
+  op51 = filterstr.ssd ("Channel 1"/"Normal")。子块内的 IP 由 --ip 参数改写 (默认 127.0.0.1)。
 
 用法: python tools/extract_first_push.py [--pcap cap/start.pcap] [--ip 127.0.0.1]
 """
@@ -103,14 +106,25 @@ def main():
 
     new_ip_bytes = socket.inet_aton(args.ip)
     blob1_new = enc_new + tail2
-    print("\n--- Kotlin 常量 ---")
-    print("# op1 MultiServerInit EN 资料块 (Encode4(46) 后, 46B = 44B 编码块 + Encode2(0) 原样尾)")
-    print(f"EN_MULTISVR_BLOB = \"{blob1_new.hex()}\"")
+    print("\n--- op1 结构核对 (Kotlin 侧已改为程序化生成) ---")
+    print("# 包体 = Encode1Bool(true) + Encode4(块长) + SSD 块 + Encode1(0)")
+    print("# info 流 = u8 mCnt + mCnt×[_ss strName][_ss strIp文案][u32 param]")
+    print("#          + u16 lCnt + lCnt×[4B IPv4][u16 port][u8 flag] + u8 current")
+    print("# 生成点: src/main/kotlin/bnbemu/packet/MultiServerInit.kt")
+    print("#   EN_MULTI_SERVERS / EN_LOGIN_SERVERS / EN_CURRENT_SERVER -> multisvrInfoStream")
+    print("#   -> buildSsdBlock -> ssdEncode  (改 IP 只改 EN_LOGIN_SERVERS[].ip)")
+    print(f"# 本次解析: SSD 块 {len(blob1)}B (info 流 {len(plain) + len(tail2)}B), 目标 IP {args.ip}")
+    print(f"# 线上块 hex (仅用于和 Kotlin 输出对照): {blob1_new.hex()}")
 
     body51 = open(os.path.join(outdir, "firstconn_s2c_op51.bin"), "rb").read()[2:]
     blob51 = body51[5:5 + 32]
-    print("# op51 MultiServerTail EN 资料块 (Encode4(32) 后, 32B, 解码 = filterstr.ssd: Channel 1/Normal)")
-    print(f"EN_CHANNEL_NAMES_BLOB = \"{blob51.hex()}\"")
+    print("\n--- op51 结构核对 (Kotlin 侧已改为程序化生成, 不再回放 hex 常量) ---")
+    print("# 包体 = Encode1Bool(true) + Encode4(块长) + SSD 块   (单块, 无结尾第二个 Encode1)")
+    print("# 词条流 = u16 count + count×[u8 group][_ss word][_ss extra]")
+    print("# 生成点: src/main/kotlin/bnbemu/packet/CurseFilterTable.kt")
+    print("#   EN_CURSE_FILTER -> curseFilterStream -> buildSsdBlock -> ssdEncode")
+    print(f"# 本次解析: 块 {len(blob51)}B (词条流 26B = 1 条 group=0 'Channel 1' / 'Normal')")
+    print(f"# 线上块 hex (仅用于和 Kotlin 输出对照): {blob51.hex()}")
 
     body2 = open(os.path.join(outdir, "firstconn_s2c_op2.bin"), "rb").read()[2:]
     blob2 = body2[5:5 + 1854]

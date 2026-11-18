@@ -49,7 +49,7 @@
   81 JoinSessionReq（进频道自动空包，⚠️ 非"进房"；2026-08-31 起回应=整条**进频道握手推送**，
   客户端发 81 后会等这条推送才继续发 274/281/276，缺它卡"正在连接"对话框，见 JoinSessionReq.kt）、
   274（13B×2）/281（空）/276（空）（握手后续，空消费，无逐包回应）；
-  S→C 193 FirstSessionNotify、67 FirstInfoTail、51 MultiServerTail、4 AskFirstInfoResult（登录连线 65B）
+  S→C 193 FirstSessionNotify、67 FirstInfoTail、51 CurseFilterTable（旧名 MultiServerTail）、4 AskFirstInfoResult（登录连线 65B）
   / SessionInfoResult（频道连线 65B 全零变体）/ UserSimpleInfoResult（13B 变体，三种同类名映射同 op 4；
   前两者已结构化为 `packet/AskFirstInfoResult.kt` 的 `UserInfo` 类，userId=7215/会话串
   f0ae35f3 等账号值暂用抓包常量 CAPTURE_USER_ID/SESSION_STRING）、
@@ -61,7 +61,7 @@
   293(E1(0))/78 QuestConfigTable（任务配置表，E4(count)+条目列表，空为 E4(0)）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、
   81 JoinSessionResult（**大厅名册**，已结构化 `packet/JoinSessionResult.kt` 的 `RosterEntry`，
   `E4(人数)+N×[E1槽位+E4账号数值+E2名长+令牌]`，账号数值=passport 0x2E 同值）、
-  413 UserInventoryInfo（**玩家背包槽位/容量初始化**，614B 50槽，CUserInventoryMan/ 198 / 200 MyPageSlots / 274 UserItemUpdate×2（**道具槽位更新**，CUserItemMan）/ 212 FxConfig（**特效与角色可用性配置**，CFxContext）/ 210 DynamicMapInfo / 65 ShopCatalog(50KB) / 204 / 66 / 14(9B 变体) / 20 / 261 ShopVersion（**商城目录版本校验与开关**，CShopItemMan，不一致触发客户端发 276）/ 247 CoupleStateSync
+  413 UserInventoryInfo（**玩家背包槽位/容量初始化**，614B 50槽，CUserInventoryMan/ 198 / 200 MyPageSlots / 274 UserItemUpdate×2（**道具槽位更新**，CUserItemMan）/ 212 FxConfig（**特效与角色可用性配置**，CFxContext）/ 210 DynamicMapInfo / 65 ShopCatalog(50KB) / 204 ShopStringTable / 66 ShopPackageMap / 14(9B 变体) / 20 / 261 ShopVersion（**商城目录版本校验与开关**，CShopItemMan，不一致触发客户端发 276）/ 247 CoupleStateSync
   进频道握手推送，
 - 尚无 handler/packet（yaml 里 Unk_* 占位）：
   S→C 86（大厅期周期推送，⚠️ 非"进房后"）
@@ -86,12 +86,12 @@
 - **op11 = 频道列表、op13 = 各频道开关/状态、op12 = 公告与PPL广告信息，均已结构化**：频道表 `EN_CHANNELS` 定义在
   `packet/ChannelsExtraInfo.kt`（`ChannelEntry`，op13 用其 `state`/`enabled` 栏，
   生成逻辑在 `ChannelsState.kt`；
-- op1 = multisvr.ssd 缓存体（解码布局见 MultiServerInit.kt 注释）；op51 = filterstr.ssd；
-  op2 = 字串表；**op12 = ChannelsNotice 公告与广告块 已结构化在 `packet/ChannelsNotice.kt`
-- 已改写为 127.0.0.1 的 IP 位置：`packet/MultiServerInit.kt` EN_MULTISVR_BLOB（op1）、
+- op1 = multisvr.ssd 缓存体（`MultiServerInit.kt`；
+  op51 = filterstr.ssd 敏感词库（`CurseFilterTable.kt`
+  op2 = 字串表（仍为硬编码回放）；**op12 = 公告与广告块 `ChannelsNotice.kt`
+- 已改写为 127.0.0.1 的 IP 位置：`packet/MultiServerInit.kt` EN_LOGIN_SERVERS[].ip（op1）、
   `packet/ChannelsExtraInfo.kt` ChannelEntry.ip（op11）——**改服务器地址需同步**
-  `tools/patch_ip.py`（客户端二进制侧，含 nmconew.dll/nmcogame.dll 的 UTF-16LE 表各 8 槽）
-- 客户端行为：op1 到达后写 multisvr.ssd 并取得 login 服务器地址；**缺失即报"无法连接登录服务器"**
+  `tools/client/patch_ip.py`（客户端二进制侧，含 nmconew.dll/nmcogame.dll 的 UTF-16LE 表各 8 槽；
 
 ## 真实流程（按抓包时序，逐字节细节查 decoded_dump.txt）
 1. 连 47611 passport：**0x000B 登录换会话 → 换线 0x002D 查询角色**（协议实现见 `netty/PassportServer.kt`）；随后带 36B 票据连 3838
