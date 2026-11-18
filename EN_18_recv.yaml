@@ -43,6 +43,8 @@ ObjectHitReq: 108
 PushMovableBoxReq: 109
 AILevelChangeReq: 88
 #TeamChat: 111
+
+# ----- battle -----
 BombKickThrowReq: 107
 EatItemReq: 110
 EatObstacleReq: 111
@@ -52,6 +54,7 @@ SetEffectReq: 147
 DropObstacleReq: 148
 EventItemReq: 149
 DestroyBoxReq: 126
+DrillReq: 124
 GenerateGhostReq: 151
 DestroyGhostReq: 152
 #LapFinishedReq: 154

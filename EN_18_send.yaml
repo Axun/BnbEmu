@@ -46,8 +46,10 @@ SelectMap: 108
 StartGameResult: 115
 LaunchGameStage: 170
 DoStartGame: 171
+# ----- battle -----
 SetBombState: 138
 SetBombStateBatch: 138
+DrillResult: 156
 DetonateBomb: 141
 TileBombExplode: 148
 BombKickThrow: 141

@@ -227,6 +227,33 @@ object Room {
 
     fun movableBoxState(boxSeq: Int): MovableBoxState? = movableBoxes[boxSeq]
 
+    // ---- C→S op 124 电钻 (Drill) → S→C op 156 DrillResult 回显 ----
+    // 客户端用道具「电钻」时 服务端必须把这条请求**原样回放给所有人, 含使用者本人，否则谁也不会看到方块消失。
+    //
+    // 服务端没有方块/地图状态模型 (消块在各客户端本地确定性重算), 这里只做坐标与槽位的健全性校验:
+    //   · 槽位进 packet 的高 4 位, 越界 (>=8) 会让客户端 0x533D5C 取到野 bomber, 必须丢;
+    //   · 坐标越界时客户端 0x55EAC3 会整包丢弃, 发了也是白发, 直接不发。
+    // 不做去重: op 124 是按键一次发一次 (直发, 不走 CGameMsgCache 待确认队列), 不存在帧级重发。
+    fun onDrill(gridX: Int, gridY: Int, slotId: Int, action: Int): Boolean {
+        if (slotId !in slots.indices) {
+            if (debugMode) println("[Room] op124 电钻: 非法槽位 slot=$slotId, 丢弃")
+            return false
+        }
+        if (gridX !in 0..12 || gridY !in 0..14) {
+            if (debugMode) println("[Room] op124 电钻: 坐标越界 ($gridX,$gridY), 丢弃")
+            return false
+        }
+
+        BC(DrillResult(gridX, gridY, slotId, action))
+        if (debugMode) {
+            println(
+                "[Room] 电钻 slot=$slotId grid=($gridX,$gridY) dir=$action" +
+                    " | 已广播 S→C op156"
+            )
+        }
+        return true
+    }
+
     // ---- C→S op 107 水泡移动 (抛掷/踢出) → S→C op 141 BombIgnite 回显 (2026-11-09 定案) ----
     //
     // 客户端发包链只做滑行 trace + 入队 (0x0054CCBC / 0x0046E6D7), 没有任何本地位移预测;
