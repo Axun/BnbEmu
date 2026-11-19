@@ -14,9 +14,9 @@ import bnbemu.packet.RoomList
 import bnbemu.packet.SessionInfoResult
 import bnbemu.packet.SetSlotColor
 import bnbemu.packet.SetSlotFanfare
-import bnbemu.packet.Unk113
 import bnbemu.packet.UserSimpleInfoResult
 import bnbemu.packet.WelcomeNotice
+import bnbemu.packet.room.RoomName
 import bnbemu.packet.room.SelectMap
 
 /**
@@ -51,7 +51,9 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
         // 进房结果 (op 83): 房型必须原样回显, 客户端 0x0068626F 存进 CFxContext[0x570]。
         EnterSessionResult(sessionId = Room.sessionId, sessionType = Room.sessionType),
         UserSimpleInfoResult(), SessionInfoResult(),
-        Unk113(),
+        // op 113 房名同步: 客户端把字符串直接写进会话对象 +0x1C4 并刷新房间标题。
+        // 必须发 Room.name 而不是空串 —— 空串会把 op 87/op 83 刚填好的房名清掉（变空白）。
+        RoomName(Room.name),
         SetPlayer(slotId = 0, user = user),
     )
     if (init) {

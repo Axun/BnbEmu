@@ -94,17 +94,24 @@
   每槽(114,104,105,103 交错, 槽7 无 103), 198, 423]`；
   随后客户端自动跟发 297/302，再发 **op 92** 触发游戏开始 → S 回 `[111, 112 SelectMap(165B),
   100(77B), 136(178B 棋盘块)]`（线序 seq=331~340）。
-- **S→C op 113 = 房间名 / 会话名同步（2026-11-08 反编译钉死，`PracticeBlobs.EN_OP113`）**：
-  blob `a5 69` 不是「数值 0」，而是 `EncodeStr(房名)` 的 `E2(0)` 长度前缀（空房名）；
+- **S→C op 113 = 房间名 / 会话名同步（`RoomName.kt`）**：
+  抓包 blob `a5 69` 不是「数值 0」，而是 `EncodeCipherStr(房名)` 的 `E2(0)` 长度前缀（空房名）；
   完整包 `a5 18 a5 69`（前 2B = Encode2(113)）。`CSlotStage::OnPacket` 0x4F480C /
   `CPrepareStage::OnPacket` 0x52A949 / 对局阶段 0x616D59 三处 case 113 分别指向
   逐字节相同的 handler（0x4F0B07 / 0x51F86F / 0x61273B）：`sub_78FDF0`(→`sub_78F910`)
-  读 [E2 长度][内容] 字符串，长度 >0x16 截到 21 字符，`sub_68872B`→`sub_44886E(this+113, str)`
-  把名字赋给全局会话对象 +0x1C4 的房名字段。反证：0x005147B9 建房时把玩家输入的房名
+  读 [E2 长度][内容] 字符串，长度 >0x16 截到 21 字节，`sub_68872B`→`sub_44886E(this+113, str)`
+  把名字赋给全局会话对象 +0x1C4 的房名字段（getter `sub_687C94`，房间标题等处取值）。反证：0x005147B9 建房时把玩家输入的房名
   写进同一字段并作为 C→S op 75 第 1 字段发出；0x00506513（op 83 进房结果）从房间缓存
   取出条目的房名写入；0x004EC7F8 case 3 用空串清空并切场景。⇒ op 113 是服务端权威回显 /
-  变更当前房名（可覆盖客户端输入），练习房无房名所以抓包为空串；普通房应发真实房名
-  （等价结构化写法 `EncodeStr(name)`）。实现与地址链详见 `packet/Practice.kt` 注释。
+  变更当前房名（可覆盖客户端输入）。
+  **编码已定案 = `EncodeCipherStr`（不是明文 `EncodeStr`）**：`sub_78F910` 在
+  `*(CInPacket+8)`（cipher degree，EN 帧 = 3）∈ 1..3 时，长度走 `sub_75DA10`（^0xA569）、
+  内容走 `sub_75DAF0`（4B BE^0x96CA5395→LE / 余 2B ^0xA569 / 余 1B ^0x5A），与 C→S op 75 的
+  房名 / 密码同一套；发明文客户端会显示乱码。
+  实现：`sendRoomEntryChain` 里 `RoomName(Room.name)`（原 `Unk113()` / `PracticeBlobs.EN_OP113` 已删），
+  超长先按字符边界截到 21 字节再下发；练习房房名为空串，产出与 `cap/practice_s2c_op113_4B_0.bin`
+  逐字节一致（`tools/replay_test.py` 仍逐字节断言）。回归：`RoomNameTest`（空房名 / 普通房房名
+  `Come quick~` 的密文域 / 21 字节截断 / opcode 绑定）。
 - **S→C op 83 = `EnterSessionResult`「进房结果」(2026-11-08 反编译钉死；旧表名 SessionSimpleInfo 已废弃)**：客户端
   `CLobbyStage::OnPacket` 0x00510287 的 `case 'S'(0x53)` → 0x00507113，先 `Decode1` 取**结果码**
   （0=成功；1..12 = WrongPassword / CantJoinRoom / InvalidGrade / … 各弹一个对话框且**不再读任何字段**），
@@ -142,6 +149,4 @@
   **待办 (第 4 项，需另抓普通房 S→C 包)**：普通房走 `CPrepareStage`（与练习房 `CSlotStage`
   读法不同，见 op 104 的 3B 变体），回应链 `[113, 100(78B), 108, 106×8, 每槽(114,104,105,103), …]`
   目前仍两路共用；槽位也仍是「1 真人 + 7 AI」，分叉点已标在 handler 的 `isPractice` 处。
-  另外 op 87 `RoomList` 的房名是「E4 名长 + dword 对齐 + ssdEncode」的容器（见 `RoomList.kt`
-  的 f1 长度前缀警告），**不适用** `EncodeCipherStr` 的 E2 长度格式，不能在这里直接套用；
-  op 113 回显真实房名时该用明文 `EncodeStr` 还是 `EncodeCipherStr` 也需随普通房抓包一并验证。
+  cipher degree 分支），不需要再等普通房 S→C 抓包。

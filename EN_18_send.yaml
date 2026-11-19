@@ -127,7 +127,7 @@ PracticeBoard: 136
 SetBomberEvent: 139
 NpcEvent: 270
 NpcAvailability: 271
-Unk113: 113
+RoomName: 113
 
 # ----- shop -----
 CashBalance: 201
