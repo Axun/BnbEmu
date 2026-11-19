@@ -60,6 +60,16 @@ public static class ServerBuild
             return true;
         }
 
+        // 用户 .m2 与 runtime\m2repo 之间切换后，server-cp.txt 里每一条依赖路径都换成了另一份仓库的 jar，
+        // 旧快照要么指向过期版本、要么指向已经不存在的文件，必须重编。
+        if (!string.Equals(stamp.MavenRepo, AppPaths.MavenRepoDir, StringComparison.OrdinalIgnoreCase))
+        {
+            reason = stamp.MavenRepo is null
+                ? "maven repo was not recorded"
+                : "maven repo changed";
+            return true;
+        }
+
         if (!string.Equals(stamp.JdkVersion, jdk.Version, StringComparison.OrdinalIgnoreCase))
         {
             reason = $"JDK changed ({stamp.JdkVersion} -> {jdk.Version})";
@@ -128,6 +138,9 @@ public static class ServerBuild
     {
         var sw = Stopwatch.StartNew();
         ResetArtifacts(log);
+        log(AppPaths.UseUserMavenRepo
+            ? $"Maven repo: {AppPaths.MavenRepoDir} (user .m2 detected)"
+            : $"Maven repo: {AppPaths.MavenRepoDir} (no .m2, using bundled)");
 
         await RunMavenAsync(jdk, maven, "compile", log, "compile", ct);
 
@@ -261,6 +274,7 @@ public static class ServerBuild
             Dirty = work.Dirty,
             WorkTreeHash = work.Fingerprint,
             PomHash = HashFile(AppPaths.PomFile),
+            MavenRepo = AppPaths.MavenRepoDir,
             JdkVersion = jdk.Version,
             KotlinVersion = ReadKotlinVersion(),
             ClassCount = CountClasses(),
@@ -291,10 +305,18 @@ public static class ServerBuild
 
     /// <summary>
     /// cmd 的 /s /c 引号规则：整条命令再包一层引号，mvn 路径单独包引号
-    /// （路径里可能有空格）。最终形如：/d /s /c ""C:\...\mvn.cmd" -B …"
+    /// （路径里可能有空格）。最终形如：/d /s /c ""C:\...\mvn.cmd" "-Dmaven.repo.local=C:\..."" …"
     /// </summary>
     public static string BuildMvnArguments(MavenInfo maven, string goals)
-        => "/d /s /c \"" + "\"" + maven.MvnCmd + "\" " + goals + "\"";
+        => "/d /s /c \"" + "\"" + maven.MvnCmd + "\" " + MavenRepoArgument + " " + goals + "\"";
+
+    /// <summary>
+    /// 本地仓库必须钉死在命令行上：不传时 mvn 一律用 %USERPROFILE%\.m2\repository，
+    /// AppPaths 里「有 .m2 才用用户仓库」的判定就白做了（没 .m2 的机器还会被写一份用户目录）。
+    /// 整段带引号是因为用户名/路径常有空格；cmd /s /c 会把引号原样交给 mvn.cmd，
+    /// 再由 java 的 argv 解析器去掉，最终 mvn 收到的是 -Dmaven.repo.local=C:\...\repository。
+    /// </summary>
+    public static string MavenRepoArgument => "\"-Dmaven.repo.local=" + AppPaths.MavenRepoDir + "\"";
 
     public static Dictionary<string, string> BuildMvnEnvironment(JdkInfo jdk, MavenInfo maven)
     {

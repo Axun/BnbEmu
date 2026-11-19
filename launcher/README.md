@@ -18,7 +18,9 @@ Windows 桌面启动器（WPF / .NET 9 / C#）：用 git 拉取 BnbEmu 最新源
   不依赖 python，见下文），最后用该目录作为工作目录启动 `CA.exe`
 - **提交详情**：列出本地版本到远端之间的所有提交（sha / 说明 / 作者 / 时间），可复制
 - **JDK 21 自动安装**：可选用 Amazon Corretto 21 或 Azul Zulu 21，缺失时自动下载解压到 `runtime/jdk`
-- **Maven 自动安装**：从 Apache 官方镜像取最新的 3.9.x，解压到 `runtime/maven`；本地仓库固定为 `runtime/m2repo`
+- **Maven 自动安装**：从 Apache 官方镜像取最新的 3.9.x，解压到 `runtime/maven`；本地仓库按目录探测：
+  用户目录下存在 `%USERPROFILE%\.m2` 就复用它（`%USERPROFILE%\.m2\repository`，省掉整份依赖重下），
+  不存在才用 `runtime/m2repo`。两种情况都显式传 `-Dmaven.repo.local`，不靠 mvn 的默认值
 - **后台服务**：编译与运行分离。只有源码提交 / pom.xml / JDK 变化（或在源码里手改过）时才在
   `runtime/source` 执行一次 `mvn compile`，产物记进 `runtime/build/build-stamp.json`；
   平时启动直接用 `java -cp "target\classes;依赖 jar" bnbemu.MainKt`，不再每次都让 Kotlin 全量重编
@@ -27,7 +29,8 @@ Windows 桌面启动器（WPF / .NET 9 / C#）：用 git 拉取 BnbEmu 最新源
   服务进程仍用 Job Object 托管，启动器退出时不会留下孤儿 java 进程
 - **启动器自己会更新**：从 GitHub Release 读 `latest.json`，发现新版本在顶部提示；
   下载后校验 SHA-256，退出后由脚本把 exe 换掉（旧版本留作 `.prev` 可回退），`runtime` 目录完全不动
-- **不污染系统**：JDK / Maven / 源码 / 客户端 / Maven 仓库 / 日志全部在启动器目录内
+- **不污染系统**：JDK / Maven / 源码 / 客户端 / 日志全部在启动器目录内；Maven 仓库只**复用**已有的
+  `%USERPROFILE%\.m2`，用户没有才建 `runtime/m2repo`——不会凭空往用户目录写东西
 
 ## 目录结构
 
@@ -42,8 +45,8 @@ Windows 桌面启动器（WPF / .NET 9 / C#）：用 git 拉取 BnbEmu 最新源
     update\                 # 自更新暂存区：new.exe（下好的新版）、pending.json
     jdk\                    # JDK 21
     maven\                  # Maven 3.9.x
-    m2repo\                 # Maven 本地仓库
-    build\                  # 服务端构建产物：server-cp.txt（依赖 classpath）、build-stamp.json（编译凭证）
+    m2repo\                 # Maven 本地仓库（仅当 %USERPROFILE%\.m2 不存在时才用）
+    build\                  # 服务端构建产物：server-cp.txt（依赖 classpath）、build-stamp.json（编译凭证，含仓库路径）
     source\                 # BnbEmu 源码（标准 git 仓库，含 .git）
       target\classes\       # 编译输出；每次重编前整个清空
       resource\             # 客户端资源（git 子模块，按需初始化）

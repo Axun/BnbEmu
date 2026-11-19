@@ -151,6 +151,8 @@ public static class SelfTest
             }
             if (maven is null) throw new InvalidOperationException("No usable Maven found");
             Say($"[mvn] OK {maven.Version} @ {maven.Home}");
+            Say($"[mvn] repo = {AppPaths.MavenRepoDir}" +
+                (AppPaths.UseUserMavenRepo ? " (user .m2)" : " (bundled, no .m2)"));
 
             // 2.5) 用与编译完全相同的命令行验证一遍（引号 / JAVA_HOME / 本地仓库）
             if (jdk is not null)

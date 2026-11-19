@@ -28,6 +28,12 @@ public sealed class BuildStamp
     /// <summary>pom.xml 的 SHA-256：依赖版本、Kotlin 插件参数变化都要触发重编。</summary>
     [JsonPropertyName("pomHash")] public string? PomHash { get; set; }
 
+    /// <summary>
+    /// 编译时用的本地仓库（mvn -Dmaven.repo.local）。用户 .m2 与 runtime\m2repo 是两份独立仓库，
+    /// 切换后 server-cp.txt 里的依赖路径整片失效，所以仓库本身也进指纹。
+    /// </summary>
+    [JsonPropertyName("mavenRepo")] public string? MavenRepo { get; set; }
+
     /// <summary>编译所用 JDK，换 JDK 后 bytecode 目标可能不同。</summary>
     [JsonPropertyName("jdkVersion")] public string? JdkVersion { get; set; }
 
