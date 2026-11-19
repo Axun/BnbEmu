@@ -80,5 +80,8 @@ const val SESSION_ENTER_HORDE_TICKET = 12      // HordeEvent_RecommendBuyHordeTi
 //    舊 handler 用 `takeIf { it in 1..31 }` 把 0 (以及解析錯位讀到的 229) 一律退回 15,
 //    等於把所有普通房都當練習房回, 已移除。
 const val SESSION_TYPE_NORMAL = 0
+const val SESSION_TYPE_MONSTER = 14
 /** 15 = 練習房 (tst.pcap 抓包值; 對應 op 75 body 的 E1(15) / 規則 66) */
 const val SESSION_TYPE_PRACTICE = 15
+/* 激战 */
+const val SESSION_TYPE_BATTLE = 16

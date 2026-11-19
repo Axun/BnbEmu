@@ -1,6 +1,8 @@
 package bnbemu.server
 
+import bnbemu.constants.MAX_SESSION_SLOTS
 import bnbemu.netty.ClientSocket
+import bnbemu.packet.CAPTURE_USER_ID
 import bnbemu.packet.EnterSessionResult
 import bnbemu.packet.PracticeSetPlayer
 import bnbemu.packet.room.SetPlayer
@@ -8,6 +10,7 @@ import bnbemu.packet.PracticeSetSlotAI
 import bnbemu.packet.PracticeSlot104
 import bnbemu.packet.PracticeSlot114
 import bnbemu.packet.PracticeSlotReady
+import bnbemu.packet.RoomEntry
 import bnbemu.packet.RoomList
 import bnbemu.packet.SessionInfoResult
 import bnbemu.packet.Unk113
@@ -29,8 +32,21 @@ import bnbemu.packet.room.SelectMap
  */
 fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
     val user = c.users.firstOrNull()
+    val closedSlots = Room.slots.count { (it.state.toInt() and FLAG_CLOSED) != 0 }
+    val humanCount = Room.slots.count { it.user != null }.coerceAtLeast(1)
+    val roomEntry = RoomEntry(
+        roomId = Room.sessionId,
+        handle = user?.id ?: CAPTURE_USER_ID,
+        name = Room.name,
+        hasPassword = Room.password.isNotEmpty(),
+        curPlusClosed = humanCount + closedSlots,
+        closedSlots = closedSlots,
+        maxPlusClosed = MAX_SESSION_SLOTS,
+        sessionType = Room.sessionType,
+        mapId = Room.mapId,
+    )
     c.send(
-        RoomList(),
+        RoomList(listOf(roomEntry)),
         // 进房结果 (op 83): 房型必须原样回显, 客户端 0x0068626F 存进 CFxContext[0x570]。
         EnterSessionResult(sessionId = Room.sessionId, sessionType = Room.sessionType),
         UserSimpleInfoResult(), SessionInfoResult(),

@@ -35,9 +35,9 @@ import org.tinylog.kotlin.Logger
 //      (房型读成 229, 又被 takeIf{1..31} 退回 15, 等于把普通房当练习房回)。
 //
 // 字符串用 PKT.kt 的 DecodeCipherStr (4B BE^0x96CA5395 → LE; 余 2B ^0xA569; 余 1B ^0x5A);
-// 反向写回要用 EncodeCipherStr。⚠️ 但 op 87 RoomList 的房名是另一套容器
-// (E4 名长 + dword 对齐 + ssdEncode, 见 RoomList.kt), 不适用 EncodeCipherStr 的 E2 长度格式,
-// 所以这里只把房名记进 Room.name, 暂不动态改写 RoomList (会破坏 replay_test 逐字节基准)。
+// 反向写回要用 EncodeCipherStr。op 87 RoomList 现已结构化（SSD 块内明文 u32le 串长 + ACP），
+// 进房链 sendRoomEntryChain 会按 Room.sessionId / Room.name / Room.sessionType / Room.mapId
+// 动态下发 RoomEntry，不再破坏大厅 replay_test 的逐字节基准。
 //
 // 回应链 (seq 顺序, 见 Practice.kt 注释) 目前仍是练习房基准:
 //   [87 RoomList, 83 EnterSessionResult, 4(13B), 4(65B), 113, 100(78B), 108,
@@ -61,6 +61,8 @@ val CreateSessionReq = PKTHandler { c ->
     Room.name = roomName
     Room.password = password
     Room.localBombers = bombers
+    Room.themeId = 0
+    Room.mapId = 253
 
     Logger.info(
         "[CreateSession] mode=$mode (${if (isPractice) "practice" else "normal"}) " +

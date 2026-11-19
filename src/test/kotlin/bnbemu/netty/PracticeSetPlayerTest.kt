@@ -152,6 +152,8 @@ class PracticeSetPlayerTest {
         val savedBombers = Room.localBombers
         val savedSlotUser = Room.slots[0].user
         val savedSlotBomber = Room.slots[0].bomber
+        val savedThemeId = Room.themeId
+        val savedMapId = Room.mapId
         try {
             val buf = Unpooled.wrappedBuffer(body)
             with(CreateSessionReq) { buf.handle(client) }
@@ -173,6 +175,8 @@ class PracticeSetPlayerTest {
             Room.localBombers = savedBombers
             Room.slots[0].user = savedSlotUser
             Room.slots[0].bomber = savedSlotBomber
+            Room.themeId = savedThemeId
+            Room.mapId = savedMapId
             ch.finishAndReleaseAll()
         }
     }
