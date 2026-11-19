@@ -114,40 +114,51 @@ object Room {
     }
 
     fun startGame() {
-        // 每 200ms 一次炸弹与对局状态检测
-        tickFuture?.cancel(false)
-        tickFuture = executor.scheduleAtFixedRate(::onTick, 0, 200, TimeUnit.MILLISECONDS)
+        synchronized(matchLock) {
+            tickFuture?.cancel(false)
+            gameOverFuture?.cancel(false)
+            backToRoomFuture?.cancel(false)
+            gameOverFuture = null
+            backToRoomFuture = null
 
-        // 每局开局把槽位生命状态重置成 (座位上有人 ? ALIVE : OUT_OF_MATCH) 并清结算标志。
-        // 必须在这里做, 否则上一局阵亡的槽位会带着 DEAD 进入下一局,
-        // 导致开局第一次死亡上报被当成重复上报吞掉、或开局即判定全灭。
-        resetMatchState()
-
-        if (!isEN) {
-            // temp fix jp crash
-            if (isJP)
-                mapId = 118
-
-            val spawnPositions = (0..7).shuffled()
-            val random = Random.nextInt(9999)
-            BC(
-                LaunchGameStage(spawnPositions),
-                AirplaneItemProb(),
-                DoStartGame(random)
-            )
+            // 每局开局把槽位生命状态重置成 (座位上有人 ? ALIVE : OUT_OF_MATCH) 并清结算标志。
+            // 必须在这里做, 否则上一局阵亡的槽位会带着 DEAD 进入下一局,
+            // 导致开局第一次死亡上报被当成重复上报吞掉、或开局即判定全灭。
+            resetMatchState()
+            matchStartTimeMs = System.currentTimeMillis()
+            val period = tickIntervalMs.coerceAtLeast(1L)
+            tickFuture = executor.scheduleAtFixedRate(::onTick, 0, period, TimeUnit.MILLISECONDS)
         }
+
+//        if (!isEN) {
+//            val spawnPositions = (0..7).shuffled()
+//            val random = Random.nextInt(9999)
+//            BC(
+//                LaunchGameStage(spawnPositions),
+//                AirplaneItemProb(),
+//                DoStartGame(random)
+//            )
+//        }
         // EN: 对局推进完全由客户端本地 AI (CAIPlayer / CAIGoal*) 与本地时钟驱动,
         // 服务端只在 C→S op 106 时回 S→C op 139、2.5s 后回 op 138 引爆, 无需任何周期广播。
         // (曾误加每 400ms 的 op 172 "ItemThrow" 广播, 实为地图事件时间轴同步, 见 MapEventSync.kt)
     }
 
-    // CGameSession::Update - 定时更新水泡倒计时并广播爆炸状态
+    // CGameSession::Update - 定时更新水泡倒计时并广播爆炸状态；超过对局时限 (默认 3 分钟) 自动判平局结束
     // 注意: S→C op 138 SetBombState(bombId, 0) (CA.exe 0x005481BD -> 0x00534B18 -> 0x00565E9F)
     // 已完整处理水泡引爆、十字水柱、炸箱子与爆出道具。
     // 绝不可在此追加发送 S→C op 148 (CA.exe 0x0054BA1A -> 0x00477CEF), 因为 op 148 实为
     // DropObstacleResult (放置地面障碍物: 1=地雷, 2=陷阱, 3=香蕉皮 Item/BananaGround, 4=图钉 Item/PushpinGround)!
     private fun onTick() {
         val now = System.currentTimeMillis()
+        val timedOut = synchronized(matchLock) {
+            !gameOverSent && matchTimeoutMs > 0L && matchStartTimeMs > 0L && (now - matchStartTimeMs >= matchTimeoutMs)
+        }
+        if (timedOut) {
+            onMatchTimeout()
+            return
+        }
+
         val stateChanged = mutableListOf<Bomb>()
 
         synchronized(bombs) {
@@ -405,6 +416,18 @@ object Room {
 
     fun dartDetonationState(bombId: Int): DartDetonation? = dartDetonations[bombId]
 
+    enum class MatchOutcome(val winnerTeam: Int) {
+        HUMAN_WIN(WINNER_TEAM_HUMAN),
+        AI_WIN(WINNER_TEAM_AI),
+        DRAW(WINNER_TEAM_DRAW),
+    }
+
+    private enum class MatchEndTrigger {
+        DEATH_REPORT,
+        LAST_TEAM_STANDING,
+        TIMEOUT,
+    }
+
     // 角色死亡上报处理 (C→S op 154 action=5 -> CA.exe 0x0046DB1D CGOGameBomber::OnDie)
     //
     //   这条上报只对**真人玩家**成立 —— 0x46DB01 处先调 0x45FBD3,
@@ -419,21 +442,23 @@ object Room {
     // 结算判定规则
     //   客户端只是把每个阵亡的 bomber 转发给服务端, 自身没有任何"敌人清空"判定, 全部依赖服务端下令。
     //   于是「杀光全部 AI」之后对局永远不会结束。现在按 Slot.matchState 统计双方存活人数, 任意一方全灭即结束对局:
-    //     · 人类全灭            → AI 胜 (与原行为一致, 胜利者取一个仍活着的 AI 槽位)
-    //     · AI 全灭 && 人类存活 → 人类胜 (胜利者取玩家槽位, GameResult winnerTeam = 0)
-    //   结算包固定 1.5s 延迟下发: 客户端要先播完阵亡动画。
+    //     · 双方同时全灭            → 平局 (DRAW, winnerTeam = 0xFF)
+    //     · 人类全灭 && AI 存活     → AI 胜 (winnerTeam = 1, 胜利者取一个仍活着的 AI 槽位)
+    //     · AI 全灭 && 人类存活     → 人类胜 (winnerTeam = 0, 胜利者取玩家槽位)
+    //   结算包固定 1.0s 延迟下发: 客户端要先播完阵亡动画; 在缓冲期内若另一方也全灭则升级为平局。
     //   顺序 op 169 InitGameResult → op 150 GameResult（缺 169/150 不弹结算窗）。
     fun onBomberDie(slotId: Int) {
         if (slotId !in slots.indices) return
 
         val slot = slots[slotId]
-        // 只有"参战且存活"的槽位才接受阵亡上报:
-        //   · DEAD       → 重复上报 (CGameMsgCache 重发 / 抓包残流 / 连续两次 OnDie), 忽略,
-        //                  否则会重复广播 op 159 并可能触发第二套结算包;
-        //   · OUT_OF_MATCH → 空槽的错位/迟到上报, 忽略, 绝不能给没有 bomber 的槽位发 op 159
-        //                  (客户端 0x0054C378 会拿 slotId 去 session 的 bomber 数组取对象)。
-        if (slot.matchState != SlotMatchState.ALIVE) return
-        slot.matchState = SlotMatchState.DEAD
+        synchronized(matchLock) {
+            if (resultDispatched) return
+            // 只有"参战且存活"的槽位才接受阵亡上报:
+            //   · DEAD         → 重复上报 (CGameMsgCache 重发 / 抓包残流 / 连续两次 OnDie), 忽略
+            //   · OUT_OF_MATCH → 空槽的错位/迟到上报, 忽略, 绝不能给没有 bomber 的槽位发 op 159
+            if (slot.matchState != SlotMatchState.ALIVE) return
+            slot.matchState = SlotMatchState.DEAD
+        }
 
         // 阵亡广播 = 两条包配合:
         //   1) S→C op159 BomberDie(slot) —— 客户端 0x0054C378: 置状态 17、清队伍桶、
@@ -475,84 +500,148 @@ object Room {
     //    服务端只是"不知道", 再来一条 159 会让死亡动作重播。
     fun onLastTeamStanding(slotId: Int) {
         if (slotId !in slots.indices) return
-        if (gameOverSent) return
+        synchronized(matchLock) {
+            if (gameOverSent) return
 
-        // 单座位房 (1 人无 AI) 客户端从第一帧就会满足"只剩一队", 那不是胜负而是没对手;
-        // 真正参战的房间至少要有两个座位 (练习房 = 1 真人 + 1..7 AI)
-        if (activeSlotCount < 2) return
+            // 单座位房 (1 人无 AI) 客户端从第一帧就会满足"只剩一队", 那不是胜负而是没对手;
+            // 真正参战的房间至少要有两个座位 (练习房 = 1 真人 + 1..7 AI)
+            if (activeSlotCount < 2) return
 
-        val winner = slots[slotId]
-        // 空槽上报丢弃: 客户端只会替"真人或 AI"的存活槽位发这个包 (vtable[0x150] == 0 的过滤)
-        if (!winner.hasSeat()) return
+            val winner = slots[slotId]
+            // 空槽上报丢弃: 客户端只会替"真人或 AI"的存活槽位发这个包 (vtable[0x150] == 0 的过滤)
+            if (!winner.hasSeat()) return
 
-        val humanWin = winner.user != null
-        // 落败方一律补记 DEAD, 让 matchState 与服务端认知一致 (客户端本地早就判死了)
-        slots.forEach { s ->
-            val sameSide = if (humanWin) s.user != null else s.isAI
-            if (s.hasSeat() && !sameSide) s.matchState = SlotMatchState.DEAD
+            val humanWin = winner.user != null
+            // 落败方一律补记 DEAD, 让 matchState 与服务端认知一致 (客户端本地早就判死了)
+            slots.forEach { s ->
+                val sameSide = if (humanWin) s.user != null else s.isAI
+                if (s.hasSeat() && !sameSide) s.matchState = SlotMatchState.DEAD
+            }
+
+            // action=0x60 是每帧重发的, 这里靠 gameOverSent 去重
+            emitMatchResultLocked(
+                outcome = if (humanWin) MatchOutcome.HUMAN_WIN else MatchOutcome.AI_WIN,
+                winnerSlot = slotId,
+                trigger = MatchEndTrigger.LAST_TEAM_STANDING
+            )
         }
+    }
 
-        // action=0x60 是每帧重发的, 这里靠 gameOverSent 去重
-        emitMatchResult(humanWin, slotId)
+    /** 对局超时（默认 3 分钟 = 180,000ms），与真端 CGameSession::Update 一致直接判平局结束。 */
+    fun onMatchTimeout() {
+        synchronized(matchLock) {
+            if (gameOverSent) return
+            emitMatchResultLocked(
+                outcome = MatchOutcome.DRAW,
+                winnerSlot = -1,
+                trigger = MatchEndTrigger.TIMEOUT,
+                detail = "对局超时(${matchTimeoutMs}ms)"
+            )
+        }
     }
 
     /**
-     * 一方全灭即结束对局。调用前必须已经把阵亡槽位标记为 [SlotMatchState.DEAD]。
-     * 只有[人类]与[AI]两个阵营都还有人时才继续对局; 任一方空出则立刻结算。
+     * 一方全灭或双方同时全灭即结束对局。调用前必须已经把阵亡槽位标记为 [SlotMatchState.DEAD]。
+     * 只有[人类]与[AI]两个阵营都还有人时才继续对局; 任一方空出即按存活情况结算（同灭为平局）。
      */
     private fun finishMatchIfDecided() {
-        if (gameOverSent) return
+        synchronized(matchLock) {
+            if (resultDispatched) return
 
-        // 阵营划分: 有人坐着 = 人类阵营, isAI = AI 阵营。不参战的空槽两边都进不去。
-        val humanIdx = slots.indices.filter { slots[it].user != null }
-        val enemyIdx = slots.indices.filter { slots[it].isAI }
-        if (humanIdx.isEmpty()) return          // 没有人类就没有"人类胜负"可言, 交给上层流程
+            // 阵营划分: 有人坐着 = 人类阵营, isAI = AI 阵营。不参战的空槽两边都进不去。
+            val humanIdx = slots.indices.filter { slots[it].user != null }
+            val enemyIdx = slots.indices.filter { slots[it].isAI }
+            if (humanIdx.isEmpty()) return          // 没有人类就没有"人类胜负"可言, 交给上层流程
 
-        val humanAlive = humanIdx.filter { slots[it].isAlive }
-        val enemyAlive = enemyIdx.filter { slots[it].isAlive }
+            val humanAlive = humanIdx.filter { slots[it].isAlive }
+            val enemyAlive = enemyIdx.filter { slots[it].isAlive }
 
-        // 结束条件只有两个: 人类全灭, 或 AI 全灭 (enemyIdx 为空时不存在"AI 全灭"这种胜负)。
-        // 这样即使将来开了纯人类 PvP 房, 死一个人也不会被误判成"敌人清空"。
-        val humanWiped = humanAlive.isEmpty()
-        val enemyWiped = enemyIdx.isNotEmpty() && enemyAlive.isEmpty()
-        if (!humanWiped && !enemyWiped) return   // 双方都还有人, 继续打
+            // 结束条件: 人类全灭, 或 AI 全灭 (enemyIdx 为空时不存在"AI 全灭"这种胜负)。
+            // 这样即使将来开了纯人类 PvP 房, 死一个人也不会被误判成"敌人清空"。
+            val humanWiped = humanAlive.isEmpty()
+            val enemyWiped = enemyIdx.isNotEmpty() && enemyAlive.isEmpty()
+            if (!humanWiped && !enemyWiped) return   // 双方都还有人, 继续打
 
-        // 人类全灭(含与 AI 同时全灭) → AI 胜, 沿用旧的 winnerSlotId = 1 语义;
-        // 若还有 AI 活着, 胜利跳舞交给真正活下来的那个槽位。
-        val humanWin = !humanWiped
-        val winnerSlot = when {
-            humanWin -> humanAlive.first()
-            enemyAlive.isNotEmpty() -> enemyAlive.first()
-            else -> 1
+            val outcome = when {
+                humanWiped && enemyWiped -> MatchOutcome.DRAW
+                !humanWiped -> MatchOutcome.HUMAN_WIN
+                else -> MatchOutcome.AI_WIN
+            }
+            val winnerSlot = when (outcome) {
+                MatchOutcome.HUMAN_WIN -> humanAlive.first()
+                MatchOutcome.AI_WIN -> enemyAlive.first()
+                MatchOutcome.DRAW -> -1
+            }
+
+            if (!gameOverSent) {
+                emitMatchResultLocked(
+                    outcome = outcome,
+                    winnerSlot = winnerSlot,
+                    trigger = MatchEndTrigger.DEATH_REPORT,
+                    detail = "存活人类=$humanAlive 存活AI=$enemyAlive"
+                )
+            } else if (pendingTrigger == MatchEndTrigger.DEATH_REPORT && outcome == MatchOutcome.DRAW) {
+                // 在 gameOverDelayMs 动画缓冲期内另一阵营也全灭（同炸弹/同帧双灭），由单方胜负升级为平局
+                pendingOutcome = MatchOutcome.DRAW
+                println("[Room] 双方同时全灭，结算结果升级为平局 | 存活人类=$humanAlive 存活AI=$enemyAlive")
+            }
         }
-
-        emitMatchResult(humanWin, winnerSlot, "存活人类=$humanAlive 存活AI=$enemyAlive")
     }
 
     /**
-     * 真正下发结算包。两条触发路径共用:
+     * 真正下发结算包。三条触发路径共用:
      *   · [finishMatchIfDecided]  —— 靠 op154 action=5 逐个记录阵亡后的服务端统计
      *   · [onLastTeamStanding]    —— 靠 op112 action=0x60 客户端自报"只剩一支队伍"
+     *   · [onMatchTimeout]        —— 对局达到 3 分钟上限自动判平局
      *
      * 固定顺序 op 169 InitGameResult → op 150 GameResult（客户端 0x55856A → 0x5584CC 建
      * CGameResultDocument，op 150 再填金币/经验并弹窗）。
      */
-    private fun emitMatchResult(humanWin: Boolean, winnerSlot: Int, detail: String = "") {
+    private fun emitMatchResultLocked(
+        outcome: MatchOutcome,
+        winnerSlot: Int,
+        trigger: MatchEndTrigger,
+        detail: String = ""
+    ) {
         if (gameOverSent) return
         gameOverSent = true
+        pendingOutcome = outcome
+        pendingTrigger = trigger
+
+        val outcomeLabel = when (outcome) {
+            MatchOutcome.HUMAN_WIN -> "玩家胜"
+            MatchOutcome.AI_WIN -> "AI 胜"
+            MatchOutcome.DRAW -> "平局"
+        }
         println(
-            "[Room] 对局结束: " + (if (humanWin) "玩家胜" else "AI 胜") +
+            "[Room] 对局结束: $outcomeLabel" +
                 " | winnerSlot=$winnerSlot" + (if (detail.isEmpty()) "" else " | $detail")
         )
 
-        executor.schedule({
+        gameOverFuture = executor.schedule({
+            val finalOutcome: MatchOutcome
+            synchronized(matchLock) {
+                if (resultDispatched) return@schedule
+                resultDispatched = true
+                finalOutcome = pendingOutcome ?: outcome
+            }
+            val expAfter = when (finalOutcome) {
+                MatchOutcome.HUMAN_WIN -> winExpAfter
+                MatchOutcome.AI_WIN -> loseExpAfter
+                MatchOutcome.DRAW -> drawExpAfter
+            }
+            val lucciGained = when (finalOutcome) {
+                MatchOutcome.HUMAN_WIN -> winLucci
+                MatchOutcome.AI_WIN -> loseLucci
+                MatchOutcome.DRAW -> drawLucci
+            }
             BC(
                 InitGameResult(mode = 0, mapId = 0),
                 GameResult(
-                    winnerTeam = if (humanWin) 0 else 1,
+                    winnerTeam = finalOutcome.winnerTeam,
                     delayMs = 2000,
-                    expAfter = if (humanWin) winExpAfter else loseExpAfter,
-                    lucciGained = if (humanWin) winLucci else loseLucci
+                    expAfter = expAfter,
+                    lucciGained = lucciGained
                 )
             )
             // 结算后停掉对局主循环 (水泡倒计时), 与客户端离开棋盘同步
@@ -560,7 +649,7 @@ object Room {
             // ⚠️ 结果窗弹出 ≠ 对局结束: 客户端没有任何本地超时会把结果窗关掉
             // (op150 的 delayMs 只决定「多久后弹窗」, 见 packet/room/BackToRoom.kt)。
             // 必须由服务端补一条 S→C op 155, 客户端才会拆掉 CGameStage 回到 stage 12 房间。
-            executor.schedule({ backToRoom() }, resultReturnDelayMs, TimeUnit.MILLISECONDS)
+            backToRoomFuture = executor.schedule({ backToRoom() }, resultReturnDelayMs, TimeUnit.MILLISECONDS)
         }, gameOverDelayMs, TimeUnit.MILLISECONDS)
     }
 
@@ -753,11 +842,26 @@ object Room {
     // 输的一档按胜利的 1/3 给：输局也要有收益，但不能和赢一样多。
     internal var winExpAfter = 60   // 胜利 6.0%
     internal var loseExpAfter = 20  // 失败 2.0%
+    internal var drawExpAfter = 30  // 平局 3.0%
     internal var winLucci = 120
     internal var loseLucci = 40
+    internal var drawLucci = 60
 
-    // 是否已经下发过本局结算 (防止重复结算)
-    internal var gameOverSent = false
+    // 对局超时上限 (ms): 对齐真端 GAME_DURATION_LIMIT_MS = 0x2BF20 (3 分钟); <=0 表示不超时
+    internal var matchTimeoutMs = 180_000L
+    // onTick 调度周期 (ms), 测试可改小
+    internal var tickIntervalMs = 200L
+
+    private val matchLock = Any()
+    @Volatile private var matchStartTimeMs = 0L
+    // 是否已经触发结算调度 (防止重复调度)
+    @Volatile internal var gameOverSent = false
+    // 是否已经实际发出 op 169/150 (在 gameOverDelayMs 缓冲期内为 false, 供同灭升级平局判断)
+    @Volatile private var resultDispatched = false
+    @Volatile private var pendingOutcome: MatchOutcome? = null
+    @Volatile private var pendingTrigger: MatchEndTrigger? = null
+    private var gameOverFuture: ScheduledFuture<*>? = null
+    private var backToRoomFuture: ScheduledFuture<*>? = null
 
     // 发射型水泡 (坦克炮泡) 的「落地激活」延时。
     // op139 的 sub_4598AB 会把泡置成 +192=0 未激活 / +292=1 飞行中, 必须等发射动画播完
@@ -882,15 +986,28 @@ object Room {
      *    否则他的阵亡上报会被当成"不参战/重复上报"吞掉，该玩家阵亡后对局永远不会结束。
      */
     fun resetMatchState() {
-        gameOverSent = false
-        backSent = false
-        slots.forEach {
-            it.matchState = if (it.hasSeat()) SlotMatchState.ALIVE else SlotMatchState.OUT_OF_MATCH
+        synchronized(matchLock) {
+            gameOverSent = false
+            resultDispatched = false
+            pendingOutcome = null
+            pendingTrigger = null
+            backSent = false
+            matchStartTimeMs = 0L
+            slots.forEach {
+                it.matchState = if (it.hasSeat()) SlotMatchState.ALIVE else SlotMatchState.OUT_OF_MATCH
+            }
         }
     }
 
     fun reset() {
-        tickFuture?.cancel(false)
+        synchronized(matchLock) {
+            tickFuture?.cancel(false)
+            gameOverFuture?.cancel(false)
+            backToRoomFuture?.cancel(false)
+            tickFuture = null
+            gameOverFuture = null
+            backToRoomFuture = null
+        }
         bombs.clear()
         movableBoxes.clear()
         movableBoxSentAt.clear()

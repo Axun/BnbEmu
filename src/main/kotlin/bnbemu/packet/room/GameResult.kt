@@ -49,8 +49,13 @@ import bnbemu.server.Room
 //        **所以 +128 只要还是 0，这一列就永远是 00.0%**。+124 = 战前进度，+128 = 战后进度，
 //        两者都 < 1000 时按 "+1000 取模" 处理升级回卷。
 //      · LUCCI 列（0x46F544 case 6）读 槽+152（E4，有符号，负值会画减号）。
+const val WINNER_TEAM_HUMAN = 0
+const val WINNER_TEAM_AI = 1
+const val WINNER_TEAM_DRAW = 0xFF
+
 private const val RESULT_FRAME_WIN = 0   // "YOU WIN!!"
 private const val RESULT_FRAME_LOSE = 2  // "YOU LOSE!!"（0..4 共 5 帧，2 为失去方，需实机复核）
+private const val RESULT_FRAME_DRAW = 3  // "DRAW!!"（CA.exe 0x558EE1: v21==3 → CGODrawGlyph "Game/Draw"）
 
 val AI_LEVEL_TO_LEVEL = mapOf(
     0 to 3,
@@ -65,24 +70,30 @@ fun GameResult(
     expAfter: Int = 50,      // +128 战后等级进度，EXP% 列动画的终点（0 → 5.0%）
     lucciGained: Int = 100   // +152 本局获得金币
 ) = PKT {
+    val isDraw = winnerTeam < 0 || winnerTeam == WINNER_TEAM_DRAW
+    val headerWinnerTeam = if (isDraw) WINNER_TEAM_DRAW else winnerTeam
+
     // 1. Header (11 字节)
-    Encode1(0)           // gameType: 必须 0，非 0 会插 "MISSION PERFECT!!" 印章
-    Encode1(winnerTeam)  // winnerTeam / slot
-    Encode1(0)           // unk3
-    Encode1(0)           // unk4 (0 = 第 4 列显示 KILLS/SAVES)
-    Encode1(0)           // unk5
-    Encode4(delayMs)     // delayMs
-    Encode1(0xFF)        // unk7 (-1)
-    Encode1(0xFF)        // unk8 (-1)
+    Encode1(0)                   // gameType: 必须 0，非 0 会插 "MISSION PERFECT!!" 印章
+    Encode1(headerWinnerTeam)    // winnerTeam / slot (0=玩家胜, 1=AI 胜, 0xFF=平局)
+    Encode1(0)                   // unk3
+    Encode1(0)                   // unk4 (0 = 第 4 列显示 KILLS/SAVES)
+    Encode1(0)                   // unk5
+    Encode4(delayMs)             // delayMs
+    Encode1(0xFF)                // unk7 (-1)
+    Encode1(0xFF)                // unk8 (-1)
 
     // 2. 8 Slots
     for (slotIndex in 0 until 8) {
         val slot = Room.slots.getOrNull(slotIndex)
         val isHuman = slot?.user != null
         val isAI = slot?.isAI == true
-        // 该槽是否属于胜利方（真人 = 蓝队/team 0，AI = 红队/team 1）
-        val won = if (isHuman) winnerTeam == 0 else winnerTeam != 0
-        val frame = if (won) RESULT_FRAME_WIN else RESULT_FRAME_LOSE
+        // 该槽是否属于胜利方（真人 = 蓝队/team 0，AI = 红队/team 1）；平局双方均写 RESULT_FRAME_DRAW
+        val frame = when {
+            isDraw -> RESULT_FRAME_DRAW
+            isHuman -> if (winnerTeam == 0) RESULT_FRAME_WIN else RESULT_FRAME_LOSE
+            else -> if (winnerTeam != 0) RESULT_FRAME_WIN else RESULT_FRAME_LOSE
+        }
         // EXP% 是千分比 0..1000，超界会被客户端当成"升级回卷"（+1000 取模），这里先钳住
         val expFrom = expBefore.coerceIn(0, 1000)
         val expTo = expAfter.coerceIn(0, 1000)

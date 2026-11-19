@@ -5,6 +5,7 @@ import bnbemu.packet.room.BOMBER_STATE_DEATH_LIST
 import bnbemu.packet.room.ReviveBomber
 import bnbemu.packet.room.GameResult
 import bnbemu.packet.room.InitGameResult
+import bnbemu.packet.room.WINNER_TEAM_DRAW
 import bnbemu.server.Room
 import bnbemu.server.SlotMatchState
 import bnbemu.server.User
@@ -37,6 +38,8 @@ class GameOverTest {
     private lateinit var cs: ClientSocket
     private var savedDelay = 0L
     private var savedReturnDelay = 0L
+    private var savedMatchTimeout = 0L
+    private var savedTickInterval = 0L
 
     @BeforeEach
     fun setUp() {
@@ -44,6 +47,8 @@ class GameOverTest {
         ch = EmbeddedChannel(cs)
         savedDelay = Room.gameOverDelayMs
         savedReturnDelay = Room.resultReturnDelayMs
+        savedMatchTimeout = Room.matchTimeoutMs
+        savedTickInterval = Room.tickIntervalMs
         Room.gameOverDelayMs = 0
         Room.resultReturnDelayMs = -1 // 避免前序用例调度的 3.5s BackToRoom 污染后续用例 (回房单测见 BackToRoomTest)
 
@@ -62,6 +67,8 @@ class GameOverTest {
     fun tearDown() {
         Room.gameOverDelayMs = savedDelay
         Room.resultReturnDelayMs = savedReturnDelay
+        Room.matchTimeoutMs = savedMatchTimeout
+        Room.tickIntervalMs = savedTickInterval
         Room.slots.forEach { slot ->
             slot.user = null
             slot.isAI = false
@@ -479,5 +486,88 @@ class GameOverTest {
         val bodyClamped = bodyOf(GameResult(winnerTeam = 1))
         assertTrue(dec2(bodyClamped, human + 35) >= 1, "+132 绝不可为 0")
         assertTrue(dec2(bodyClamped, human + 37) >= 1, "+136 绝不可为 0")
+    }
+
+    // ---- 平局：同时全灭 & 超时自动结束 ----
+
+    @Test
+    fun testGameResultDrawEncodesDrawFrames() {
+        for (wt in listOf(WINNER_TEAM_DRAW, -1)) {
+            val body = bodyOf(GameResult(winnerTeam = wt))
+            assertEquals(WINNER_TEAM_DRAW, dec1(body[1]), "平局 header.winnerTeam 必须是 0xFF")
+            assertEquals(3, dec1(body[11 + 5]), "平局真人 +68 必须是 DRAW 帧(3)")
+            assertEquals(3, dec1(body[11 + 64 + 1]), "平局 AI +68 必须是 DRAW 帧(3)")
+        }
+    }
+
+    @Test
+    fun testSimultaneousWipeoutHumanThenAiYieldsDraw() {
+        // 1v1 练习房：缓冲期内人类先死、紧接着最后一名 AI 也死 → 升级为平局
+        for (i in 2..7) Room.slots[i].isAI = false
+        Room.gameOverDelayMs = 80L
+        Room.startGame()
+        ch.outboundMessages().clear()
+
+        Room.onBomberDie(0)
+        Room.onBomberDie(1)
+
+        val sent = collectSent()
+        val ops = sent.map(::opcodeOf)
+        assertTrue(ops.contains(169) && ops.contains(150), "必须下发结算包, ops=$ops")
+        assertEquals(1, sent.count { opcodeOf(it) == 150 }, "只下发一次 op 150")
+        val body = bodyOf(sent.first { opcodeOf(it) == 150 })
+        assertEquals(WINNER_TEAM_DRAW, dec1(body[1]), "同时全灭必须判平局 (0xFF)")
+        assertEquals(3, dec1(body[11 + 5]), "平局真人 +68 = DRAW(3)")
+        assertEquals(3, dec1(body[11 + 64 + 1]), "平局 AI +68 = DRAW(3)")
+        assertEquals(Room.drawExpAfter, dec2(body, 11 + 33), "平局 EXP = drawExpAfter")
+        assertEquals(Room.drawLucci, dec4(body, 11 + 49), "平局 LUCCI = drawLucci")
+    }
+
+    @Test
+    fun testSimultaneousWipeoutAiThenHumanYieldsDraw() {
+        // 1v1 练习房：缓冲期内最后一名 AI 先死、紧接着人类也死 → 升级为平局
+        for (i in 2..7) Room.slots[i].isAI = false
+        Room.gameOverDelayMs = 80L
+        Room.startGame()
+        ch.outboundMessages().clear()
+
+        Room.onBomberDie(1)
+        Room.onBomberDie(0)
+
+        val sent = collectSent()
+        assertEquals(1, sent.count { opcodeOf(it) == 150 }, "只下发一次 op 150")
+        val body = bodyOf(sent.first { opcodeOf(it) == 150 })
+        assertEquals(WINNER_TEAM_DRAW, dec1(body[1]), "同时全灭必须判平局 (0xFF)")
+        assertEquals(3, dec1(body[11 + 5]), "平局真人 +68 = DRAW(3)")
+        assertEquals(3, dec1(body[11 + 64 + 1]), "平局 AI +68 = DRAW(3)")
+    }
+
+    @Test
+    fun testMatchTimeoutEndsWithDraw() {
+        assertEquals(180_000L, savedMatchTimeout, "默认对局时限必须是 3 分钟 (180,000ms)")
+        Room.matchTimeoutMs = 60L
+        Room.tickIntervalMs = 20L
+        Room.startGame()
+        ch.outboundMessages().clear()
+
+        val sent = collectSent(timeoutMs = 2000)
+        val ops = sent.map(::opcodeOf)
+        assertTrue(ops.contains(169), "超时必须下发 op 169 InitGameResult, ops=$ops")
+        assertTrue(ops.contains(150), "超时必须下发 op 150 GameResult, ops=$ops")
+        assertEquals(1, sent.count { opcodeOf(it) == 150 }, "超时只能下发一次 op 150")
+
+        val body = bodyOf(sent.first { opcodeOf(it) == 150 })
+        assertEquals(WINNER_TEAM_DRAW, dec1(body[1]), "超时必须判平局 (0xFF)")
+        assertEquals(3, dec1(body[11 + 5]), "超时真人 +68 = DRAW(3)")
+        assertEquals(3, dec1(body[11 + 64 + 1]), "超时 AI +68 = DRAW(3)")
+        assertEquals(Room.drawExpAfter, dec2(body, 11 + 33), "超时 EXP = drawExpAfter")
+        assertEquals(Room.drawLucci, dec4(body, 11 + 49), "超时 LUCCI = drawLucci")
+
+        // 超时结算后迟到的死亡与只剩一队上报均不得再发包
+        ch.outboundMessages().clear()
+        Room.onBomberDie(0)
+        Room.onLastTeamStanding(0)
+        Thread.sleep(100)
+        assertTrue(drain().isEmpty(), "超时结算后迟到上报不得再发任何包")
     }
 }
