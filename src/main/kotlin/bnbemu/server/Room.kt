@@ -5,19 +5,17 @@ import io.netty.util.concurrent.ScheduledFuture
 import bnbemu.constants.MAX_SESSION_SLOTS
 import bnbemu.debugMode
 import bnbemu.data.map.MapCatalog
-import bnbemu.isEN
-import bnbemu.isJP
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.NettyServer.workerGroup
 import bnbemu.netty.PKT
 import bnbemu.packet.ClientStage
 import bnbemu.packet.PracticeSetSlotAI
 import bnbemu.packet.PracticeSlotReady
+import bnbemu.packet.SESSION_TYPE_BATTLE
 import bnbemu.packet.room.*
 import org.tinylog.kotlin.Logger
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
-import kotlin.random.Random
 
 // 之後改用class
 object Room {
@@ -58,6 +56,69 @@ object Room {
     var password = ""
     /** 每个本地玩家一个 bomber id, 长度 = 玩家数, 不再固定读 1 个 */
     var localBombers: List<Int> = emptyList()
+
+    val isAIBattle: Boolean
+        get() = sessionType == SESSION_TYPE_BATTLE
+
+    fun npcDefaultBomberForSlot(slotIdx: Int): Int = 20 + (slotIdx - 4).coerceAtLeast(0)
+
+    /* 激战模式的特殊NPC */
+    fun isBattleNpcBomber(bomber: Int): Boolean = bomber in 20..25
+
+    fun chiefSlotIndex(): Int =
+        slots.indexOfFirst { it.user != null && (it.state.toInt() and FLAG_CHIEF) != 0 }
+            .takeIf { it >= 0 } ?: 0
+
+    /**
+     * 按激战模式 (sessionType=16) 布局初始化 8 个槽位:
+     *   - 0 号槽: 真人房主 (`FLAG_CHIEF`)
+     *   - 1..3 号槽: 真人空位默认封闭 (`FLAG_CLOSED`, `isAI=false`, 不放机器人)
+     *   - 4..7 号槽: NPC 敌方队伍 (`isAI=true`, 默认角色 `20..23`, 难度 `DEFAULT_AI_LEVEL`)
+     */
+    fun setupAiBattleSlots(
+        player: User?,
+        requestedBombers: List<Int> = emptyList(),
+    ) {
+        if (player != null) {
+            val requestedBomber = requestedBombers.firstOrNull() ?: player.bomber
+            val chosenBomber = if (requestedBomber in 0..15) requestedBomber else player.bomber
+            val effectiveBomber = if (chosenBomber == 4) 10 else chosenBomber
+            player.setBomber(effectiveBomber)
+
+            slots[0].apply {
+                this.user = player
+                isAI = false
+                state = FLAG_CHIEF
+                bomber = effectiveBomber
+                color = 0
+            }
+        } else {
+            // should not happen
+        }
+
+        for (i in 1..3) {
+            slots[i].apply {
+                this.user = null
+                isAI = false
+                state = FLAG_CLOSED
+                aILevel = 0
+                bomber = 0
+                color = 0
+            }
+        }
+
+        for (i in 4..7) {
+            slots[i].apply {
+                this.user = null
+                isAI = true
+                state = 0
+                aILevel = DEFAULT_AI_LEVEL
+                bomber = npcDefaultBomberForSlot(i)
+                color = 7
+            }
+        }
+        resetMatchState()
+    }
 
     val activeSlotCount: Int
         get() = slots.count { it.user != null || it.isAI }

@@ -35,10 +35,21 @@ import bnbemu.netty.PKT
 // (83: E1(result)+E1(flag)+E2+E1+E1; 84: E1(result)+E2+E4+E1+E1)。
 // ============================================================================
 
-/** 2 = 找不到空房間 (模擬器目前不實作自動匹配, 固定回這個) */
+/** 2 = 找不到空房間 */
 const val JOIN_FREE_NO_ROOM = 2
 
-fun JoinFreeSessionResult(result: Int = JOIN_FREE_NO_ROOM) = PKT {
+fun JoinFreeSessionResult(
+    result: Int = JOIN_FREE_NO_ROOM,
+    session: Int = 0,
+    seq: Int = 0,
+    sessionType: Int = 0,
+    state: Int = 0,
+) = PKT {
     Encode1(result)
-    // 成功分支才需要後續欄位; 目前只回失敗, 客戶端不讀, 保持 1 位元組最安全。
+    if (result == 0) {
+        Encode2(session)
+        Encode4(seq)
+        Encode1(sessionType)
+        Encode1(state)
+    }
 }

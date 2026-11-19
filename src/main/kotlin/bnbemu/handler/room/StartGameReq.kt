@@ -8,6 +8,8 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.PracticeAiLevel
 import bnbemu.packet.PracticeBoard
 import bnbemu.packet.PracticeStartInfo
+import bnbemu.packet.SESSION_TYPE_BATTLE
+import bnbemu.packet.SESSION_TYPE_PRACTICE
 import bnbemu.packet.room.GameStartMapInfo
 import bnbemu.packet.room.assignSpawnPositions
 import bnbemu.server.Room
@@ -35,7 +37,9 @@ private const val FALLBACK_MAP_NAME = "Cemetery03"
 //     Encode1: isCustomMap （0 = 官方内置预置地图；1 = 自定义/外部下载地图）
 //     Encode1: fileCheckType （地图文件完整性校验标志。1 = 跳过文件哈希校验（官方内置地图或随机地图）0 = 需比对文件哈希，此时封包体会在后面紧跟一个 Encode4(mapFileCrc32) 传入该地图文件的 CRC32 防作弊。）
 //     Encode4: eventParam （活动 / 赛事参数）
-//   (17B body, tst.pcap stream4 sq=91).
+//   ⚠️ CA.exe 0x00531A09 在 isCustomMap 之后仅当 sub_686233(CFxContext) != 0（即
+//      CA.exe 0x0052725F 仅对 sessionType == 15 练习模式置 1）时才写 fileCheckType(+CRC32)；
+//      激战模式 (16) 与普通房 (0) 不写该字段，body 为 16B (tst.pcap 练习房为 17B)。
 //   在舊版 TW_5 / CN_12 協議中對應 StartGameReq (TW_5 op 106).
 // 伺服器回覆對局啟動序列:
 //   [111 PracticeAiLevel, 112 GameStartMapInfo, 100 PracticeStartInfo, 136 PracticeBoard].
@@ -46,9 +50,11 @@ val StartGameReq = PKTHandler { c ->
     val subType = Decode1            // 固定 0 (标准地图)
     val roomSelectedMapId = Decode4  // 房间原始选图按钮 ID (如随机池或练习按钮 172)
     val isCustomMap = Decode1        // 0=官方, 1=外部自定义
-    val fileCheckType = Decode1      // 1=无需比对 CRC, 0=需比对 CRC
-    val mapCrc32 = if (fileCheckType == 0) Decode4 else 0
-    val eventParam = Decode4         // CEventManager 活动参数, 普通房间为 0
+    // 只有剩余字节 > 4 (即带 fileCheckType [+ optional CRC32] + 4B eventParam) 才读 fileCheckType
+    val fileCheckType = if (readableBytes() > 4) Decode1 else 1
+    val mapCrc32 = if (fileCheckType == 0 && readableBytes() >= 8) Decode4 else 0
+    val eventParam = if (readableBytes() >= 4) Decode4 else 0
+    if (readableBytes() > 0) skipBytes(readableBytes())
 
     if (mapId != Room.mapId || themeId != Room.themeId) {
         println("mapId or themeId mismatch")
@@ -80,6 +86,7 @@ val StartGameReq = PKTHandler { c ->
             mapId = mapId,
             themeId = themeId,
             mapName = mapName,
+            gameOptions = if (Room.isAIBattle) SESSION_TYPE_BATTLE else SESSION_TYPE_PRACTICE,
             activeSlots = activeSlots,
             // 出生点数量由地图决定（4 人图只有 0..3），按参战槽顺序分配，见 assignSpawnPositions
             spawnPositions = assignSpawnPositions(mapId, activeSlots),

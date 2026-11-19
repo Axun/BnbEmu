@@ -61,6 +61,8 @@ val AI_LEVEL_TO_LEVEL = mapOf(
     0 to 3,
     1 to 10,
     2 to 52,
+    3 to 109,
+    4 to 163,
 )
 
 fun GameResult(

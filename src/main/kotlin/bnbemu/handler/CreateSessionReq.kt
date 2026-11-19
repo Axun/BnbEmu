@@ -6,6 +6,7 @@ import bnbemu.netty.Decode4
 import bnbemu.netty.DecodeCipherStr
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ClientStage
+import bnbemu.packet.SESSION_TYPE_BATTLE
 import bnbemu.server.*
 import org.tinylog.kotlin.Logger
 
@@ -55,6 +56,7 @@ val CreateSessionReq = PKTHandler { c ->
     val ruleId = Decode4
 
     val isPractice = mode == 0
+    Room.reset()
     Room.sessionMode = mode
     Room.sessionType = sessionType
     Room.ruleId = ruleId
@@ -78,7 +80,9 @@ val CreateSessionReq = PKTHandler { c ->
     // ⚠️ 普通房真实应为「其余槽留空等真人加入」, 但回应链里 103/105/114 仍是 AI 槽推送,
     //    两者必须一起改; 等普通房 S→C 抓包钉死线序后再在 isPractice 处分叉。
     val player = c.users.firstOrNull()
-    if (player != null) {
+    if (sessionType == SESSION_TYPE_BATTLE) {
+        Room.setupAiBattleSlots(player, bombers)
+    } else if (player != null) {
         val requestedBomber = bombers.firstOrNull() ?: player.bomber
         val chosenBomber = if (requestedBomber in 0..15) requestedBomber else player.bomber
         val effectiveBomber = if (chosenBomber == 4) 10 else chosenBomber
@@ -86,6 +90,7 @@ val CreateSessionReq = PKTHandler { c ->
 
         Room.slots[0].apply {
             this.user = player
+            this.isAI = false
             state = FLAG_CHIEF
             bomber = effectiveBomber
             color = 0

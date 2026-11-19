@@ -60,7 +60,8 @@ DestroyGhostReq: 152
 #LapFinishedReq: 154
 BoxItemSpawnReport: 154
 LapInfoReq: 155
-AirplaneReq: 156
+#AirplaneReq: 156
+NpcEventReq: 156
 CreateObjReq: 158
 DestroyObjReq: 159
 EatBulaReq: 160

@@ -3,7 +3,9 @@ package bnbemu.handler.room
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.PracticeSetSlotAI
+import bnbemu.packet.room.SlotBomber
 import bnbemu.server.Room
+import bnbemu.server.bomber
 import org.tinylog.kotlin.Logger
 
 // ============================================================================
@@ -26,13 +28,39 @@ import org.tinylog.kotlin.Logger
 //     0x52B3E8 `cmp esi,7 / ja 0x52B47D` 限定为 ≤7，因此回显时填目标槽位号，
 // ============================================================================
 val AILevelChangeReq = PKTHandler { c ->
-    Decode1                     // chiefSlot: 0x688446 本机玩家序号, 服务端不使用
+    val chiefSlot = Decode1     // 0x688446 本机玩家序号
     val slotIdx = Decode1
-    Decode1                     // charId: AI 角色/头像 id, 客户端回显用, 服务端不落库
-    val aiLevel = Decode1       // 才是 AI 难度档 0..4
+    val charId = Decode1        // NPC 选择器选中的角色 id (20..23) 或当前角色 id
+    val aiLevel = Decode1       // AI 难度档 0..4
     val level = aiLevel.coerceIn(0, 4)
 
     val slot = Room.slots.getOrNull(slotIdx)
+    if (Room.isAIBattle) {  // 激战模式可以设置电脑的角色类型
+        if (slotIdx !in 4..7 || slot == null) {
+            Logger.warn("[AILevelChangeReq] 激战模式忽略越界/真人槽 slot=$slotIdx")
+            return@PKTHandler
+        }
+        val refSlot = chiefSlot.takeIf { it in 0..3 && Room.slots[it].user != null }
+            ?: Room.chiefSlotIndex()
+        slot.isAI = true
+        slot.user = null
+        slot.aILevel = level
+        if (Room.isBattleNpcBomber(charId) || charId in 0..15) {
+            slot.bomber = charId
+        }
+        val effectiveBomber = slot.bomber.toInt()
+        Logger.info("激战模式设置AI槽位${slotIdx} 角色=${effectiveBomber} 难度=${level} refSlot=${refSlot}")
+
+        val pktBomber = SlotBomber(slotIdx, effectiveBomber)
+        val pktAi = PracticeSetSlotAI(slot = slotIdx, isAI = true, refSlot = refSlot, aiLevel = level)
+        if (Room.uniqueClients.any()) {
+            Room.BC(pktBomber, pktAi)
+        } else {
+            c.send(pktBomber, pktAi)
+        }
+        return@PKTHandler
+    }
+
     if (slot != null) {
         slot.isAI = true
         slot.aILevel = level

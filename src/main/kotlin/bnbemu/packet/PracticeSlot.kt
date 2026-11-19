@@ -22,9 +22,9 @@ fun PracticeSlotReady(slot: Int, state: Int = 2) = PKT {
     Encode1((slot shl 4) or (state and 0x0F))
 }
 
-// ---- op 104 单槽 1B: slot0→0, 其余 (slot<<4)|8 ----
-fun PracticeSlot104(slot: Int) = PKT {
-    Encode1(if (slot == 0) 0 else (slot shl 4) or 8)
+// ---- op 104 单槽 1B: 槽位颜色/队伍同步 (slot<<4)|color (slot0→0, 其余→(slot<<4)|8) ----
+fun SetSlotColor(slot: Int, color: Int = if (slot == 0) 0 else 8) = PKT {
+    Encode1(((slot and 0x0F) shl 4) or (color and 0x0F))
 }
 
 // ---- op 105 单槽 2B: E1(slot) E1(bomber) ----
@@ -36,11 +36,11 @@ fun PracticeSetPlayer(
     Encode1(bomber)
 }
 
-// ---- op 114 单槽 6B ----
-fun PracticeSlot114(slot: Int) = PKT {
+// ---- op 114 单槽 6B: 槽位角色预览 / 房间表情动作 (Fanfare) 同步 ----
+fun SetSlotFanfare(slot: Int, bomber: Int = 5) = PKT {
     Encode1(slot)
-    Encode1(5)
-    Encode1(5)
+    Encode1(bomber)
+    Encode1(bomber)
     Encode1(0)
     Encode2(0)
 }

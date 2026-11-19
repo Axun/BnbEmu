@@ -4,6 +4,7 @@ import bnbemu.constants.CharacterType
 import bnbemu.constants.MAX_SESSION_SLOTS
 import bnbemu.data.map.MapCatalog
 import bnbemu.netty.PKT
+import bnbemu.packet.SESSION_TYPE_PRACTICE
 import bnbemu.server.Room
 import bnbemu.server.bomber
 import kotlin.random.Random
@@ -91,7 +92,7 @@ fun GameStartMapInfo(
     themeId: Int = 29,
     mapName: String = "Cemetery04",
     mapId: Int = 176,
-    gameOptions: Int = 15,
+    gameOptions: Int = SESSION_TYPE_PRACTICE,
     flag: Int = 0,
     spawnPositions: IntArray = intArrayOf(2, 1, 6, 0, 3, 4, 5, 7),
     activeSlots: List<Int> = (0..7).toList(),
@@ -122,7 +123,8 @@ fun GameStartMapInfo(
         } else {
             slot?.bomber?.toInt() ?: CharacterType.Boz.value
         }
-        val team = if (i == 0) 0 else 8
+        // 激战模式下，0..3 号槽位属于真人方，所以判断user
+        val team = if (i == 0 || slot?.user != null) 0 else 8
         val spawn = if (i < spawnPositions.size) spawnPositions[i] else i
 
         Encode1(i)

@@ -4,15 +4,16 @@ import bnbemu.constants.MAX_SESSION_SLOTS
 import bnbemu.netty.ClientSocket
 import bnbemu.packet.CAPTURE_USER_ID
 import bnbemu.packet.EnterSessionResult
+import bnbemu.packet.NpcAvailability
 import bnbemu.packet.PracticeSetPlayer
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.PracticeSetSlotAI
-import bnbemu.packet.PracticeSlot104
-import bnbemu.packet.PracticeSlot114
 import bnbemu.packet.PracticeSlotReady
 import bnbemu.packet.RoomEntry
 import bnbemu.packet.RoomList
 import bnbemu.packet.SessionInfoResult
+import bnbemu.packet.SetSlotColor
+import bnbemu.packet.SetSlotFanfare
 import bnbemu.packet.Unk113
 import bnbemu.packet.UserSimpleInfoResult
 import bnbemu.packet.WelcomeNotice
@@ -22,7 +23,7 @@ import bnbemu.packet.room.SelectMap
  * 整条「进房间」S→C 推送链（练习房基准）。
  *
  * 原来内联在 `handler/CreateSessionReq.kt`（C→S op 75 的回应），
- * 2026-11-08 抽出来给「对局结束回房间」复用：`Room.backToRoom` 发完 S→C op 155 之后，
+ * 抽出来给「对局结束回房间」复用：`Room.backToRoom` 发完 S→C op 155 之后，
  * 客户端虽然已经切回 stage 12，但房间对象/会话是空的 —— 不补这条链，房主位、座位、
  * 房间名、选图都会是降级状态。
  *
@@ -54,7 +55,7 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
         SetPlayer(slotId = 0, user = user),
     )
     if (init) {
-        c.send(SelectMap(result = 0, themeId = 0, mapId = 253))  // 海盗随机
+        c.send(SelectMap(result = 0, themeId = Room.themeId, mapId = Room.mapId))
     }
 
     // 106×8 —— 按服务端权威的 Room.slots[].state 回灌「封闭 / 开放」位。
@@ -73,34 +74,61 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
         val closed = (Room.slots[slot].state.toInt() and FLAG_CLOSED) != 0
         c.send(PracticeSlotReady(slot, state = if (closed) 1 else 2))
     }
-    // 每槽先发 [114, 104, 105]，随后补「下一槽」的 AI 槽属性包 103 (槽号 = 当前组 + 1)。
-    // 只有槽 0 是真人，槽 1..7 全是 AI，op 103 从不用于真人槽。
-    repeat(8) { slot ->
-        c.send(
-            PracticeSlot114(slot),
-            PracticeSlot104(slot),
-            PracticeSetPlayer(slot),
-        )
-        // op 103 第 3 字段 refSlot = 槽位引用 (抓包等于槽号, 客户端要求 ≤7)，
-        // 第 4 字段 aiLevel = 难度档 0..4 (抓包初始 = 1)。
-        //
-        // ⚠️ 这条链同时被 Room.backToRoom / ShopToRoomReq 复用：
-        //    旧实现把 aiLevel 写死 1、isAI 写死 true，于是每次回房都把客户端全局槽位
-        //    结构 +8 (0x685E9B 写入 / 0x686A4C 读回，也是 +/- 按钮的起算值) 冲成默认档，
-        //    表现为「对局结束后设置的 AI 等级回到 1」，并且会把玩家踢掉的 AI 加回来。
-        //    现在改为读 Room.slots 的服务端权威状态回灌；客户端不保存房间设置，
-        //    重放进房链时服务端必须把 isAI / aILevel 一并带回。
-        if (slot < 7) {
-            val idx = slot + 1
-            val s = Room.slots[idx]
+
+    if (Room.isAIBattle) {
+        val refSlot = Room.chiefSlotIndex()
+        repeat(8) { slot ->
+            val s = Room.slots[slot]
+            val slotBomber = s.bomber.toInt()
             c.send(
-                PracticeSetSlotAI(
-                    slot = idx,
-                    isAI = s.isAI && s.user == null,
-                    refSlot = idx,
-                    aiLevel = s.aILevel,
-                )
+                SetSlotFanfare(slot, bomber = slotBomber),
+                SetSlotColor(slot),
+                PracticeSetPlayer(slot, bomber = slotBomber),
             )
+            // 激战模式只有 4..7 号槽属于 NPC 队伍; refSlot 指向房主真人槽 (0),
+            // 避免 1..3 真人空槽误挂载机器人。
+            if (slot in 4..7) {
+                c.send(
+                    PracticeSetSlotAI(
+                        slot = slot,
+                        isAI = s.isAI && s.user == null,
+                        refSlot = refSlot,
+                        aiLevel = s.aILevel,
+                    )
+                )
+            }
+        }
+        c.send(NpcAvailability())
+    } else {
+        // 每槽先发 [114, 104, 105]，随后补「下一槽」的 AI 槽属性包 103 (槽号 = 当前组 + 1)。
+        // 只有槽 0 是真人，槽 1..7 全是 AI，op 103 从不用于真人槽。
+        repeat(8) { slot ->
+            c.send(
+                SetSlotFanfare(slot),
+                SetSlotColor(slot),
+                PracticeSetPlayer(slot),
+            )
+            // op 103 第 3 字段 refSlot = 槽位引用 (抓包等于槽号, 客户端要求 ≤7)，
+            // 第 4 字段 aiLevel = 难度档 0..4 (抓包初始 = 1)。
+            //
+            // ⚠️ 这条链同时被 Room.backToRoom / ShopToRoomReq 复用：
+            //    旧实现把 aiLevel 写死 1、isAI 写死 true，于是每次回房都把客户端全局槽位
+            //    结构 +8 (0x685E9B 写入 / 0x686A4C 读回，也是 +/- 按钮的起算值) 冲成默认档，
+            //    表现为「对局结束后设置的 AI 等级回到 1」，并且会把玩家踢掉的 AI 加回来。
+            //    现在改为读 Room.slots 的服务端权威状态回灌；客户端不保存房间设置，
+            //    重放进房链时服务端必须把 isAI / aILevel 一并带回。
+            if (slot < 7) {
+                val idx = slot + 1
+                val s = Room.slots[idx]
+                c.send(
+                    PracticeSetSlotAI(
+                        slot = idx,
+                        isAI = s.isAI && s.user == null,
+                        refSlot = idx,
+                        aiLevel = s.aILevel,
+                    )
+                )
+            }
         }
     }
     c.send(WelcomeNotice())
