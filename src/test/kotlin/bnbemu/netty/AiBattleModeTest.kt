@@ -25,7 +25,6 @@ import bnbemu.packet.room.SlotBomber
 import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.FLAG_CLOSED
 import bnbemu.server.Room
-import bnbemu.server.SlotMatchState
 import bnbemu.server.User
 import bnbemu.server.bomber
 import bnbemu.server.color
@@ -37,6 +36,7 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -79,7 +79,6 @@ class AiBattleModeTest {
             it.aILevel = 2
             it.bomber = 0
             it.color = 0
-            it.matchState = SlotMatchState.OUT_OF_MATCH
         }
     }
 
@@ -364,6 +363,7 @@ class AiBattleModeTest {
 
         // backToRoom + ShopToRoomReq preserve AI Battle state & NpcAvailability
         Room.backToRoom(force = true)
+        assertNull(Room.battle, "backToRoom 必须销毁 BattleSession")
         val backOps = drainOutbound(ch).map { it.first }
         assertTrue(155 in backOps)
         assertTrue(271 in backOps)

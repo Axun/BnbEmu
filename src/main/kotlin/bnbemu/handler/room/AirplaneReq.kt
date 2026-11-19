@@ -2,24 +2,22 @@ package bnbemu.handler.room
 
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.room.Airplane
 import bnbemu.server.AirplaneItem
 import bnbemu.server.Room
-import bnbemu.server.Room.lastAirplaneTime
 
 // CGameSession::OnRequestAirplane
 val AirplaneReq = PKTHandler { c ->
-    val now = System.currentTimeMillis()
-
-    // 檢查：距離上次請求需超過 7000ms
-    if (lastAirplaneTime + 7000 > now)
+    val battle = Room.battle
+    if (battle == null) {
+        if (readableBytes() > 0) skipBytes(readableBytes())
         return@PKTHandler
+    }
 
     val count = Decode1
 
     if (count in 1..3) {
         val airplaneItems = mutableListOf<AirplaneItem>()
-        repeat(count) { i ->
+        repeat(count) {
             val v1 = Decode1 // 0
             val v2 = Decode1 // 42
             val v3 = Decode1 // 9
@@ -29,11 +27,7 @@ val AirplaneReq = PKTHandler { c ->
             )
         }
 
-        val scheduledTime = (now + 2000)
-
-        lastAirplaneTime = scheduledTime
-
-        Room BC Airplane(scheduledTime.toInt(), airplaneItems)
+        battle.onRequestAirplane(airplaneItems)
     } else {
         error("Strange Request Airplane, nCount=$count")
     }

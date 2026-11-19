@@ -3,6 +3,7 @@ package bnbemu.netty
 import bnbemu.handler.room.SetBomberEventReq
 import bnbemu.packet.room.SetBomberEvent
 import bnbemu.packet.room.SetBombState
+import bnbemu.server.BattleSession
 import bnbemu.server.Bomb
 import bnbemu.server.Room
 import bnbemu.server.User
@@ -58,49 +59,49 @@ class SetBomberEventTest {
         return ByteArray(buf.readableBytes()).also { buf.readBytes(it) }
     }
 
-    /** Room.addBomb 在共享 EventLoop 上异步注册, 等它落地后再断言, 避免竞态。 */
-    private fun awaitBomb(bombToken: Int): Bomb {
+    /** BattleSession.addBomb 在共享 EventLoop 上异步注册, 等它落地后再断言, 避免竞态。 */
+    private fun awaitBomb(battle: BattleSession, bombToken: Int): Bomb {
         val deadline = System.nanoTime() + 1_000_000_000L
         while (System.nanoTime() < deadline) {
-            synchronized(Room.bombs) { Room.getBomb(bombToken) }?.let { return it }
+            battle.getBomb(bombToken)?.let { return it }
             Thread.sleep(5)
         }
-        error("Room.addBomb 异步注册未生效: bombToken=$bombToken")
+        error("BattleSession.addBomb 异步注册未生效: bombToken=$bombToken")
     }
 
     /**
-     * 端到端: C→S op 106 → Room.BC → EmbeddedChannel 收到 S→C op 139。
+     * 端到端: C→S op 106 → BattleSession.broadcast → EmbeddedChannel 收到 S→C op 139。
      * 发射泡的落地激活是延时排程, 这里把延时调大避免后台任务干扰,
-     * 由 [beforePackets] 显式调用 Room.activateLaunchedBomb 模拟「延时到点」。
+     * 由 [beforePackets] 显式调用 battle.activateLaunchedBomb 模拟「延时到点」。
      */
     private fun runBombRequest(
         body: ByteArray,
         bombToken: Int = 40,
-        beforePackets: () -> Unit = {},
-        assertions: (List<ByteArray>) -> Unit
+        beforePackets: (BattleSession) -> Unit = {},
+        assertions: (BattleSession, List<ByteArray>) -> Unit
     ) {
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
         val previousUser = Room.slots[0].user
-        val previousDelay = Room.launchedBombActivationDelayMs
+        val previousDelay = Room.battleConfig.launchedBombActivationDelayMs
         try {
             Room.slots[0].user = User(cs, id = 1, name = "tester")
-            Room.launchedBombActivationDelayMs = 60_000L
-            Room.reset()
+            Room.battleConfig.launchedBombActivationDelayMs = 60_000L
+            val battle = Room.startGame()
             ch.outboundMessages().clear()
 
             val buf = Unpooled.wrappedBuffer(body)
             with(SetBomberEventReq) { buf.handle(cs) }
             assertEquals(0, buf.readableBytes(), "C→S body 必须被完整消费, 不能残留影响下一包")
 
-            awaitBomb(bombToken)
-            beforePackets()
+            awaitBomb(battle, bombToken)
+            beforePackets(battle)
 
             val sent = ch.outboundMessages().toList()
-            assertions(sent.map { encode(it as PKT) })
+            assertions(battle, sent.map { encode(it as PKT) })
         } finally {
             Room.slots[0].user = previousUser
-            Room.launchedBombActivationDelayMs = previousDelay
+            Room.battleConfig.launchedBombActivationDelayMs = previousDelay
             Room.reset()
             ch.finish()
         }
@@ -117,11 +118,11 @@ class SetBomberEventTest {
 
     @Test
     fun testTankBombReplyIncludesLandingExtensionAndActivation() {
-        runBombRequest(tankBombBody, beforePackets = {
-            assertTrue(Room.launchedBombActivationPending(40), "发射泡必须排程延时激活, 不能立即发")
-            assertTrue(Room.activateLaunchedBomb(40), "延时到点应下发 state=1")
-            assertFalse(Room.launchedBombActivationPending(40), "激活只能执行一次")
-        }) { replies ->
+        runBombRequest(tankBombBody, beforePackets = { battle ->
+            assertTrue(battle.launchedBombActivationPending(40), "发射泡必须排程延时激活, 不能立即发")
+            assertTrue(battle.activateLaunchedBomb(40), "延时到点应下发 state=1")
+            assertFalse(battle.launchedBombActivationPending(40), "激活只能执行一次")
+        }) { battle, replies ->
             val sent = replies[0]
             assertEquals(27, sent.size, "bombFlags & 0x20 时 op139 必须从 24B 变 27B")
             assertEquals(
@@ -134,9 +135,9 @@ class SetBomberEventTest {
             )
 
             // 角色槽位仍是炮口, 服务端水泡表则登记落点
-            assertEquals(10, Room.slots[0].gridX)
-            assertEquals(1, Room.slots[0].gridY)
-            val bomb = awaitBomb(40)
+            assertEquals(10, battle.slotState(0)!!.gridX)
+            assertEquals(1, battle.slotState(0)!!.gridY)
+            val bomb = awaitBomb(battle, 40)
             assertEquals(10, bomb.gridX, "服务端水泡必须注册在落点 X")
             assertEquals(12, bomb.gridY, "服务端水泡必须注册在落点 Y, 不是炮口 (10,1)")
             assertTrue(bomb.isSpecial, "0x20 才是 isSpecial 判据, 旧的 flag0 != 0 判错了")
@@ -145,15 +146,15 @@ class SetBomberEventTest {
 
     @Test
     fun testLatestTankSampleActivatesBomb() {
-        runBombRequest(tankBombBodyToken60, bombToken = 60, beforePackets = {
-            assertTrue(Room.activateLaunchedBomb(60))
-        }) { replies ->
+        runBombRequest(tankBombBodyToken60, bombToken = 60, beforePackets = { battle ->
+            assertTrue(battle.activateLaunchedBomb(60))
+        }) { battle, replies ->
             assertEquals(tankBombReplyToken60.toHexString(), replies[0].toHexString())
             assertEquals(activationToken60.toHexString(), replies[1].toHexString())
 
-            assertEquals(1, Room.slots[0].gridX, "角色槽位记炮口 (1,10)")
-            assertEquals(10, Room.slots[0].gridY)
-            val bomb = awaitBomb(60)
+            assertEquals(1, battle.slotState(0)!!.gridX, "角色槽位记炮口 (1,10)")
+            assertEquals(10, battle.slotState(0)!!.gridY)
+            val bomb = awaitBomb(battle, 60)
             assertEquals(8, bomb.gridX, "服务端水泡登记落点 (8,10)")
             assertEquals(10, bomb.gridY)
             assertTrue(bomb.isSpecial)
@@ -163,38 +164,38 @@ class SetBomberEventTest {
     @Test
     fun testEarlyDetonationSkipsActivation() {
         // 射到钉子/飞镖提前引爆 (onObjectHit 立刻从 bombs 移除) → 延时到点不得再发激活包
-        runBombRequest(tankBombBody, beforePackets = {
+        runBombRequest(tankBombBody, beforePackets = { battle ->
             assertTrue(
-                Room.onObjectHit(targetObjectId = 999, gridX = 10, gridY = 12, delayMs = 0, broadcast = false),
+                battle.onObjectHit(targetObjectId = 999, gridX = 10, gridY = 12, delayMs = 0, broadcast = false),
                 "按落点应能命中这颗泡"
             )
-            assertFalse(Room.activateLaunchedBomb(40), "泡已被移除, 激活必须跳过")
-        }) { replies ->
+            assertFalse(battle.activateLaunchedBomb(40), "泡已被移除, 激活必须跳过")
+        }) { _, replies ->
             assertEquals(1, replies.size, "提前引爆后不得再下发给死泡的 state=1 激活包")
         }
     }
 
     @Test
     fun testPlainBombReplyStays24BytesAndNeedsNoActivation() {
-        runBombRequest(plainBombBody, beforePackets = {
-            assertFalse(Room.launchedBombActivationPending(40), "普通泡不排程落地激活")
-            assertFalse(Room.activateLaunchedBomb(40), "没有排程记录时激活应幂等跳过")
-        }) { replies ->
+        runBombRequest(plainBombBody, beforePackets = { battle ->
+            assertFalse(battle.launchedBombActivationPending(40), "普通泡不排程落地激活")
+            assertFalse(battle.activateLaunchedBomb(40), "没有排程记录时激活应幂等跳过")
+        }) { battle, replies ->
             assertEquals(1, replies.size, "普通泡只回 op139 一包")
             assertEquals(24, replies[0].size, "普通放泡不得多写扩展字节")
             assertEquals(plainBombReply.toHexString(), replies[0].toHexString(), "11B 定长路径必须保持原样")
-            assertFalse(awaitBomb(40).isSpecial, "普通水泡不是发射型, 不需要 state=1 激活")
-            assertEquals(10, awaitBomb(40).gridX)
-            assertEquals(1, awaitBomb(40).gridY)
+            assertFalse(awaitBomb(battle, 40).isSpecial, "普通水泡不是发射型, 不需要 state=1 激活")
+            assertEquals(10, awaitBomb(battle, 40).gridX)
+            assertEquals(1, awaitBomb(battle, 40).gridY)
         }
     }
 
     @Test
     fun testLaunchedFlagWithoutExtensionFallsBackToOrigin() {
         // 标志置位但扩展字节缺失 (跨包截断): 不得越界读取断线, 仍需补 3B 保持客户端读序对齐
-        runBombRequest(launchedFlagWithoutExtension, beforePackets = {
-            assertTrue(Room.activateLaunchedBomb(40))
-        }) { replies ->
+        runBombRequest(launchedFlagWithoutExtension, beforePackets = { battle ->
+            assertTrue(battle.activateLaunchedBomb(40))
+        }) { _, replies ->
             assertEquals(27, replies[0].size, "只要 bombFlags 带 0x20, 回显就必须带 3B 扩展")
             assertEquals(fallbackReply.toHexString(), replies[0].toHexString(), "缺数据时落点退回发射点")
             assertEquals(activationToken40.toHexString(), replies[1].toHexString(), "标志置位就必须激活")

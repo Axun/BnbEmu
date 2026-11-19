@@ -42,7 +42,7 @@ val ChatMsg = PKTHandler { c ->
     // 命令列表（前缀后接命令名，如 !die 3）：
     //   die  <slot>                -> 广播 S->C op159（单字节 BomberDie，只置状态17/音效0x37，实测无感）
     //   list <slot> [slot...]      -> 广播 S->C op146 state=5「死亡名单」（实测：当场死亡 + 死亡音 0x2A）
-    //   trap <slot> [x y]          -> op146 state=2「困住」；不给坐标就用该槽最后上报的位置
+    //   trap <slot> [x y]          -> op146 state=2「困住」；必须给坐标，不给则拒绝下发（避免瞬移到左上角）
     //   free <slot> [saverSlot]    -> op146 state=12「脱困」(不给 saver) 或 state=3「被救」
     //   shield <slot>              -> op146 state=9「护盾」；被撞时客户端会自己破盾并报 op112 0xA0
     //   st   <state> <slot> [x y]  -> 广播任意 state 的 op146，用来试每个 state 的语义
@@ -52,12 +52,14 @@ val ChatMsg = PKTHandler { c ->
         // ⚠️ 副作用：不带前缀的纯 "die 3" 也会命中，普通聊天可能误触发；建议一律带前缀。
         val cmd = text.trim().dropWhile { !it.isLetter() }
 
+        val battle = Room.battle
+
         val die = DEBUG_DIE.find(cmd)
-        if (die != null) Room.debugBroadcastBomberDie(die.groupValues[1].toInt())
+        if (die != null) battle?.debugBroadcastBomberDie(die.groupValues[1].toInt())
 
         val list = DEBUG_LIST.find(cmd)
         if (list != null) {
-            Room.broadcastDeathList(
+            battle?.broadcastDeathList(
                 list.groupValues[1].split(Regex("[,\\s]+")).filter { it.isNotEmpty() }.map { it.toInt() },
                 debug = true
             )
@@ -71,7 +73,7 @@ val ChatMsg = PKTHandler { c ->
             val x = rest.getOrNull(0)?.toInt() ?: -1
             val y = rest.getOrNull(1)?.toInt() ?: -1
             // state 2/3/4 会拿这两栏当坐标：能不给就别给 0，否则客户端会把角色瞬移到左上角。
-            Room.setBomberState(slot, state, x, y)
+            battle?.setBomberState(slot, state, x, y)
         }
 
         val trap = DEBUG_TRAP.find(cmd)
@@ -80,14 +82,14 @@ val ChatMsg = PKTHandler { c ->
             val rest = trap.groupValues[2].trim().split(Regex("[,\\s]+")).filter { it.isNotEmpty() }
             val x = rest.getOrNull(0)?.toInt() ?: -1
             val y = rest.getOrNull(1)?.toInt() ?: -1
-            Room.trapBomber(slot, x, y)
+            battle?.trapBomber(slot, x, y)
         }
 
         val free = DEBUG_FREE.find(cmd)
         if (free != null) {
             val slot = free.groupValues[1].toInt()
             val saver = free.groupValues[2].trim().toIntOrNull() ?: -1
-            Room.freeBomber(slot, saver)
+            battle?.freeBomber(slot, saver)
         }
     }
 }

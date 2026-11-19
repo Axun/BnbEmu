@@ -30,7 +30,7 @@ import bnbemu.server.Room
 // 服务端处理: 客户端在 0x0054CABA 里只做格子/占位校验然后 0x5393C2 入队, **没有本地位移预测**;
 // 箱子位移的唯一实现是 0x00565CE0, 而它在整个 .text 里只有一个调用者 ——
 // S→C op 142 的 handler 0x0054A5F9。所以服务端必须把本包 7 字节原样广播回所有人
-// (含推箱者本人), 箱子才会动。广播见 Room.onMovableBoxPush / packet/room/MovableBoxMove.kt。
+// (含推箱者本人), 箱子才会动。广播见 BattleSession.onMovableBoxPush / packet/room/MovableBoxMove.kt。
 // ⚠️ 旧 TW_5 表的 S→C op 155 / 357 在 EN 客户端局内分发器 (0x0055A4D8) 里没有对应分支, 发了会被丢弃。
 // 另注: S→C op 109 = SelectBomber (房间准备阶段) 是反方向的另一个包，与本包无关。
 // 包内 slotId 是客户端 CGameMsgCache 待确认队列的槽位 (= OnTick 循环下标, 0..7), 不是玩家槽位;
@@ -48,7 +48,7 @@ val PushMovableBoxReq = PKTHandler { c ->
     val targetY = Decode1
     val slotId = Decode1
 
-    Room.onMovableBoxPush(boxSeq, gridX, gridY, targetX, targetY, slotId)
+    Room.battle?.onMovableBoxPush(boxSeq, gridX, gridY, targetX, targetY, slotId)
 
     // 防御式消费: 若未来客户端追加字段，不让残留字节影响下一包解析
     if (readableBytes() > 0) {

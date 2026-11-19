@@ -36,7 +36,7 @@ val BoxItemSpawnReport = PKTHandler { c ->
         5 -> {
             // 角色死亡上报: first 为 slotId
             val slotId = first
-            Room.onBomberDie(slotId)
+            Room.battle?.onBomberDie(slotId)
         }
         4 -> {
             val slotId = Decode2

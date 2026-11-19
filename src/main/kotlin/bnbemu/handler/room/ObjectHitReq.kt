@@ -19,7 +19,7 @@ import bnbemu.server.Room
 //     交叉验证: v68_Alias = E1(1B), v72 = E2(2B)。
 //   * 载荷 6B = E2(targetObjectId) E1(gridX) E1(gridY) E2(delayMs)
 //     - targetObjectId = sub_44B67A(obj+144), 客户端对象的混淆/校验 ID。
-//       ⚠️ 不是服务端的 bombToken / Room.bombs[].id, 不能直接拿它查水泡。
+//       ⚠️ 不是服务端的 bombToken / BattleSession.bombs[].id, 不能直接拿它查水泡。
 //     - gridX/gridY = obj+156 / obj+168 的格子坐标, 飞镖路径即命中格 (水泡) 所在格;
 //       字段序与 op106/op107 的 (gridX 行 0..12, gridY 列 0..14) 一致
 //       (sub_534520(map, gridX, gridY) 与方向增量表 dword_9886E4/9886E8 交叉验证)。
@@ -35,11 +35,11 @@ import bnbemu.server.Room
 //       与飞镖是两条链, 不能泛化。
 //     - 服务端下令引爆的入口是 S→C op138 SetBombState(bombId, state=0):
 //       0x005481BD → 0x00534B18 → 0x00534338 按 bombId 找水泡 → 0x00565E9F 引爆。
-//     ⇒ 真正闭环 (已实现): 按 gridX/gridY 在 Room.bombs 定位水泡, 延时 delayMs 后广播
+//     ⇒ 真正闭环 (已实现): 按 gridX/gridY 在 BattleSession.bombs 定位水泡, 延时 delayMs 后广播
 //       SetBombState(bomb.id, 0); objId 是客户端混淆 ID, 不能当 bombId 用。
 //   * ⚠️ 真端 TS 的 OnPlayEmotion: 108 → 118 (转发给除发送者之外的人) 是另一版本语义;
 //     EN v18 客户端没有表情走 108 的发包点, 故 EN_18_recv.yaml 的 PlayEmotionReq 已注释。
-//   * 引爆判定与广播全在 Room.onObjectHit: 命中格无水泡 / 重复上报会被跳过,
+//   * 引爆判定与广播全在 BattleSession.onObjectHit: 命中格无水泡 / 重复上报会被跳过,
 //     本 handler 只负责解析并转发参数, 不直接发包。
 val ObjectHitReq = PKTHandler { c ->
     if (readableBytes() < 6) {
@@ -63,9 +63,9 @@ val ObjectHitReq = PKTHandler { c ->
         )
     }
 
-    // 命中格有水泡 → Room 延时 delayMs 广播 S→C op138 state=0 引爆 (含发射者本人);
-    // 命中箱子/角色/重复上报 → Room 内部跳过。objId 只用于日志诊断, 不参与查泡。
-    Room.onObjectHit(targetObjectId, gridX, gridY, delayMs, sender = c)
+    // 命中格有水泡 → BattleSession 延时 delayMs 广播 S→C op138 state=0 引爆 (含发射者本人);
+    // 命中箱子/角色/重复上报 → 内部跳过。objId 只用于日志诊断, 不参与查泡。
+    Room.battle?.onObjectHit(targetObjectId, gridX, gridY, delayMs, sender = c)
 
     // 防御式消费: 未来客户端追加字段时不影响下一包解析。
     if (readableBytes() > 0) {

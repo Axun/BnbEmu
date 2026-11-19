@@ -13,8 +13,8 @@ class ObjectHitReqTest {
 
     @BeforeEach
     fun clearBombs() {
-        // handler 现在会走 Room.onObjectHit, 隔离其它测试留下的水泡
-        synchronized(Room.bombs) { Room.bombs.clear() }
+        // 确保未处于残留战斗中，隔离其它测试留下的状态
+        Room.reset()
     }
 
     @Test

@@ -20,7 +20,7 @@ import bnbemu.server.Room
 // 扩展字段 (Action 0x40 交互实体列表):
 //   Decode1(param) + Decode1(count) + count * [Decode1(gridY) + Decode1(gridX) + Decode2(bombId)]
 //
-// ⚠️ Action 0x60 = **对局结束信号**（不是普通动作），详见 bnbemu.server.Room.onLastTeamStanding:
+// ⚠️ Action 0x60 = **对局结束信号**（不是普通动作），详见 bnbemu.server.BattleSession.onLastTeamStanding:
 //   客户端帧更新 0x54B380~0x54B450 每帧统计 9 个队伍桶 (bomber+0x84),
 //   非空队伍数 == 1 时对每个存活 bomber 发 E1(0x60|slot)+E2(x)+E2(y)，
 //   然后**每帧重发**直到服务端下发 op160/169/150 —— 实测杀光 AI 后客户端会连发数百条，
@@ -40,8 +40,8 @@ val BomberActionReq = PKTHandler { c ->
 
     when (action) {
         // "只剩一支队伍" 上报 → 结算。slotId 是存活方, 决定玩家胜还是 AI 胜。
-        // 客户端每帧重发, Room 内部用 gameOverSent 去重。
-        0x60 -> Room.onLastTeamStanding(slotId)
+        // 客户端每帧重发, BattleSession 内部用 gameOverSent 去重。
+        0x60 -> Room.battle?.onLastTeamStanding(slotId)
 
         0x40 -> if (readableBytes() >= 2) {
             // E1(param) + E1(count) + count × [E1 gridY, E1 gridX, E2 bombId]

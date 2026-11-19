@@ -52,7 +52,7 @@ import bnbemu.server.state
  * `dword_A373C8`（那个回调只在**读回**校验失败时调用）。
  *
  * 若只靠本包回房，房间可能处于「降级」状态（没有房间对象/会话）——
- * 配合 `Room.reenterRoomAfterBack` 在 155 之后补推整条房间链（见 Room.backToRoom）。
+ * 配合 `Room.battleConfig.reenterRoomAfterBack` 在 155 之后补推整条房间链（见 Room.backToRoom）。
  */
 fun BackToRoom(
     chState: Int = 0,

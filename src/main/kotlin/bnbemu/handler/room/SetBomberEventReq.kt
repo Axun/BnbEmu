@@ -28,7 +28,7 @@ import bnbemu.server.Room
 //   · flightRange 只上报、客户端在 op 139 不读, 无需回显。
 //
 // 服务端处理:
-//   1) 用落点格 (无扩展时退回发射格) 调用 Room.addBomb 注册水泡 2.5s 倒计时;
+//   1) 用落点格 (无扩展时退回发射格) 调用 BattleSession.addBomb 注册水泡 2.5s 倒计时;
 //   2) 回显 S→C op 139 (SetBomberEvent)，原样带回 bombToken / bombFlags / 落点扩展及服务端分配的 bombId，
 //      客户端在 0x0054A3EA -> 0x0044BD9B 匹配 bombToken 后将 bombId 写入水泡对象 (+0x90) 并扣减待确认计数。
 //   3) ⚠️ 发射型水泡需要延时补一包 S→C op 138 SetBombState(bombId, state=1)「落地激活」:
@@ -41,9 +41,10 @@ import bnbemu.server.Room
 //      · sub_534B18 的 state=1 分支正好调 sub_45976E(v7,-1) 设 +192=1、清 +292、sub_560693 占格,
 //        且不覆盖 bombId (a2 == -1 时不写 +0x90), 所以后续 state=0 仍可按同一 id 找到这颗泡。
 //      · 顺序上 op139 必须先到 (创建/匹配水泡), state=1 后到。但不能紧跟着发 —— 会截断发射动画,
-//        所以由 Room.scheduleLaunchedBombActivation 延时 launchedBombActivationDelayMs (默认 500ms) 下发;
-//        **不改 expireAt**, 2.5s 引信仍从收到 op106 起算。到点若水泡已被提前引爆 (飞镖/钉子
-//        onObjectHit 或 onTick 到期移除) 则 Room.activateLaunchedBomb 直接跳过, 不给死泡发激活包。
+//        所以由 BattleSession.scheduleLaunchedBombActivation 延时 BattleConfig.launchedBombActivationDelayMs
+//        (默认 500ms) 下发; **不改 expireAt**, 2.5s 引信仍从收到 op106 起算。到点若水泡已被提前引爆
+//        (飞镖/钉子 BattleSession.onObjectHit 或 onTick 到期移除) 则 BattleSession.activateLaunchedBomb
+//        直接跳过, 不给死泡发激活包。
 // server = CGameSession::OnSetBomberEvent
 val SetBomberEventReq = PKTHandler { c ->
     if (readableBytes() < 11) {
@@ -79,12 +80,13 @@ val SetBomberEventReq = PKTHandler { c ->
     // 防御式消费: 客户端未来追加字段时不影响下一包解析。
     if (readableBytes() > 0) skipBytes(readableBytes())
 
+    val battle = Room.battle ?: return@PKTHandler
+
     if (slotId in 0..7) {
-        Room.slots[slotId].gridX = originGridX
-        Room.slots[slotId].gridY = originGridY
+        battle.updateSlotGrid(slotId, originGridX, originGridY)
     }
 
-    val bombId = Room.addBomb(
+    val bombId = battle.addBomb(
         slotId = slotId,
         gridX = landingGridX,
         gridY = landingGridY,
@@ -107,10 +109,10 @@ val SetBomberEventReq = PKTHandler { c ->
         launchDirection = launchDirection
     )
 
-    Room.BC(pkt)
+    battle.broadcast(pkt)
 
     if (isLaunchedBomb) {
         // 等发射动画播完再落地激活; 引信不延长, 到点若泡已被提前引爆则跳过。
-        Room.scheduleLaunchedBombActivation(bombId)
+        battle.scheduleLaunchedBombActivation(bombId)
     }
 }

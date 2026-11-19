@@ -11,6 +11,9 @@ import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -37,12 +40,12 @@ class BackToRoomTest {
     fun setUp() {
         cs = ClientSocket()
         ch = EmbeddedChannel(cs)
-        savedGameOverDelay = Room.gameOverDelayMs
-        savedReturnDelay = Room.resultReturnDelayMs
-        savedChain = Room.reenterRoomAfterBack
-        Room.gameOverDelayMs = 0
-        Room.resultReturnDelayMs = 0
-        Room.reenterRoomAfterBack = false // 默认只验 155，房间链单独测
+        savedGameOverDelay = Room.battleConfig.gameOverDelayMs
+        savedReturnDelay = Room.battleConfig.resultReturnDelayMs
+        savedChain = Room.battleConfig.reenterRoomAfterBack
+        Room.battleConfig.gameOverDelayMs = 0
+        Room.battleConfig.resultReturnDelayMs = 0
+        Room.battleConfig.reenterRoomAfterBack = false // 默认只验 155，房间链单独测
 
         Room.slots.forEach { slot ->
             slot.user = null
@@ -57,9 +60,9 @@ class BackToRoomTest {
 
     @AfterEach
     fun tearDown() {
-        Room.gameOverDelayMs = savedGameOverDelay
-        Room.resultReturnDelayMs = savedReturnDelay
-        Room.reenterRoomAfterBack = savedChain
+        Room.battleConfig.gameOverDelayMs = savedGameOverDelay
+        Room.battleConfig.resultReturnDelayMs = savedReturnDelay
+        Room.battleConfig.reenterRoomAfterBack = savedChain
         Room.slots.forEach { slot ->
             slot.user = null
             slot.isAI = false
@@ -141,11 +144,12 @@ class BackToRoomTest {
 
     @Test
     fun testMatchEndSendsBackToRoomAfterResult() {
-        Room.startGame()
+        val battle = Room.startGame()
+        assertNotNull(Room.battle)
         drain()
 
         // 逐个击杀 AI，最后一人阵亡即触发结算
-        for (slot in 1..7) Room.onBomberDie(slot)
+        for (slot in 1..7) battle.onBomberDie(slot)
 
         val sent = waitFor(155)
         val ops = sent.map(::opcodeOf)
@@ -156,6 +160,8 @@ class BackToRoomTest {
             ops.indexOf(155) > ops.indexOf(150),
             "op 155 必须在 op 150 之后（先让结果窗弹出来）, ops=$ops"
         )
+        assertNull(Room.battle, "自动回房后必须销毁 BattleSession")
+        assertTrue(battle.isDestroyed, "BattleSession 必须标记为已销毁")
     }
 
     @Test
@@ -167,8 +173,11 @@ class BackToRoomTest {
 
     @Test
     fun testBackToRoomDedupesPerMatch() {
+        val battle = Room.startGame()
         assertTrue(Room.backToRoom(), "首次下发")
-        assertTrue(!Room.backToRoom(), "同一局第二次调用应被去重")
+        assertNull(Room.battle, "回到房间后必须销毁 BattleSession")
+        assertTrue(battle.isDestroyed)
+        assertFalse(Room.backToRoom(), "同一局第二次调用应被去重")
         assertEquals(1, drain().count { opcodeOf(it) == 155 })
         assertTrue(Room.backToRoom(force = true), "force 可绕过去重（调试重试用）")
         assertEquals(2, drain().count { opcodeOf(it) == 155 })
@@ -176,7 +185,7 @@ class BackToRoomTest {
 
     @Test
     fun testRoomChainFollowsBackToRoom() {
-        Room.reenterRoomAfterBack = true
+        Room.battleConfig.reenterRoomAfterBack = true
         Room.backToRoom(force = true)
         // 房间链第一条是 op 87 RoomList
         val sent = waitFor(87)
@@ -188,9 +197,9 @@ class BackToRoomTest {
 
     @Test
     fun testBackToRoomIsNotSentWithoutMatchEnd() {
-        Room.startGame()
+        val battle = Room.startGame()
         drain()
-        Room.onBomberDie(1) // 还有 AI 存活，不结算
+        battle.onBomberDie(1) // 还有 AI 存活，不结算
         Thread.sleep(120)
         val ops = drain().map(::opcodeOf)
         assertTrue(ops.none { it == 155 }, "未结算时不得下发 op 155, ops=$ops")

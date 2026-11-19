@@ -15,5 +15,5 @@ val EatObstacleReq = PKTHandler { c ->
     val slotId = Decode1
     val gridX = Decode1
     val gridY = Decode1
-    Room BC EatObstacleResult(slotId, gridX, gridY)
+    Room.battle?.broadcast(EatObstacleResult(slotId, gridX, gridY))
 }

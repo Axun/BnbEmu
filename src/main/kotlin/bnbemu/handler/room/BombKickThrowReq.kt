@@ -46,7 +46,7 @@ val BombKickThrowReq = PKTHandler { c ->
         println("[op107] kind=$kind slot=$slotId bomb=$bombId ($fromX,$fromY)->($toX,$toY) ${moveDuration}ms")
     }
 
-    Room.onBombMove(slotId, kind, bombId, fromX, fromY, toX, toY, moveDuration)
+    Room.battle?.onBombMove(slotId, kind, bombId, fromX, fromY, toX, toY, moveDuration)
 
     // 防御式消费: 若未来客户端追加字段，不让残留字节影响下一包解析
     if (readableBytes() > 0) {

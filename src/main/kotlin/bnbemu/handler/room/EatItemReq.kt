@@ -30,5 +30,5 @@ val EatItemReq = PKTHandler { c ->
     val arg2 = Decode4
     val arg3 = Decode4
     val extra = DecodeStr
-    Room BC EatItemResult(slotId, gridX, gridY, itemSeq, itemType)
+    Room.battle?.broadcast(EatItemResult(slotId, gridX, gridY, itemSeq, itemType))
 }

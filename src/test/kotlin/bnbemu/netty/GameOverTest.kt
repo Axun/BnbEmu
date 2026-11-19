@@ -9,7 +9,6 @@ import bnbemu.packet.room.WINNER_TEAM_DRAW
 import bnbemu.server.Room
 import bnbemu.server.SlotMatchState
 import bnbemu.server.User
-import bnbemu.server.isAlive
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
@@ -30,7 +29,7 @@ import org.junit.jupiter.api.Test
  *   2. 兼容路径 —— C→S op 154 action=5（只对真人玩家成立：bomber+0x4D0 = m_selfidx 闸门）
  *
  * 结算包：S→C op 169 InitGameResult → op 150 GameResult。
- * 会打出 "XXX has been resurrected!"），只留给"复活币"道具用（Room.reviveBomber）。
+ * 会打出 "XXX has been resurrected!"），只留给"复活币"道具用（BattleSession.reviveBomber）。
  */
 class GameOverTest {
 
@@ -45,12 +44,12 @@ class GameOverTest {
     fun setUp() {
         cs = ClientSocket()
         ch = EmbeddedChannel(cs)
-        savedDelay = Room.gameOverDelayMs
-        savedReturnDelay = Room.resultReturnDelayMs
-        savedMatchTimeout = Room.matchTimeoutMs
-        savedTickInterval = Room.tickIntervalMs
-        Room.gameOverDelayMs = 0
-        Room.resultReturnDelayMs = -1 // 避免前序用例调度的 3.5s BackToRoom 污染后续用例 (回房单测见 BackToRoomTest)
+        savedDelay = Room.battleConfig.gameOverDelayMs
+        savedReturnDelay = Room.battleConfig.resultReturnDelayMs
+        savedMatchTimeout = Room.battleConfig.matchTimeoutMs
+        savedTickInterval = Room.battleConfig.tickIntervalMs
+        Room.battleConfig.gameOverDelayMs = 0
+        Room.battleConfig.resultReturnDelayMs = -1 // 避免前序用例调度的 BackToRoom 污染后续用例 (回房单测见 BackToRoomTest)
 
         // 练习房布局: slot 0 = 玩家, slot 1..7 = AI (见 CreateSessionReq)
         Room.slots.forEach { slot ->
@@ -65,10 +64,10 @@ class GameOverTest {
 
     @AfterEach
     fun tearDown() {
-        Room.gameOverDelayMs = savedDelay
-        Room.resultReturnDelayMs = savedReturnDelay
-        Room.matchTimeoutMs = savedMatchTimeout
-        Room.tickIntervalMs = savedTickInterval
+        Room.battleConfig.gameOverDelayMs = savedDelay
+        Room.battleConfig.resultReturnDelayMs = savedReturnDelay
+        Room.battleConfig.matchTimeoutMs = savedMatchTimeout
+        Room.battleConfig.tickIntervalMs = savedTickInterval
         Room.slots.forEach { slot ->
             slot.user = null
             slot.isAI = false
@@ -133,12 +132,12 @@ class GameOverTest {
 
     @Test
     fun testKillAllEnemiesEndsMatchWithPlayerWin() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
         // 逐个击杀 AI 1..7
         for (slot in 1..7) {
-            Room.onBomberDie(slot)
+            battle.onBomberDie(slot)
             if (slot < 7) {
                 assertFalse(
                     drain().any { opcodeOf(it) == 150 },
@@ -156,10 +155,10 @@ class GameOverTest {
 
     @Test
     fun testPlayerDeathStillEndsMatchWithAiWin() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
-        Room.onBomberDie(0)
+        battle.onBomberDie(0)
         val sent = collectSent()
         val ops = sent.map(::opcodeOf)
 
@@ -170,27 +169,27 @@ class GameOverTest {
 
     @Test
     fun testMatchContinuesWhileBothSidesHaveSurvivors() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
-        Room.onBomberDie(1)
-        Room.onBomberDie(2)
+        battle.onBomberDie(1)
+        battle.onBomberDie(2)
         Thread.sleep(120)
 
         val ops = drain().map(::opcodeOf)
         assertTrue(ops.contains(159), "阵亡必须广播 op 159, ops=$ops")
         assertFalse(ops.contains(150), "双方都还有人时不得结算, ops=$ops")
-        assertFalse(Room.gameOverSent)
+        assertFalse(battle.gameOverSent)
     }
 
     @Test
     fun testDuplicateDeathReportIsIgnored() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
-        Room.onBomberDie(3)
-        Room.onBomberDie(3) // 客户端 OnTick 重发 / 残流
-        Room.onBomberDie(3)
+        battle.onBomberDie(3)
+        battle.onBomberDie(3) // 客户端 OnTick 重发 / 残流
+        battle.onBomberDie(3)
 
         val ops = drain().map(::opcodeOf)
         assertEquals(1, ops.count { it == 159 }, "同一槽位重复阵亡上报只能广播一次, ops=$ops")
@@ -198,35 +197,35 @@ class GameOverTest {
 
     @Test
     fun testResultIsSentOnlyOnce() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
-        Room.onBomberDie(0)
+        battle.onBomberDie(0)
         collectSent()
         val first = drain().count { opcodeOf(it) == 150 }
         assertEquals(1, first, "结算只能下发一次")
 
         // 迟到的其他阵亡上报不得再触发第二套结算
-        Room.onBomberDie(4)
+        battle.onBomberDie(4)
         Thread.sleep(120)
         assertEquals(1, drain().count { opcodeOf(it) == 150 }, "结算后不得重复下发 op 150")
     }
 
     @Test
     fun testAliveStateIsResetOnNextMatch() {
-        Room.startGame()
-        for (slot in 1..7) Room.onBomberDie(slot)
+        val battle1 = Room.startGame()
+        for (slot in 1..7) battle1.onBomberDie(slot)
         collectSent()
-        assertTrue(Room.gameOverSent, "第一局应当已结算")
+        assertTrue(battle1.gameOverSent, "第一局应当已结算")
 
-        // 第二局: 所有参战槽位重新复活, 计数与结算标志都要复位
-        Room.startGame()
-        assertFalse(Room.gameOverSent, "新一局必须清空结算标志")
-        assertTrue(Room.slots[1].isAlive && Room.slots[7].isAlive, "新一局所有 AI 必须复活")
-        assertTrue(Room.slots[0].isAlive, "新一局玩家必须复活")
+        // 第二局: 创建全新的 BattleSession, 所有参战槽位重新复活, 计数与结算标志都要复位
+        val battle2 = Room.startGame()
+        assertFalse(battle2.gameOverSent, "新一局必须清空结算标志")
+        assertTrue(battle2.slotState(1)!!.isAlive && battle2.slotState(7)!!.isAlive, "新一局所有 AI 必须复活")
+        assertTrue(battle2.slotState(0)!!.isAlive, "新一局玩家必须复活")
 
         ch.outboundMessages().clear()
-        Room.onBomberDie(1)
+        battle2.onBomberDie(1)
         Thread.sleep(120)
         val ops = drain().map(::opcodeOf)
         assertTrue(ops.contains(159), "新一局首次阵亡上报不能被当成重复上报吞掉, ops=$ops")
@@ -235,40 +234,40 @@ class GameOverTest {
 
     @Test
     fun testUnknownSlotIsDropped() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
-        Room.onBomberDie(8)
-        Room.onBomberDie(-1)
+        battle.onBomberDie(8)
+        battle.onBomberDie(-1)
         assertTrue(drain().isEmpty(), "越界槽位不得广播也不得触发结算")
-        assertFalse(Room.gameOverSent)
+        assertFalse(battle.gameOverSent)
     }
 
     @Test
     fun testEmptySlotIsAlwaysOutOfMatch() {
         // slot 5 没座位
         Room.slots[5].isAI = false
-        Room.startGame()
-        assertEquals(SlotMatchState.OUT_OF_MATCH, Room.slots[5].matchState)
-        assertEquals(SlotMatchState.ALIVE, Room.slots[6].matchState, "AI 槽必须是 ALIVE")
-        assertFalse(Room.slots[5].isAlive)
+        val battle = Room.startGame()
+        assertEquals(SlotMatchState.OUT_OF_MATCH, battle.slotState(5)!!.matchState)
+        assertEquals(SlotMatchState.ALIVE, battle.slotState(6)!!.matchState, "AI 槽必须是 ALIVE")
+        assertFalse(battle.slotState(5)!!.isAlive)
         ch.outboundMessages().clear()
 
         // 空槽的错位/迟到阵亡上报必须被丢弃：不能给没有 bomber 的槽位广播 op 159
-        Room.onBomberDie(5)
+        battle.onBomberDie(5)
         assertTrue(drain().isEmpty(), "空槽阵亡上报不得广播 op 159")
-        assertEquals(SlotMatchState.OUT_OF_MATCH, Room.slots[5].matchState, "空槽状态不得被上报改写")
-        assertFalse(Room.gameOverSent)
+        assertEquals(SlotMatchState.OUT_OF_MATCH, battle.slotState(5)!!.matchState, "空槽状态不得被上报改写")
+        assertFalse(battle.gameOverSent)
     }
 
     @Test
     fun testDeathOnlyTransitionsFromAlive() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
-        Room.onBomberDie(2)
-        assertEquals(SlotMatchState.DEAD, Room.slots[2].matchState)
-        Room.onBomberDie(2)
-        assertEquals(SlotMatchState.DEAD, Room.slots[2].matchState, "DEAD 是终态, 重复上报不得改变状态")
+        battle.onBomberDie(2)
+        assertEquals(SlotMatchState.DEAD, battle.slotState(2)!!.matchState)
+        battle.onBomberDie(2)
+        assertEquals(SlotMatchState.DEAD, battle.slotState(2)!!.matchState, "DEAD 是终态, 重复上报不得改变状态")
         assertEquals(1, drain().count { opcodeOf(it) == 159 }, "只有一次 ALIVE→DEAD 才广播")
     }
 
@@ -277,15 +276,15 @@ class GameOverTest {
         // 将来若开纯人类 PvP 房 (无 AI), 死一个人不能被误判成"AI 全灭"而立刻结算
         for (i in 1..7) Room.slots[i].isAI = false
         Room.slots[1].user = User(cs, id = 2, name = "tester2")
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
-        Room.onBomberDie(0)
+        battle.onBomberDie(0)
         Thread.sleep(120)
         val ops = drain().map(::opcodeOf)
         assertTrue(ops.contains(159), "阵亡仍要广播 op 159, ops=$ops")
         assertFalse(ops.contains(150), "对手还活着时不得结算, ops=$ops")
-        assertFalse(Room.gameOverSent)
+        assertFalse(battle.gameOverSent)
     }
 
     // ---- 真实路径: C→S op 112 action=0x60 ----
@@ -322,72 +321,72 @@ class GameOverTest {
 
     @Test
     fun testAction60DoesNotReplayDeathAnimation() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
-        Room.onLastTeamStanding(0)
+        battle.onLastTeamStanding(0)
         Thread.sleep(120)
 
         val ops = drain().map(::opcodeOf)
         assertFalse(ops.contains(159), "AI 的死亡动画客户端本地已经播过, 不得再广播 op 159, ops=$ops")
-        assertEquals(SlotMatchState.DEAD, Room.slots[1].matchState, "落败方要补记 DEAD")
-        assertTrue(Room.slots[0].isAlive, "存活方保持 ALIVE")
+        assertEquals(SlotMatchState.DEAD, battle.slotState(1)!!.matchState, "落败方要补记 DEAD")
+        assertTrue(battle.slotState(0)!!.isAlive, "存活方保持 ALIVE")
     }
 
     @Test
     fun testRepeatedAction60EndsMatchOnlyOnce() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
         // 客户端每帧重发, 实测一秒能来几百条
-        repeat(50) { Room.onLastTeamStanding(0) }
+        repeat(50) { battle.onLastTeamStanding(0) }
 
         val sent = collectSent()
         assertEquals(1, sent.count { opcodeOf(it) == 150 }, "action=0x60 洪水只能触发一次结算")
-        repeat(5) { Room.onLastTeamStanding(0) }
+        repeat(5) { battle.onLastTeamStanding(0) }
         Thread.sleep(120)
         assertEquals(1, drain().count { opcodeOf(it) == 150 }, "结算后不得重复下发 op 150")
     }
 
     @Test
     fun testAction60FromAiSlotGivesAiWin() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
         // 玩家先阵亡 (op154 action=5 只对真人成立, 这条路径仍然有效),
         // 之后客户端会替存活的 AI 发 action=0x60 —— 但结算此时早就发过了, 不能重发
-        Room.onBomberDie(0)
+        battle.onBomberDie(0)
         val first = collectSent()
         assertEquals(1, first.count { opcodeOf(it) == 150 }, "玩家阵亡立刻结算")
         assertEquals(1, winnerTeamOf(first), "AI 胜, winnerTeam=1")
 
         ch.outboundMessages().clear()
-        Room.onLastTeamStanding(3)
+        battle.onLastTeamStanding(3)
         Thread.sleep(120)
         assertTrue(drain().isEmpty(), "已经结算过, 迟到的 action=0x60 不得再下发任何包")
     }
 
     @Test
     fun testAction60FromEmptySlotIsIgnored() {
-        Room.startGame()
+        // slot 5 是空槽
+        Room.slots[5].isAI = false
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
-        // slot 5 是空槽 (练习房只有 slot 0 + 1..7 AI? 这里清掉一个座位来模拟空槽)
-        Room.slots[5].isAI = false
-        Room.onLastTeamStanding(5)
+        battle.onLastTeamStanding(5)
 
         Thread.sleep(120)
         assertTrue(drain().isEmpty(), "空槽的错位上报不得触发结算")
-        assertFalse(Room.gameOverSent)
+        assertFalse(battle.gameOverSent)
         Room.slots[5].isAI = true
     }
 
     @Test
     fun testBomberDieBroadcastsDeathListToo() {        // 阵亡 = op159（状态 17/清队伍桶，实测无音效）+ op146 state5 死亡名单（摘除 + 音效 0x2A）
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
-        Room.onBomberDie(1)
+        battle.onBomberDie(1)
         val sent = drain()
         val ops = sent.map(::opcodeOf)
         assertEquals(1, ops.count { it == 159 }, "先发 op 159, ops=$ops")
@@ -448,29 +447,29 @@ class GameOverTest {
 
     @Test
     fun testWinRewards() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
-        Room.onLastTeamStanding(0)
+        battle.onLastTeamStanding(0)
 
         val sent = collectSent()
         val body = bodyOf(sent.first { opcodeOf(it) == 150 })
-        assertEquals(Room.winExpAfter, dec2(body, 11 + 33), "玩家胜 → +128 EXP = winExpAfter")
-        assertEquals(Room.winLucci, dec4(body, 11 + 49), "玩家胜 → +152 LUCCI = winLucci")
-        assertTrue(Room.loseExpAfter < Room.winExpAfter, "失败 EXP 必须低于胜利")
-        assertTrue(Room.loseLucci < Room.winLucci, "失败 LUCCI 必须低于胜利")
+        assertEquals(Room.battleConfig.winExpAfter, dec2(body, 11 + 33), "玩家胜 → +128 EXP = winExpAfter")
+        assertEquals(Room.battleConfig.winLucci, dec4(body, 11 + 49), "玩家胜 → +152 LUCCI = winLucci")
+        assertTrue(Room.battleConfig.loseExpAfter < Room.battleConfig.winExpAfter, "失败 EXP 必须低于胜利")
+        assertTrue(Room.battleConfig.loseLucci < Room.battleConfig.winLucci, "失败 LUCCI 必须低于胜利")
     }
 
     @Test
     fun testLoseRewardsAreLower() {
-        Room.startGame()
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
-        Room.onBomberDie(0) // 玩家阵亡 → AI 胜
+        battle.onBomberDie(0) // 玩家阵亡 → AI 胜
 
         val sent = collectSent()
         val body = bodyOf(sent.first { opcodeOf(it) == 150 })
         assertEquals(1, dec1(body[1]), "AI 胜")
-        assertEquals(Room.loseExpAfter, dec2(body, 11 + 33), "AI 胜 → 玩家 +128 EXP = loseExpAfter")
-        assertEquals(Room.loseLucci, dec4(body, 11 + 49), "AI 胜 → 玩家 +152 LUCCI = loseLucci")
+        assertEquals(Room.battleConfig.loseExpAfter, dec2(body, 11 + 33), "AI 胜 → 玩家 +128 EXP = loseExpAfter")
+        assertEquals(Room.battleConfig.loseLucci, dec4(body, 11 + 49), "AI 胜 → 玩家 +152 LUCCI = loseLucci")
     }
 
     @Test
@@ -504,12 +503,12 @@ class GameOverTest {
     fun testSimultaneousWipeoutHumanThenAiYieldsDraw() {
         // 1v1 练习房：缓冲期内人类先死、紧接着最后一名 AI 也死 → 升级为平局
         for (i in 2..7) Room.slots[i].isAI = false
-        Room.gameOverDelayMs = 80L
-        Room.startGame()
+        Room.battleConfig.gameOverDelayMs = 80L
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
-        Room.onBomberDie(0)
-        Room.onBomberDie(1)
+        battle.onBomberDie(0)
+        battle.onBomberDie(1)
 
         val sent = collectSent()
         val ops = sent.map(::opcodeOf)
@@ -519,20 +518,20 @@ class GameOverTest {
         assertEquals(WINNER_TEAM_DRAW, dec1(body[1]), "同时全灭必须判平局 (0xFF)")
         assertEquals(3, dec1(body[11 + 5]), "平局真人 +68 = DRAW(3)")
         assertEquals(3, dec1(body[11 + 64 + 1]), "平局 AI +68 = DRAW(3)")
-        assertEquals(Room.drawExpAfter, dec2(body, 11 + 33), "平局 EXP = drawExpAfter")
-        assertEquals(Room.drawLucci, dec4(body, 11 + 49), "平局 LUCCI = drawLucci")
+        assertEquals(Room.battleConfig.drawExpAfter, dec2(body, 11 + 33), "平局 EXP = drawExpAfter")
+        assertEquals(Room.battleConfig.drawLucci, dec4(body, 11 + 49), "平局 LUCCI = drawLucci")
     }
 
     @Test
     fun testSimultaneousWipeoutAiThenHumanYieldsDraw() {
         // 1v1 练习房：缓冲期内最后一名 AI 先死、紧接着人类也死 → 升级为平局
         for (i in 2..7) Room.slots[i].isAI = false
-        Room.gameOverDelayMs = 80L
-        Room.startGame()
+        Room.battleConfig.gameOverDelayMs = 80L
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
-        Room.onBomberDie(1)
-        Room.onBomberDie(0)
+        battle.onBomberDie(1)
+        battle.onBomberDie(0)
 
         val sent = collectSent()
         assertEquals(1, sent.count { opcodeOf(it) == 150 }, "只下发一次 op 150")
@@ -545,9 +544,9 @@ class GameOverTest {
     @Test
     fun testMatchTimeoutEndsWithDraw() {
         assertEquals(180_000L, savedMatchTimeout, "默认对局时限必须是 3 分钟 (180,000ms)")
-        Room.matchTimeoutMs = 60L
-        Room.tickIntervalMs = 20L
-        Room.startGame()
+        Room.battleConfig.matchTimeoutMs = 60L
+        Room.battleConfig.tickIntervalMs = 20L
+        val battle = Room.startGame()
         ch.outboundMessages().clear()
 
         val sent = collectSent(timeoutMs = 2000)
@@ -560,13 +559,13 @@ class GameOverTest {
         assertEquals(WINNER_TEAM_DRAW, dec1(body[1]), "超时必须判平局 (0xFF)")
         assertEquals(3, dec1(body[11 + 5]), "超时真人 +68 = DRAW(3)")
         assertEquals(3, dec1(body[11 + 64 + 1]), "超时 AI +68 = DRAW(3)")
-        assertEquals(Room.drawExpAfter, dec2(body, 11 + 33), "超时 EXP = drawExpAfter")
-        assertEquals(Room.drawLucci, dec4(body, 11 + 49), "超时 LUCCI = drawLucci")
+        assertEquals(Room.battleConfig.drawExpAfter, dec2(body, 11 + 33), "超时 EXP = drawExpAfter")
+        assertEquals(Room.battleConfig.drawLucci, dec4(body, 11 + 49), "超时 LUCCI = drawLucci")
 
         // 超时结算后迟到的死亡与只剩一队上报均不得再发包
         ch.outboundMessages().clear()
-        Room.onBomberDie(0)
-        Room.onLastTeamStanding(0)
+        battle.onBomberDie(0)
+        battle.onLastTeamStanding(0)
         Thread.sleep(100)
         assertTrue(drain().isEmpty(), "超时结算后迟到上报不得再发任何包")
     }

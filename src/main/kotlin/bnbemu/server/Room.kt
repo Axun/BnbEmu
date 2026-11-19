@@ -1,9 +1,6 @@
 package bnbemu.server
 
-import io.netty.channel.EventLoop
-import io.netty.util.concurrent.ScheduledFuture
 import bnbemu.constants.MAX_SESSION_SLOTS
-import bnbemu.debugMode
 import bnbemu.data.map.MapCatalog
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.NettyServer.workerGroup
@@ -12,21 +9,28 @@ import bnbemu.packet.ClientStage
 import bnbemu.packet.PracticeSetSlotAI
 import bnbemu.packet.PracticeSlotReady
 import bnbemu.packet.SESSION_TYPE_BATTLE
-import bnbemu.packet.room.*
+import bnbemu.packet.room.BackToRoom
+import bnbemu.packet.room.SetPlayer
+import bnbemu.packet.room.SetSlotState
+import io.netty.channel.EventLoop
 import org.tinylog.kotlin.Logger
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.TimeUnit
 
 // 之後改用class
 object Room {
     private val executor: EventLoop = workerGroup.next()
-    private var tickFuture: ScheduledFuture<*>? = null
-    private var nextBombId = 0
+    private val battleLock = Any()
+
     val slots = Array(8) { Slot() }
     var mapId = 89
     var themeId = 0
-    val bombs = mutableListOf<Bomb>()
-    var lastAirplaneTime = 0L
+
+    /** 默认战斗配置；每次开局创建 [BattleSession] 时传入快照。 */
+    val battleConfig = BattleConfig()
+
+    /** 当前活跃的战斗会话；仅在进入战斗（[startGame]）时创建，回到房间（[backToRoom] / [reset]）时销毁并置 null。 */
+    @Volatile
+    var battle: BattleSession? = null
+        private set
 
     /**
      * 房间号 / 会话 id —— S→C op 83 [bnbemu.packet.EnterSessionResult] 的第 3 栏位。
@@ -47,13 +51,17 @@ object Room {
     // 再按 sessionMode 分叉 (见 handler/CreateSessionReq.kt 顶部注释)。
     /** sub_517233 的 a4: 0 = 练习 / AI 房, 1 = 普通房 */
     var sessionMode = 0
+
     /** a5 房型: 15 = 练习房, 0 = 普通房; 需原样回显到 S→C op 83 */
     var sessionType = 15
+
     /** sub_516C5A 按房型查表算出的规则 id: 15 → 66, 0 → 0 */
     var ruleId = 66
+
     /** 房间名 / 密码明文 (线上是 EncodeCipherStr 的 3 度混淆串) */
     var name = ""
     var password = ""
+
     /** 每个本地玩家一个 bomber id, 长度 = 玩家数, 不再固定读 1 个 */
     var localBombers: List<Int> = emptyList()
 
@@ -92,8 +100,6 @@ object Room {
                 bomber = effectiveBomber
                 color = 0
             }
-        } else {
-            // should not happen
         }
 
         for (i in 1..3) {
@@ -117,7 +123,6 @@ object Room {
                 color = 7
             }
         }
-        resetMatchState()
     }
 
     val activeSlotCount: Int
@@ -165,7 +170,6 @@ object Room {
             slot.isAI = false
             slot.user = null
             slot.state = FLAG_CLOSED
-            slot.matchState = SlotMatchState.OUT_OF_MATCH
             packets += PracticeSlotReady(slot = slotIdx, state = 1)
             packets += PracticeSetSlotAI(slot = slotIdx, isAI = false)
         }
@@ -174,572 +178,79 @@ object Room {
         return kicked
     }
 
-    fun startGame() {
-        synchronized(matchLock) {
-            tickFuture?.cancel(false)
-            gameOverFuture?.cancel(false)
-            backToRoomFuture?.cancel(false)
-            gameOverFuture = null
-            backToRoomFuture = null
-
-            // 每局开局把槽位生命状态重置成 (座位上有人 ? ALIVE : OUT_OF_MATCH) 并清结算标志。
-            // 必须在这里做, 否则上一局阵亡的槽位会带着 DEAD 进入下一局,
-            // 导致开局第一次死亡上报被当成重复上报吞掉、或开局即判定全灭。
-            resetMatchState()
-            matchStartTimeMs = System.currentTimeMillis()
-            val period = tickIntervalMs.coerceAtLeast(1L)
-            tickFuture = executor.scheduleAtFixedRate(::onTick, 0, period, TimeUnit.MILLISECONDS)
+    /**
+     * 进入战斗：销毁可能残留的旧战斗，按当前房间槽位与 [battleConfig] 创建新的 [BattleSession] 并启动主循环。
+     *
+     * 参战名单与配置都在这一刻定格 ([BattleSession] 持有副本)：上一局的炸弹/推箱/去重表/结算标志
+     * 全部随旧会话丢弃，重开一局不会把残留的泡带进新局。
+     */
+    fun startGame(): BattleSession {
+        val newBattle = synchronized(battleLock) {
+            battle?.destroy()
+            val initialSlots = Array(MAX_SESSION_SLOTS) { idx ->
+                val s = slots[idx]
+                BattleSlotState(slotId = idx, isHuman = s.user != null, isAI = s.isAI)
+            }
+            BattleSession(
+                executor = executor,
+                config = battleConfig.copy(),
+                initialSlots = initialSlots,
+                broadcastAll = { packets -> BC(*packets) },
+                clientsProvider = { uniqueClients },
+                onReturnToRoom = { session -> backToRoomFromBattle(session) },
+            ).also {
+                battle = it
+            }
         }
-
-//        if (!isEN) {
-//            val spawnPositions = (0..7).shuffled()
-//            val random = Random.nextInt(9999)
-//            BC(
-//                LaunchGameStage(spawnPositions),
-//                AirplaneItemProb(),
-//                DoStartGame(random)
-//            )
-//        }
         // EN: 对局推进完全由客户端本地 AI (CAIPlayer / CAIGoal*) 与本地时钟驱动,
         // 服务端只在 C→S op 106 时回 S→C op 139、2.5s 后回 op 138 引爆, 无需任何周期广播。
         // (曾误加每 400ms 的 op 172 "ItemThrow" 广播, 实为地图事件时间轴同步, 见 MapEventSync.kt)
+        newBattle.start()
+        return newBattle
     }
 
-    // CGameSession::Update - 定时更新水泡倒计时并广播爆炸状态；超过对局时限 (默认 3 分钟) 自动判平局结束
-    // 注意: S→C op 138 SetBombState(bombId, 0) (CA.exe 0x005481BD -> 0x00534B18 -> 0x00565E9F)
-    // 已完整处理水泡引爆、十字水柱、炸箱子与爆出道具。
-    // 绝不可在此追加发送 S→C op 148 (CA.exe 0x0054BA1A -> 0x00477CEF), 因为 op 148 实为
-    // DropObstacleResult (放置地面障碍物: 1=地雷, 2=陷阱, 3=香蕉皮 Item/BananaGround, 4=图钉 Item/PushpinGround)!
-    private fun onTick() {
-        val now = System.currentTimeMillis()
-        val timedOut = synchronized(matchLock) {
-            !gameOverSent && matchTimeoutMs > 0L && matchStartTimeMs > 0L && (now - matchStartTimeMs >= matchTimeoutMs)
+    private fun backToRoomFromBattle(session: BattleSession): Boolean {
+        synchronized(battleLock) {
+            if (battle !== session) return false
         }
-        if (timedOut) {
-            onMatchTimeout()
-            return
-        }
-
-        val stateChanged = mutableListOf<Bomb>()
-
-        synchronized(bombs) {
-            bombs.removeIf { bomb ->
-                if (bomb.updateState(now)) {
-                    stateChanged.add(bomb)
-                }
-                bomb.shouldRemove()
-            }
-        }
-
-        if (stateChanged.isNotEmpty()) {
-            stateChanged.forEach { bomb ->
-                BC(SetBombState(bomb.id, bomb.state))
-            }
-        }
-    }
-
-    // 客户端上报槽位事件 (Opcode 149) 时触发
-    fun onEventItem(slotId: Int, token: Int, action: Int, param: Int) {
-    }
-
-    // 可移动箱子 (CGOTileMovableBox) 的最新推动状态。
-    // 来源: C→S op 109 PushMovableBoxReq, 消费后必须广播 S→C op 142 MovableBoxMove。
-    // 客户端 (CA.exe 0x0054CABA) 只做格子校验 + 入队, 没有任何本地位移预测,
-    // 箱子位移的唯一实现 0x565CE0 只有一个调用者 —— S→C op 142 的 handler 0x0054A5F9。
-    // 所以「不回包」会让箱子在任何客户端都不动。
-    data class MovableBoxState(
-        var gridX: Int,
-        var gridY: Int,
-        var targetX: Int,
-        var targetY: Int,
-        var slotId: Int
-    )
-
-    private val movableBoxes = ConcurrentHashMap<Int, MovableBoxState>()
-    private val movableBoxSentAt = ConcurrentHashMap<Int, Long>()
-
-    // 完全相同的推箱动作(同 boxSeq + 同 src/dst)在该窗口内只广播一次。
-    //
-    // 去重是必须的: 客户端 0x0054CABA 之后进入 0x5393C2 的待确认队列, OnTick (0x0053A700)
-    // 每帧检查、重试计数 > 5 就把**同一个动作**再发一次。而客户端 0x565CE0 会先校验
-    // "箱子此刻仍在 (gridX,gridY)" —— 同一个 src→dst 广播第二次必然校验失败, 各客户端会
-    // 触发 0x549C35 往服务端回 C→S op 149 回滚上报。
-    // 但窗口必须有限: 万一一端的箱子因为漏包/校验失败没动, 玩家再推一次时必须能重播自愈,
-    // 否则那个箱子会永久卡死。窗口取 400ms, 远大于一次重发周期(帧级), 又短于人的连点间隔。
-    // 箱子被推回去再推回来时 src/dst 都不同, 不会被误判成重复。
-    internal var movableBoxDedupeWindowMs = 400L
-
-    // 返回是否真的广播了 (重复上报不广播, 便于测试/调试)。
-    fun onMovableBoxPush(
-        boxSeq: Int,
-        gridX: Int,
-        gridY: Int,
-        targetX: Int,
-        targetY: Int,
-        slotId: Int
-    ): Boolean {
-        // boxSeq/末尾字节都是 E1/E2 原样字段, 只做宽度兜底, 不做语义过滤:
-        // 末尾字节是客户端 CGameMsgCache 待确认队列下标, 收到的这一端 (0x565CE0 第 6 参数) 并不使用,
-        // 过滤掉反而可能让某些槽位的推箱永远不生效。
-        if (boxSeq !in 0..0xFFFF || slotId !in 0..0xFF) return false
-
-        val now = System.currentTimeMillis()
-        val next = MovableBoxState(gridX, gridY, targetX, targetY, slotId)
-        val prev = movableBoxes[boxSeq]
-        if (prev == next && now - (movableBoxSentAt[boxSeq] ?: 0L) < movableBoxDedupeWindowMs) {
-            return false
-        }
-        movableBoxes[boxSeq] = next
-        movableBoxSentAt[boxSeq] = now
-
-        // 广播给所有客户端(含推箱者本人): 推箱者自己也需要这一包才会看到箱子动
-        BC(MovableBoxMove(boxSeq, gridX, gridY, targetX, targetY, slotId))
-        return true
-    }
-
-    fun movableBoxState(boxSeq: Int): MovableBoxState? = movableBoxes[boxSeq]
-
-    // ---- C→S op 124 电钻 (Drill) → S→C op 156 DrillResult 回显 ----
-    // 客户端用道具「电钻」时 服务端必须把这条请求**原样回放给所有人, 含使用者本人，否则谁也不会看到方块消失。
-    //
-    // 服务端没有方块/地图状态模型 (消块在各客户端本地确定性重算), 这里只做坐标与槽位的健全性校验:
-    //   · 槽位进 packet 的高 4 位, 越界 (>=8) 会让客户端 0x533D5C 取到野 bomber, 必须丢;
-    //   · 坐标越界时客户端 0x55EAC3 会整包丢弃, 发了也是白发, 直接不发。
-    // 不做去重: op 124 是按键一次发一次 (直发, 不走 CGameMsgCache 待确认队列), 不存在帧级重发。
-    fun onDrill(gridX: Int, gridY: Int, slotId: Int, action: Int): Boolean {
-        if (slotId !in slots.indices) {
-            if (debugMode) println("[Room] op124 电钻: 非法槽位 slot=$slotId, 丢弃")
-            return false
-        }
-        if (gridX !in 0..12 || gridY !in 0..14) {
-            if (debugMode) println("[Room] op124 电钻: 坐标越界 ($gridX,$gridY), 丢弃")
-            return false
-        }
-
-        BC(DrillResult(gridX, gridY, slotId, action))
-        if (debugMode) {
-            println(
-                "[Room] 电钻 slot=$slotId grid=($gridX,$gridY) dir=$action" +
-                    " | 已广播 S→C op156"
-            )
-        }
-        return true
-    }
-
-    // ---- C→S op 107 水泡移动 (抛掷/踢出) → S→C op 141 BombIgnite 回显 (2026-11-09 定案) ----
-    //
-    // 客户端发包链只做滑行 trace + 入队 (0x0054CCBC / 0x0046E6D7), 没有任何本地位移预测;
-    // 水泡位移的唯一驱动是 S→C op 141 的 action=kind 分支 (0x54BD14 -> 0x4598AB 滑行 /
-    // 0x459935 抛掷落地), 两个函数全 .text 只有 op141 处理器与 op139 确认链两个调用者。
-    // 所以服务端必须把 op 107 前 7 字节 (kind|slot, bombId, from, to) 以 op 141 原样广播,
-    // 含踢泡者本人 (他也靠这一包看到球飞)。不要回 op 107 —— EN 局内分发器没有 0x6B 分支。
-    //
-    // 与 op 109 推箱子同理做去重: 踢/推是 CGameMsgCache 待确认队列 + 每帧 flush 机制,
-    // 同一动作可能在帧级重复上报; 而 0x4598AB 会把目标格写进 bomb+0x9C/0xA8 并置 moving,
-    // 重复广播同一动作虽无致命后果 (精灵会重新滑向同格), 但会抖动动画与 moving 状态。
-    // 窗口 400ms: 远大于帧级重发周期, 又短于玩家把球踢回同一位置的连击间隔。
-    internal var bombMoveDedupeWindowMs = 400L
-    data class BombMoveState(
-        val kind: Int, val bombId: Int,
-        val fromX: Int, val fromY: Int, val toX: Int, val toY: Int
-    )
-
-    private val bombMoves = ConcurrentHashMap<Int, BombMoveState>()
-    private val bombMoveSentAt = ConcurrentHashMap<Int, Long>()
-
-    // 返回是否真的广播了 (重复上报不广播, 便于测试/调试)。
-    fun onBombMove(
-        slotId: Int,
-        kind: Int,
-        bombId: Int,
-        fromX: Int,
-        fromY: Int,
-        toX: Int,
-        toY: Int,
-        moveDuration: Int
-    ): Boolean {
-        val now = System.currentTimeMillis()
-        val next = BombMoveState(kind, bombId, fromX, fromY, toX, toY)
-        val prev = bombMoves[bombId]
-        if (prev == next && now - (bombMoveSentAt[bombId] ?: 0L) < bombMoveDedupeWindowMs) {
-            return false
-        }
-        bombMoves[bombId] = next
-        bombMoveSentAt[bombId] = now
-
-        // 更新服务端水泡状态: 滑行期间暂停倒计时, 到点后由 Bomb.updateState 续 2s 再引爆
-        getBomb(bombId)?.apply {
-            gridX = toX
-            gridY = toY
-            isMoving = true
-            expireAt = now + moveDuration.coerceIn(0, 10_000)
-        }
-
-        // 回显 = op 107 前 7 字节原样 (action = kind, 4..7 滑行 / 0..3 抛掷)。
-        // oldX/oldY 传 from: 客户端 0x54BDEA 只用 oldX 与 bomb+0x9C 做校验, 不符也照常执行。
-        BC(
-            BombKickThrow(
-                slotId = slotId,
-                bombId = bombId,
-                x = toX,
-                y = toY,
-                oldX = fromX,
-                oldY = fromY,
-                action = kind
-            )
-        )
-        return true
-    }
-
-    fun bombMoveState(bombId: Int): BombMoveState? = bombMoves[bombId]
-
-    // ---- C→S op 108 对象命中上报 → S→C op138 SetBombState(state=0) 引爆  ----
-    //
-    // 飞镖 (CGODart) 命中水泡时客户端只发 op121 (发射) + op108 (命中预告), 全函数没有
-    // sub_565E9F —— **不会本地引爆**, 必须等服务端下令:
-    //   S→C op138 0x005481BD → 0x00534B18 → 0x00534338 (按 bombId 找水泡) → 0x00565E9F 引爆。
-    // op108 的 delayMs = 飞镖飞行时间 (1200*射程px/1000 - 2*ping), 服务端按它延时广播,
-    // 让飞行动画先播完。objId 是客户端对象混淆 ID (sub_44B67A(obj+144)), 不能当 bombId,
-    // 所以只能按 gridX/gridY 在 Room.bombs 里反查服务端自己的 id (即 op139 回填的那个值)。
-    //
-    // · 命中格没有登记水泡 → 不处理 (op108 也可能命中箱子/角色/地面障碍)。
-    // · 找到后立刻从 bombs 移除: 既对同一颗泡的重复上报去重 (实测连发两镖会收到两条
-    //   完全相同的 op108), 也防止 onTick 2.5s 到期再广播一次引爆。
-    // · delayMs > 0 = 飞镖预告路径, 客户端没炸过 → 广播含发射者本人。
-    //   delayMs == 0 = 客户端已本地引爆的路径 (0x0046DFAD / C2S_Op108_And_Op154_Action1),
-    //   只同步其它客户端, 不给发射者重复发引爆包。
-    internal var dartDetonationMaxDelayMs = 500L
-
-    data class DartDetonation(
-        val bombId: Int, val targetObjectId: Int,
-        val gridX: Int, val gridY: Int, val delayMs: Int,
-        val includeSender: Boolean
-    )
-
-    private val dartDetonations = ConcurrentHashMap<Int, DartDetonation>()
-
-    /**
-     * @return 是否真的引爆了一颗水泡 (重复上报 / 命中格无泡都返回 false)。
-     * @param broadcast false = 只改服务端状态, 供单元测试使用, 不排程广播。
-     */
-    fun onObjectHit(
-        targetObjectId: Int,
-        gridX: Int,
-        gridY: Int,
-        delayMs: Int,
-        sender: ClientSocket? = null,
-        broadcast: Boolean = true
-    ): Boolean {
-        if (gridX !in 0..12 || gridY !in 0..14) return false
-
-        val bomb = synchronized(bombs) {
-            val hit = bombs.firstOrNull { it.gridX == gridX && it.gridY == gridY && it.state != 0 }
-            if (hit != null) bombs.remove(hit)
-            hit
-        }
-        if (bomb == null) {
-            if (debugMode) {
-                val known = synchronized(bombs) {
-                    bombs.joinToString { "id=${it.id}@(${it.gridX},${it.gridY})" }
-                }
-                println(
-                    "[Room] op108 hit -> no bomb at ($gridX,$gridY) objId=$targetObjectId " +
-                        "delay=${delayMs}ms bombs=[$known]"
-                )
-            }
-            return false
-        }
-
-        val includeSender = delayMs > 0
-        val delay = delayMs.toLong().coerceIn(0, dartDetonationMaxDelayMs)
-        dartDetonations[bomb.id] = DartDetonation(
-            bomb.id, targetObjectId, gridX, gridY, delayMs, includeSender
-        )
-
-        if (debugMode) {
-            println(
-                "[Room] op108 hit -> detonate bomb=${bomb.id} grid=($gridX,$gridY) " +
-                    "objId=$targetObjectId delay=${delay}ms includeSender=$includeSender"
-            )
-        }
-
-        if (broadcast) {
-            val packet = SetBombState(bomb.id, state = 0)
-            val dispatch = Runnable {
-                uniqueClients
-                    .filter { includeSender || it !== sender }
-                    .forEach { it.ctx.writeAndFlush(packet) }
-            }
-            if (delay == 0L) dispatch.run() else executor.schedule(dispatch, delay, TimeUnit.MILLISECONDS)
-        }
-        return true
-    }
-
-    fun dartDetonationState(bombId: Int): DartDetonation? = dartDetonations[bombId]
-
-    enum class MatchOutcome(val winnerTeam: Int) {
-        HUMAN_WIN(WINNER_TEAM_HUMAN),
-        AI_WIN(WINNER_TEAM_AI),
-        DRAW(WINNER_TEAM_DRAW),
-    }
-
-    private enum class MatchEndTrigger {
-        DEATH_REPORT,
-        LAST_TEAM_STANDING,
-        TIMEOUT,
-    }
-
-    // 角色死亡上报处理 (C→S op 154 action=5 -> CA.exe 0x0046DB1D CGOGameBomber::OnDie)
-    //
-    //   这条上报只对**真人玩家**成立 —— 0x46DB01 处先调 0x45FBD3,
-    //   其判据是 `0 <= bomber+0x4D0 < 2`, 而 `+0x4D0` 是调试串 0x892838 "m_selfidx = " 所指的
-    //   **网络玩家序号** (相邻的 +0x4DC 是 "m_faislot", AI 槽号)。AI 的 m_selfidx 恒为 -1
-    //   (bomber 初始化 0x4680xx 置 -1, 只有真人在 0x639FE3 循环里经 0x45FDDD 赋 0/1),
-    //   所以**杀光 AI 时一个 action=5 都不会来**。整段实战日志 (1510 行 / 72 个 op154) 里
-    //   action 只有 4 / 1 / 0, 没有 2 / 3 / 5, 也印证了这点。
-    //   → 「玩家赢」必须靠 [onLastTeamStanding] (op112 action=0x60); 这里保留 action=5 是为了
-    //     处理玩家自己阵亡 (以及将来真正的多真人房)。
-    //
-    // 结算判定规则
-    //   客户端只是把每个阵亡的 bomber 转发给服务端, 自身没有任何"敌人清空"判定, 全部依赖服务端下令。
-    //   于是「杀光全部 AI」之后对局永远不会结束。现在按 Slot.matchState 统计双方存活人数, 任意一方全灭即结束对局:
-    //     · 双方同时全灭            → 平局 (DRAW, winnerTeam = 0xFF)
-    //     · 人类全灭 && AI 存活     → AI 胜 (winnerTeam = 1, 胜利者取一个仍活着的 AI 槽位)
-    //     · AI 全灭 && 人类存活     → 人类胜 (winnerTeam = 0, 胜利者取玩家槽位)
-    //   结算包固定 1.0s 延迟下发: 客户端要先播完阵亡动画; 在缓冲期内若另一方也全灭则升级为平局。
-    //   顺序 op 169 InitGameResult → op 150 GameResult（缺 169/150 不弹结算窗）。
-    fun onBomberDie(slotId: Int) {
-        if (slotId !in slots.indices) return
-
-        val slot = slots[slotId]
-        synchronized(matchLock) {
-            if (resultDispatched) return
-            // 只有"参战且存活"的槽位才接受阵亡上报:
-            //   · DEAD         → 重复上报 (CGameMsgCache 重发 / 抓包残流 / 连续两次 OnDie), 忽略
-            //   · OUT_OF_MATCH → 空槽的错位/迟到上报, 忽略, 绝不能给没有 bomber 的槽位发 op 159
-            if (slot.matchState != SlotMatchState.ALIVE) return
-            slot.matchState = SlotMatchState.DEAD
-        }
-
-        // 阵亡广播 = 两条包配合:
-        //   1) S→C op159 BomberDie(slot) —— 客户端 0x0054C378: 置状态 17、清队伍桶、
-        //      播 0x37（实测这声听不见，所以**光发它等于没声音**）；
-        //   2) S→C op146 state=5「死亡名单」—— 0x54E0B8: 把该 bomber 从场上摘除 + 刷 UI，
-        //      结尾播 0x2A 死亡音。
-        //   顺序必须先 159 再名单：名单会把 bomber 摘掉，之后再发 159 会因 `[bomber+8]==0` 提前返回。
-        //   名单的通用头 slot 不能写死 0：客户端 0x54DDD1 会先按它取 bomber，空槽/已摘除
-        //   会让整个包被跳过（连 0x2A 都不播）。用本次名单里第一个槽——判空发生在摘除之前。
-        BC(BomberDie(slotId))
-        BC(BomberDeathList(listOf(slotId), headerSlot = slotId))
-        println(
-            "[Room] BomberDie slot=$slotId (" + (if (slot.user != null) "人类" else if (slot.isAI) "AI" else "空槽") +
-                ") | 存活人类=${slots.indices.filter { slots[it].user != null && slots[it].isAlive }} " +
-                "存活AI=${slots.indices.filter { slots[it].isAI && slots[it].isAlive }}"
-        )
-
-        finishMatchIfDecided()
-    }
-
-    // 客户端"只剩一支队伍"上报 (C→S op 112 action=0x60) —— EN 客户端唯一的对局结束信号
-    //
-    // 逆向 (CA.exe 0x54B380~0x54B450, 帧更新里每帧跑一次):
-    //   1) 开一个 9 槽的计数组 [ebp-0x5C] (0x24 = 9*4), 对每个 bomber:
-    //        if (bomber->vtable[0xAC]() != 0)  ++cnt[bomber->+0x84]      // +0x84 = 队伍号 (0..8)
-    //   2) 统计非空队伍的个数 n; 若 n > 1 直接 ret (还有两队以上, 对局继续)
-    //   3) n == 1 时, 对每个 bomber:
-    //        if (bomber->+0x8 != 0 && bomber->vtable[0x150]() == 0)      // 0x45FBA0: 不是空壳
-    //            0x54A773(bomber) -> 发 C→S op 112: E1(0x60 | slot) + E2(x) + E2(y)
-    //   即:**客户端自己判定"只剩一支队伍", 然后对存活方每帧狂发 action=0x60**, 一直发到服务端
-    //   下发结算为止 (实测杀光 AI 后连发数百条, 其它局内包全部停摆 —— 客户端卡在这个等待里)。
-    //
-    // 所以这个包就是"赢"的唯一信号, 而且双向通用:
-    //   · 存活方是真人槽 → 玩家胜 (客户端已本地判死全部 AI, 但永远不会为 AI 发 op154 action=5,
-    //     见 docs/agents-notes-battle.md: op154 action=5 有 m_selfidx 闸门, AI 恒不通过)
-    //   · 存活方是 AI 槽   → AI 胜 (玩家全灭, 这时通常也已经有 op154 action=5 slot=0 先到)
-    //
-    // ⚠️ 不要再给落败槽位广播 S→C op 159: 客户端本地阵亡时已经播过死亡动画 (OnDie 是本地函数),
-    //    服务端只是"不知道", 再来一条 159 会让死亡动作重播。
-    fun onLastTeamStanding(slotId: Int) {
-        if (slotId !in slots.indices) return
-        synchronized(matchLock) {
-            if (gameOverSent) return
-
-            // 单座位房 (1 人无 AI) 客户端从第一帧就会满足"只剩一队", 那不是胜负而是没对手;
-            // 真正参战的房间至少要有两个座位 (练习房 = 1 真人 + 1..7 AI)
-            if (activeSlotCount < 2) return
-
-            val winner = slots[slotId]
-            // 空槽上报丢弃: 客户端只会替"真人或 AI"的存活槽位发这个包 (vtable[0x150] == 0 的过滤)
-            if (!winner.hasSeat()) return
-
-            val humanWin = winner.user != null
-            // 落败方一律补记 DEAD, 让 matchState 与服务端认知一致 (客户端本地早就判死了)
-            slots.forEach { s ->
-                val sameSide = if (humanWin) s.user != null else s.isAI
-                if (s.hasSeat() && !sameSide) s.matchState = SlotMatchState.DEAD
-            }
-
-            // action=0x60 是每帧重发的, 这里靠 gameOverSent 去重
-            emitMatchResultLocked(
-                outcome = if (humanWin) MatchOutcome.HUMAN_WIN else MatchOutcome.AI_WIN,
-                winnerSlot = slotId,
-                trigger = MatchEndTrigger.LAST_TEAM_STANDING
-            )
-        }
-    }
-
-    /** 对局超时（默认 3 分钟 = 180,000ms），与真端 CGameSession::Update 一致直接判平局结束。 */
-    fun onMatchTimeout() {
-        synchronized(matchLock) {
-            if (gameOverSent) return
-            emitMatchResultLocked(
-                outcome = MatchOutcome.DRAW,
-                winnerSlot = -1,
-                trigger = MatchEndTrigger.TIMEOUT,
-                detail = "对局超时(${matchTimeoutMs}ms)"
-            )
-        }
+        return backToRoom(sendRoomChain = session.config.reenterRoomAfterBack)
     }
 
     /**
-     * 一方全灭或双方同时全灭即结束对局。调用前必须已经把阵亡槽位标记为 [SlotMatchState.DEAD]。
-     * 只有[人类]与[AI]两个阵营都还有人时才继续对局; 任一方空出即按存活情况结算（同灭为平局）。
-     */
-    private fun finishMatchIfDecided() {
-        synchronized(matchLock) {
-            if (resultDispatched) return
-
-            // 阵营划分: 有人坐着 = 人类阵营, isAI = AI 阵营。不参战的空槽两边都进不去。
-            val humanIdx = slots.indices.filter { slots[it].user != null }
-            val enemyIdx = slots.indices.filter { slots[it].isAI }
-            if (humanIdx.isEmpty()) return          // 没有人类就没有"人类胜负"可言, 交给上层流程
-
-            val humanAlive = humanIdx.filter { slots[it].isAlive }
-            val enemyAlive = enemyIdx.filter { slots[it].isAlive }
-
-            // 结束条件: 人类全灭, 或 AI 全灭 (enemyIdx 为空时不存在"AI 全灭"这种胜负)。
-            // 这样即使将来开了纯人类 PvP 房, 死一个人也不会被误判成"敌人清空"。
-            val humanWiped = humanAlive.isEmpty()
-            val enemyWiped = enemyIdx.isNotEmpty() && enemyAlive.isEmpty()
-            if (!humanWiped && !enemyWiped) return   // 双方都还有人, 继续打
-
-            val outcome = when {
-                humanWiped && enemyWiped -> MatchOutcome.DRAW
-                !humanWiped -> MatchOutcome.HUMAN_WIN
-                else -> MatchOutcome.AI_WIN
-            }
-            val winnerSlot = when (outcome) {
-                MatchOutcome.HUMAN_WIN -> humanAlive.first()
-                MatchOutcome.AI_WIN -> enemyAlive.first()
-                MatchOutcome.DRAW -> -1
-            }
-
-            if (!gameOverSent) {
-                emitMatchResultLocked(
-                    outcome = outcome,
-                    winnerSlot = winnerSlot,
-                    trigger = MatchEndTrigger.DEATH_REPORT,
-                    detail = "存活人类=$humanAlive 存活AI=$enemyAlive"
-                )
-            } else if (pendingTrigger == MatchEndTrigger.DEATH_REPORT && outcome == MatchOutcome.DRAW) {
-                // 在 gameOverDelayMs 动画缓冲期内另一阵营也全灭（同炸弹/同帧双灭），由单方胜负升级为平局
-                pendingOutcome = MatchOutcome.DRAW
-                println("[Room] 双方同时全灭，结算结果升级为平局 | 存活人类=$humanAlive 存活AI=$enemyAlive")
-            }
-        }
-    }
-
-    /**
-     * 真正下发结算包。三条触发路径共用:
-     *   · [finishMatchIfDecided]  —— 靠 op154 action=5 逐个记录阵亡后的服务端统计
-     *   · [onLastTeamStanding]    —— 靠 op112 action=0x60 客户端自报"只剩一支队伍"
-     *   · [onMatchTimeout]        —— 对局达到 3 分钟上限自动判平局
+     * 下发 S→C op 155 [BackToRoom] 并销毁当前 [BattleSession]（唯一能把客户端从游戏阶段拉回房间的出口）。
      *
-     * 固定顺序 op 169 InitGameResult → op 150 GameResult（客户端 0x55856A → 0x5584CC 建
-     * CGameResultDocument，op 150 再填金币/经验并弹窗）。
-     */
-    private fun emitMatchResultLocked(
-        outcome: MatchOutcome,
-        winnerSlot: Int,
-        trigger: MatchEndTrigger,
-        detail: String = ""
-    ) {
-        if (gameOverSent) return
-        gameOverSent = true
-        pendingOutcome = outcome
-        pendingTrigger = trigger
-
-        val outcomeLabel = when (outcome) {
-            MatchOutcome.HUMAN_WIN -> "玩家胜"
-            MatchOutcome.AI_WIN -> "AI 胜"
-            MatchOutcome.DRAW -> "平局"
-        }
-        println(
-            "[Room] 对局结束: $outcomeLabel" +
-                " | winnerSlot=$winnerSlot" + (if (detail.isEmpty()) "" else " | $detail")
-        )
-
-        gameOverFuture = executor.schedule({
-            val finalOutcome: MatchOutcome
-            synchronized(matchLock) {
-                if (resultDispatched) return@schedule
-                resultDispatched = true
-                finalOutcome = pendingOutcome ?: outcome
-            }
-            val expAfter = when (finalOutcome) {
-                MatchOutcome.HUMAN_WIN -> winExpAfter
-                MatchOutcome.AI_WIN -> loseExpAfter
-                MatchOutcome.DRAW -> drawExpAfter
-            }
-            val lucciGained = when (finalOutcome) {
-                MatchOutcome.HUMAN_WIN -> winLucci
-                MatchOutcome.AI_WIN -> loseLucci
-                MatchOutcome.DRAW -> drawLucci
-            }
-            BC(
-                InitGameResult(mode = 0, mapId = 0),
-                GameResult(
-                    winnerTeam = finalOutcome.winnerTeam,
-                    delayMs = 2000,
-                    expAfter = expAfter,
-                    lucciGained = lucciGained
-                )
-            )
-            // 结算后停掉对局主循环 (水泡倒计时), 与客户端离开棋盘同步
-            endGame()
-            // ⚠️ 结果窗弹出 ≠ 对局结束: 客户端没有任何本地超时会把结果窗关掉
-            // (op150 的 delayMs 只决定「多久后弹窗」, 见 packet/room/BackToRoom.kt)。
-            // 必须由服务端补一条 S→C op 155, 客户端才会拆掉 CGameStage 回到 stage 12 房间。
-            backToRoomFuture = executor.schedule({ backToRoom() }, resultReturnDelayMs, TimeUnit.MILLISECONDS)
-        }, gameOverDelayMs, TimeUnit.MILLISECONDS)
-    }
-
-    /**
-     * 下发 S→C op 155 [BackToRoom] —— 唯一能把客户端从游戏阶段拉回房间的包。
-     *
-     * 时序参照真实服务器「结果窗显示几秒后自动返回」: 结算包之后 [resultReturnDelayMs] 再发。
+     * 时序参照真实服务器「结果窗显示几秒后自动返回」: 结算包之后
+     * [BattleConfig.resultReturnDelayMs] 再发（见 [BattleSession] 的结算调度）。
      *
      * ⚠️ 光有 155 只能把客户端「切回 stage 12」，房间对象/会话是空的（实机验证
      * 能回房、AI 还在，但「开始」按钮退化成「准备」= 房主位丢了）。
      * 所以默认再补推整条房间链（[sendRoomEntryChain]，与 C→S op 75 的回应同一串），
-     * 把房主/座位/房间名/选图重新灌一遍；[reenterRoomAfterBack] 置 false 可只发 155。
+     * 把房主/座位/房间名/选图重新灌一遍；[BattleConfig.reenterRoomAfterBack] 置 false 可只发 155。
      *
-     * 调试入口: 聊天框 `/back`（仅 debugMode）—— 可强制重发、可指定槽位状态字节、可只发 155。
+     * 调试入口: 直接调用 `backToRoom(force = true)` —— 可强制重发、可指定槽位状态字节、可只发 155。
      *
      * @param sendRoomChain 是否在 155 之后补推房间链
      * @param slotStates    槽 0..2 的状态字节（null = 用 [slots] 的真实 state，槽 0 保住房主位）
-     * @param chState       op155 首个 E1（`0x687393` → player+0x1AC，语义未定，默认 0）
-     * @param force         true = 忽略「本局已发过」的去重（调试重试用）
+     * @param chState       op155 首个 E1（`0x687393` → player+0x1AC，默认 0）
+     * @param force         true = 忽略「本局已发过 / 当前无战斗」的去重（调试重试用）
      * @return 是否真的发出了包
      */
     fun backToRoom(
-        sendRoomChain: Boolean = reenterRoomAfterBack,
+        sendRoomChain: Boolean = battleConfig.reenterRoomAfterBack,
         slotStates: List<Int>? = null,
         chState: Int = 0,
         force: Boolean = false
     ): Boolean {
-        if (backSent && !force) return false
-        backSent = true
+        synchronized(battleLock) {
+            val current = battle
+            if (current != null) {
+                if (!current.claimBackToRoom(force)) return false
+                current.destroy()
+                battle = null
+            } else if (!force) {
+                return false
+            }
+        }
 
         val states = slotStates ?: (0 until 3).map { slots.getOrNull(it)?.state?.toInt() ?: 0 }
         BC(BackToRoom(chState = chState, slotStates = states))
@@ -755,247 +266,6 @@ object Room {
             Logger.info("[Room] op155 之后补推房间链sendRoomEntryChain")
         }
         return true
-    }
-
-    /**
-     * 调试专用：只广播 S→C op159 [BomberDie]，**不改** `matchState`、**不触发**结算。
-     *
-     * 用途：验证"op159 到底会不会让客户端播死亡音效 / 进入状态 17"。
-     * 对局中在聊天框输入 `/die <slot>` 即可触发（见 handler/ChatMsg.kt，仅 debugMode）。
-     */
-    fun debugBroadcastBomberDie(slotId: Int) {
-        if (slotId !in slots.indices) return
-        println("[Room][debug] 手动广播 BomberDie slot=$slotId")
-        BC(BomberDie(slotId))
-    }
-
-    /**
-     * 广播 S→C op 146 [SetBomberState]：局内 bomber 事件伞（详见 packet/room/SetBomberState.kt）。
-     *
-     * 已知 state（全部反汇编 + 实机验证）：
-     *   · 2  = **困住**（气泡），必须带目标当前坐标，见 [trapBomber]
-     *   · 3  = 被救脱困（需要坐标 + saver），见 [freeBomber]
-     *   · 5  = **死亡名单**（官方服务端的同一条消息，见 [broadcastDeathList]）
-     *   · 9  = 护盾/暂时无敌；10 = 护盾被打破（音效 0x87）
-     *   · 12 = 脱困但不改坐标（角色留在原地）
-     *   · 13 = 复活卡特效（对别人使用）
-     *
-     * 调试入口：聊天框 `st <state> <slot> [x y]`（仅 debugMode）。**没有自动调用点**。
-     */
-    fun setBomberState(slotId: Int, state: Int, x: Int = 0, y: Int = 0, saverSlot: Int = -1) {
-        if (slotId !in slots.indices) return
-        if (!slots[slotId].hasSeat()) return
-        BC(SetBomberState(slotId, state, x, y, saverSlot))
-        println("[Room] SetBomberState slot=$slotId state=$state x=$x y=$y" + if (saverSlot >= 0) " saver=$saverSlot" else "")
-    }
-
-    /**
-     * 把某个槽位的 bomber 装进泡泡（op146 state 2，客户端 0x54DEE5）。
-     *
-     * ⚠️ 必须传目标**当前坐标**：state 2 的第一步就是 `vt[0x64](x, y)` 设位置，
-     *    传 0,0 会把角色瞬移到地图左上角（实测"发完 trap 人物就不见了"）。
-     *    坐标来源只有 C→S op112 上报过的 [Slot.posX]/[Slot.posY]（AI 也有，客户端会替它发）。
-     *
-     * ⚠️ 只发 state 2 就够：实测再补 state 9 只会让目标套上护盾（见 [shieldBomber]），
-     *    并不会让"撞上去"变成破泡。客户端的破泡分支判的是 `0x45D15B` = `[+0x2AB8] >= 0`，
-     *    而 `+0x2AB8` 是**护盾计时**（0x45E923 / 0x45E998），不是被困计时。
-     *
-     * @param x/y 显式坐标；不传则用该槽位最后上报的位置，未知时拒绝下发（宁可不动也不能瞬移）。
-     * @return 是否真的发出了包
-     */
-    fun trapBomber(slotId: Int, x: Int = -1, y: Int = -1): Boolean {
-        if (slotId !in slots.indices) return false
-        val slot = slots[slotId]
-        if (!slot.hasSeat()) return false
-        if (x < 0 || y < 0) {
-            println("[Room] 无法困住 slot=$slotId: 没有坐标")
-            return false
-        }
-        BC(SetBomberState(slotId, BOMBER_STATE_TRAPPED, x, y))
-        println("[Room] 困住 slot=$slotId: state=2 x=$x y=$y")
-        return true
-    }
-
-    /**
-     * 让某个槽位从泡泡里出来。两种 state：
-     *   · 12（默认）= 脱困但不改坐标 —— 实测角色留在原地，最安全；
-     *   · 3（传了 saverSlot）= "被某人救下"，会在格子上放特效，但**必须带坐标**，否则瞬移。
-     *
-     * @return 是否真的发出了包
-     */
-    fun freeBomber(slotId: Int, saverSlot: Int = -1, x: Int = -1, y: Int = -1): Boolean {
-        if (slotId !in slots.indices) return false
-        val slot = slots[slotId]
-        if (!slot.hasSeat()) return false
-
-        if (saverSlot < 0) {
-            // 12 = 脱掉气泡但**不改坐标**（角色留在原地）—— 实测最安全。
-            // 不要顺手发 state 10：那是"破盾"，会把 target 的护盾（如果有）一起打掉并播 0x87。
-            BC(SetBomberState(slotId, BOMBER_STATE_FREE))
-            println("[Room] 脱困 slot=$slotId: state=12")
-            return true
-        }
-
-        if (x < 0 || y < 0) {
-            println("[Room] 无法用 state 3 救下 slot=$slotId: 没有坐标, 退回 state 12")
-            BC(SetBomberState(slotId, BOMBER_STATE_FREE))
-            return true
-        }
-        BC(SetBomberState(slotId, BOMBER_STATE_SAVED, x, y, saverSlot))
-        println("[Room] SetBomberState slot=$slotId state=${BOMBER_STATE_SAVED}(被救) x=$x y=$y saver=$saverSlot")
-        return true
-    }
-
-    /**
-     * 广播"死亡名单"（op146 state=5）—— 真正用来通知阵亡的消息。
-     *
-     * 调试入口：聊天框 `/kill <slot>[ <slot>...]`（仅 debugMode）。**没有自动调用点**。
-     */
-    fun broadcastDeathList(slotIds: List<Int>, debug: Boolean = false) {
-        val valid = slotIds.filter { it in slots.indices && slots[it].hasSeat() }
-        if (valid.isEmpty()) return
-        // 通用头指向名单第一个槽：客户端判空在 case5 摘除之前，此刻它一定还在。
-        BC(BomberDeathList(valid, headerSlot = valid.first()))
-        println("[Room] BomberDeathList slots=$valid" + (if (debug) " (debug)" else ""))
-    }
-
-    /**
-     * 把某个已阵亡的槽位拉回场上（S→C op 160 [ReviveBomber] 的入口）。
-     *
-     * 目前**没有任何调用点**：这是给"复活币"类道具预留的基础设施 —— 客户端侧 0x55345D 会
-     * 把 bomber 置活、清掉陷阱/水泡并播状态 43 的复活动作，服务端这里同步自己的 `matchState`，
-     * 否则下一次 [finishMatchIfDecided] 仍会把这名玩家算作阵亡。
-     *
-     * 接入复活币时要补的东西（等 C→S 侧的道具使用包实测后再接）：
-     *   1. 道具校验（持有量 / 是否局内 / 是否真死），
-     *   2. 扣道具 + 下发对应的背包同步包，
-     *   3. 决定复活后的位置/保护期（客户端 0x4606C2 会把位置交还给本地状态机）。
-     *
-     * @return true 表示确实下线了复活的 160 包
-     */
-    fun reviveBomber(slotId: Int): Boolean {
-        if (slotId !in slots.indices) return false
-        if (gameOverSent) return false              // 已经结算, 复活没有意义
-        val slot = slots[slotId]
-        if (!slot.hasSeat()) return false           // 空槽没有 bomber 可复活
-        if (slot.matchState != SlotMatchState.DEAD) return false
-
-        slot.matchState = SlotMatchState.ALIVE
-        BC(ReviveBomber(slotId))
-        println("[Room] ReviveBomber slot=$slotId")
-        return true
-    }
-
-    // 结算结果包的下发延迟。测试可置 0 以便同步断言。
-    internal var gameOverDelayMs = 1000L
-    // 结算包之后多久下发 S→C op 155 [BackToRoom]（客户端据此退出游戏阶段回到房间）。
-    // 真实服务器是「结果窗出来后过几秒自动返回」；测试可置 0 以便同步断言。
-    internal var resultReturnDelayMs = 7000L
-    // op155 之后是否补推整条房间链（重建房主位/座位/房间对象）。置 false = 只发 155（对照用）。
-    internal var reenterRoomAfterBack = true
-    // 本局是否已经发过回房间包
-    internal var backSent = false
-
-    // ---- 结算奖励（op 150 GameResult） ----
-    // EXP 是「等级进度千分比」：1000 = 100.0%，结果页会从 0.0% 涨到这个值
-    // （客户端 0x53E617 = min(+124 + 涨条动画, +128)，见 packet/room/GameResult.kt）。
-    // LUCCI 是本局获得金币（+152，有符号）。
-    // 输的一档按胜利的 1/3 给：输局也要有收益，但不能和赢一样多。
-    internal var winExpAfter = 60   // 胜利 6.0%
-    internal var loseExpAfter = 20  // 失败 2.0%
-    internal var drawExpAfter = 30  // 平局 3.0%
-    internal var winLucci = 120
-    internal var loseLucci = 40
-    internal var drawLucci = 60
-
-    // 对局超时上限 (ms): 对齐真端 GAME_DURATION_LIMIT_MS = 0x2BF20 (3 分钟); <=0 表示不超时
-    internal var matchTimeoutMs = 180_000L
-    // onTick 调度周期 (ms), 测试可改小
-    internal var tickIntervalMs = 200L
-
-    private val matchLock = Any()
-    @Volatile private var matchStartTimeMs = 0L
-    // 是否已经触发结算调度 (防止重复调度)
-    @Volatile internal var gameOverSent = false
-    // 是否已经实际发出 op 169/150 (在 gameOverDelayMs 缓冲期内为 false, 供同灭升级平局判断)
-    @Volatile private var resultDispatched = false
-    @Volatile private var pendingOutcome: MatchOutcome? = null
-    @Volatile private var pendingTrigger: MatchEndTrigger? = null
-    private var gameOverFuture: ScheduledFuture<*>? = null
-    private var backToRoomFuture: ScheduledFuture<*>? = null
-
-    // 发射型水泡 (坦克炮泡) 的「落地激活」延时。
-    // op139 的 sub_4598AB 会把泡置成 +192=0 未激活 / +292=1 飞行中, 必须等发射动画播完
-    // 再补 S→C op138 state=1 (sub_534B18 -> sub_45976E) 才能被之后的 state=0 引爆。
-    // 立即发会截断动画; 这里刻意不改 expireAt, 引信仍从收到 C→S op106 起算 2.5s。
-    var launchedBombActivationDelayMs = 500L
-
-    // 已排程但尚未执行的落地激活 (bombId -> future), 供调试、去重与 reset 取消。
-    private val launchedBombActivations = ConcurrentHashMap<Int, ScheduledFuture<*>>()
-    fun launchedBombActivationPending(bombId: Int): Boolean = launchedBombActivations.containsKey(bombId)
-
-    /** 排程延时激活; 到点由 [activateLaunchedBomb] 检查水泡是否还活着再决定发不发。 */
-    fun scheduleLaunchedBombActivation(bombId: Int) {
-        val delay = launchedBombActivationDelayMs.coerceAtLeast(0)
-        launchedBombActivations[bombId]?.cancel(false)
-        launchedBombActivations[bombId] = executor.schedule(
-            { activateLaunchedBomb(bombId) },
-            delay, TimeUnit.MILLISECONDS
-        )
-    }
-
-    /**
-     * 落地激活: 下发 S→C op 138 SetBombState(bombId, state=1)。
-     * 幂等: 排程记录被消费掉才执行, 重复触发 (或 reset 后迟到的任务) 直接跳过。
-     * @return 是否真的下发; 水泡已被提前引爆 (飞镖/钉子 onObjectHit 或 onTick 到期移除) 时跳过并返回 false。
-     */
-    fun activateLaunchedBomb(bombId: Int): Boolean {
-        launchedBombActivations.remove(bombId) ?: return false
-        val stillAlive = synchronized(bombs) {
-            bombs.any { it.id == bombId && it.state != 0 }
-        }
-        if (!stillAlive) {
-            if (debugMode) {
-                println("[Room] launched bomb $bombId 已被提前引爆, 跳过落地激活")
-            }
-            return false
-        }
-        BC(SetBombState(bombId, state = 1))
-        return true
-    }
-
-    fun addBomb(
-        slotId: Int,
-        gridX: Int,
-        gridY: Int,
-        isSpecial: Boolean = false,
-        unk: Int = 0,
-        bombId: Int? = null,
-        broadcastInitialState: Boolean = true
-    ): Int {
-        val allocatedId = bombId ?: nextBombId++
-        if (allocatedId >= nextBombId) {
-            nextBombId = allocatedId + 1
-        }
-        executor.execute {
-            val bomb = Bomb(allocatedId, slotId, (gridY shl 8) or gridX, 0, isSpecial).apply {
-                this.gridX = gridX
-                this.gridY = gridY
-                this.expireAt = System.currentTimeMillis() + 2500
-            }
-            synchronized(bombs) {
-                bombs.removeIf { it.id == allocatedId }
-                bombs += bomb
-            }
-            if (broadcastInitialState) {
-                BC(SetBombState(allocatedId, state = 1))
-            }
-        }
-        return allocatedId
-    }
-
-    fun getBomb(bombId: Int): Bomb? {
-        return bombs.find { it.id == bombId }
     }
 
     fun BC(vararg packets: PKT) {
@@ -1022,63 +292,13 @@ object Room {
         }
     }
 
-    fun endGame() {
-        tickFuture?.cancel(false)
-        bombs.clear()
-        movableBoxes.clear()
-        movableBoxSentAt.clear()
-        dartDetonations.clear()
-    }
-
-    // 座位上有人 (人类玩家或 AI)：这是"能不能参战"的判据, 只看座位占用, 不看本局死活。
     private fun Slot.hasSeat(): Boolean = user != null || isAI
 
-    /**
-     * 重置一局的参战/存活状态与结算标志 (开局时调用)。
-     *
-     * 参战槽位 (座位上有人) 置 ALIVE，空槽置 OUT_OF_MATCH —— 保留"空槽"这个第三态，
-     * 而不是简单把所有槽位都置 ALIVE，否则 [onBomberDie] 的守卫挡不住
-     * "给根本没有 bomber 的槽位广播 op 159" 这类错位/迟到上报。
-     *
-     * 这里同时把"谁参战"定格成一局开始时的快照：对局中途有人离开也不会把他从结算名单里
-     * 抹掉（人是这一局的参战者，离开只是掉线）。
-     *
-     * ⚠️ 将来若支持"中途入座"，新玩家入座时必须把该槽位置回 [SlotMatchState.ALIVE]，
-     *    否则他的阵亡上报会被当成"不参战/重复上报"吞掉，该玩家阵亡后对局永远不会结束。
-     */
-    fun resetMatchState() {
-        synchronized(matchLock) {
-            gameOverSent = false
-            resultDispatched = false
-            pendingOutcome = null
-            pendingTrigger = null
-            backSent = false
-            matchStartTimeMs = 0L
-            slots.forEach {
-                it.matchState = if (it.hasSeat()) SlotMatchState.ALIVE else SlotMatchState.OUT_OF_MATCH
-            }
-        }
-    }
-
+    /** 销毁当前战斗会话（建新房或测试清理时调用）。 */
     fun reset() {
-        synchronized(matchLock) {
-            tickFuture?.cancel(false)
-            gameOverFuture?.cancel(false)
-            backToRoomFuture?.cancel(false)
-            tickFuture = null
-            gameOverFuture = null
-            backToRoomFuture = null
+        synchronized(battleLock) {
+            battle?.destroy()
+            battle = null
         }
-        bombs.clear()
-        movableBoxes.clear()
-        movableBoxSentAt.clear()
-        bombMoves.clear()
-        bombMoveSentAt.clear()
-        dartDetonations.clear()
-        launchedBombActivations.values.forEach { it.cancel(false) }
-        launchedBombActivations.clear()
-        nextBombId = 0
-        lastAirplaneTime = 0L
-        resetMatchState()
     }
 }

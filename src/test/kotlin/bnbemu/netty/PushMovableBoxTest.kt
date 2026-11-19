@@ -2,18 +2,33 @@ package bnbemu.netty
 
 import bnbemu.handler.room.PushMovableBoxReq
 import bnbemu.packet.room.MovableBoxMove
+import bnbemu.server.BattleSession
 import bnbemu.server.Room
 import bnbemu.server.User
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 class PushMovableBoxTest {
+
+    private lateinit var battle: BattleSession
+
+    @BeforeEach
+    fun setUp() {
+        battle = Room.startGame()
+    }
+
+    @AfterEach
+    fun tearDown() {
+        Room.reset()
+    }
 
     @Test
     fun testOpcodeBinding() {
@@ -37,7 +52,7 @@ class PushMovableBoxTest {
         }
 
         assertEquals(0, buf.readableBytes(), "7B body must be fully consumed")
-        val state = Room.movableBoxState(1)
+        val state = battle.movableBoxState(1)
         assertNotNull(state)
         state!!
         assertEquals(1, state.gridX)
@@ -72,16 +87,16 @@ class PushMovableBoxTest {
 
     @Test
     fun testPushIsBroadcastToConnectedClients() {
-        // 端到端: C→S op 109 → Room.onMovableBoxPush → BC → 客户端 ctx 真的收到 S→C op 142
+        // 端到端: C→S op 109 → BattleSession.onMovableBoxPush → BC → 客户端 ctx 真的收到 S→C op 142
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
         val previous = Room.slots[0].user
         try {
             Room.slots[0].user = User(cs, id = 1, name = "tester")
-            Room.reset()
+            val activeBattle = Room.startGame()
             ch.outboundMessages().clear()
 
-            assertTrue(Room.onMovableBoxPush(1, 1, 3, 1, 4, 0), "首次推动必须广播")
+            assertTrue(activeBattle.onMovableBoxPush(1, 1, 3, 1, 4, 0), "首次推动必须广播")
 
             val sent = ch.outboundMessages().toList()
             assertEquals(1, sent.size, "一次推箱动作必须恰好下发一包 S→C op 142")
@@ -99,7 +114,7 @@ class PushMovableBoxTest {
             )
 
             // 同一动作的重发 (OnTick 每 >5 帧再发一次) 不能再广播
-            assertFalse(Room.onMovableBoxPush(1, 1, 3, 1, 4, 0))
+            assertFalse(activeBattle.onMovableBoxPush(1, 1, 3, 1, 4, 0))
             assertEquals(1, ch.outboundMessages().size, "重复上报不得再次下发")
         } finally {
             Room.slots[0].user = previous
@@ -134,18 +149,18 @@ class PushMovableBoxTest {
 
     @Test
     fun testDuplicatePushIsNotRebroadcast() {
-        val first = Room.onMovableBoxPush(9, 2, 2, 2, 3, 0)
-        val dup = Room.onMovableBoxPush(9, 2, 2, 2, 3, 0)
+        val first = battle.onMovableBoxPush(9, 2, 2, 2, 3, 0)
+        val dup = battle.onMovableBoxPush(9, 2, 2, 2, 3, 0)
         assertTrue(first, "首次推动必须广播")
         assertFalse(dup, "持续推箱每 >5 帧重发的同一动作不能重复广播, 否则客户端校验失败回滚")
 
         // 箱子继续往前推: src 变成上一次的 dst, 必须广播
-        assertTrue(Room.onMovableBoxPush(9, 2, 3, 2, 4, 0), "连续推动的下一步必须广播")
+        assertTrue(battle.onMovableBoxPush(9, 2, 3, 2, 4, 0), "连续推动的下一步必须广播")
         // 推回去再推回来 (src/dst 完全不同) 也不能被误判为重复
-        assertTrue(Room.onMovableBoxPush(9, 2, 4, 2, 3, 0))
-        assertTrue(Room.onMovableBoxPush(9, 2, 3, 2, 4, 0))
+        assertTrue(battle.onMovableBoxPush(9, 2, 4, 2, 3, 0))
+        assertTrue(battle.onMovableBoxPush(9, 2, 3, 2, 4, 0))
 
-        val state = Room.movableBoxState(9)
+        val state = battle.movableBoxState(9)
         assertNotNull(state)
         assertEquals(2, state!!.targetX)
         assertEquals(4, state.targetY)
@@ -155,24 +170,25 @@ class PushMovableBoxTest {
     fun testDuplicateRebroadcastAfterWindow() {
         // 去重必须有时间窗: 某端漏包导致箱子没动时, 玩家再推一次要能重播自愈,
         // 否则那个箱子会永久卡死 (客户端 0x565CE0 校验 src 失败后不会再自行纠正)。
-        val window = Room.movableBoxDedupeWindowMs
+        val window = Room.battleConfig.movableBoxDedupeWindowMs
         try {
-            Room.movableBoxDedupeWindowMs = 0
-            assertTrue(Room.onMovableBoxPush(11, 4, 4, 4, 5, 1))
+            Room.battleConfig.movableBoxDedupeWindowMs = 0
+            val activeBattle = Room.startGame()
+            assertTrue(activeBattle.onMovableBoxPush(11, 4, 4, 4, 5, 1))
             assertTrue(
-                Room.onMovableBoxPush(11, 4, 4, 4, 5, 1),
+                activeBattle.onMovableBoxPush(11, 4, 4, 4, 5, 1),
                 "窗口过后同一动作必须能再次广播"
             )
         } finally {
-            Room.movableBoxDedupeWindowMs = window
+            Room.battleConfig.movableBoxDedupeWindowMs = window
         }
     }
 
     @Test
     fun testIllegalBoxSeqIsDropped() {
-        assertFalse(Room.onMovableBoxPush(0x10000, 1, 1, 1, 2, 0), "越界 boxSeq 不应广播")
-        assertFalse(Room.onMovableBoxPush(3, 1, 1, 1, 2, 0x100), "越界 slotId 不应广播")
+        assertFalse(battle.onMovableBoxPush(0x10000, 1, 1, 1, 2, 0), "越界 boxSeq 不应广播")
+        assertFalse(battle.onMovableBoxPush(3, 1, 1, 1, 2, 0x100), "越界 slotId 不应广播")
         // 末尾字节是客户端待确认队列下标(0..7 之外也不该被丢掉, 接收端根本不使用它)
-        assertTrue(Room.onMovableBoxPush(3, 1, 1, 1, 2, 0xFF), "0xFF 以内的末尾字节应放行")
+        assertTrue(battle.onMovableBoxPush(3, 1, 1, 1, 2, 0xFF), "0xFF 以内的末尾字节应放行")
     }
 }
