@@ -257,14 +257,15 @@ public sealed class MainViewModel : ObservableObject
 
     public string StatusLine => IsBusy && !string.IsNullOrEmpty(BusyText) ? BusyText : StatusText;
 
-    public Visibility SpinnerVisibility => IsBusy && IsIndeterminate ? Visibility.Visible : Visibility.Collapsed;
-
-    public Visibility ProgressBarVisibility => IsBusy && !IsIndeterminate ? Visibility.Visible : Visibility.Collapsed;
+    /// <summary>
+    /// 进度只有一条，忙碌时整条显示；确定 / 不确定由 <see cref="IsIndeterminate"/>
+    /// 交给模板换轨道里的内容，不再切换控件。
+    /// </summary>
+    public Visibility ProgressBarVisibility => IsBusy ? Visibility.Visible : Visibility.Collapsed;
 
     private void RaiseBusyVisuals()
     {
         OnPropertyChanged(nameof(StatusLine));
-        OnPropertyChanged(nameof(SpinnerVisibility));
         OnPropertyChanged(nameof(ProgressBarVisibility));
     }
 

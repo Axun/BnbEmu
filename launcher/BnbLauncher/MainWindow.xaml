@@ -481,31 +481,14 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <Grid Width="14" Height="14" VerticalAlignment="Center" HorizontalAlignment="Left"
-                  Visibility="{Binding SpinnerVisibility}">
-                <Ellipse Width="14" Height="14" Stroke="#E2E6EC" StrokeThickness="2" />
-                <Path Data="M 7,0.7 A 6.3,6.3 0 1 1 0.7,7" Stroke="{StaticResource AccentBrush}" StrokeThickness="2"
-                      StrokeStartLineCap="Round" StrokeEndLineCap="Round">
-                    <Path.RenderTransform>
-                        <RotateTransform x:Name="SpinTx" CenterX="7" CenterY="7" />
-                    </Path.RenderTransform>
-                </Path>
-                <Grid.Triggers>
-                    <EventTrigger RoutedEvent="FrameworkElement.Loaded">
-                        <BeginStoryboard>
-                            <Storyboard RepeatBehavior="Forever">
-                                <DoubleAnimation Storyboard.TargetName="SpinTx" Storyboard.TargetProperty="Angle"
-                                                 From="0" To="360" Duration="0:0:0.9" />
-                            </Storyboard>
-                        </BeginStoryboard>
-                    </EventTrigger>
-                </Grid.Triggers>
-            </Grid>
-
-            <!-- 粗细由 ThinProgressBar 自己定（8px），这里别再写 Height 覆盖它 -->
+            <!-- 进度只有这一条：确定进度铺斜条、不确定进度跑纯色滑块，
+                 形态和占位宽度全程不变，右侧状态文字不会因为相位切换而横移。
+                 粗细由 ThinProgressBar 自己定（8px），这里别再写 Height 覆盖它。 -->
             <ProgressBar Style="{StaticResource ThinProgressBar}" Width="90" Margin="0,0,10,0"
                          VerticalAlignment="Center" HorizontalAlignment="Left" Minimum="0" Maximum="100"
-                         Value="{Binding ProgressValue, Mode=OneWay}" Visibility="{Binding ProgressBarVisibility}" />
+                         Value="{Binding ProgressValue, Mode=OneWay}"
+                         IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}"
+                         Visibility="{Binding ProgressBarVisibility}" />
 
             <TextBlock Grid.Column="1" Text="{Binding StatusLine}" Style="{StaticResource MutedText}"
                        VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
