@@ -165,7 +165,6 @@ public sealed class MainViewModel : ObservableObject
             () => !IsBusy && !IsClientRunning && AppPaths.SourceExists);
         OpenFolderCommand = new RelayCommand(() => OpenInExplorer(AppPaths.BaseDir));
         OpenSourceFolderCommand = new RelayCommand(() => OpenInExplorer(AppPaths.SourceDir));
-        OpenLogFolderCommand = new RelayCommand(() => OpenInExplorer(AppPaths.LogsDir));
         OpenRepoCommand = new RelayCommand(() => OpenUrl(_config.RepoUrl));
         ClearLogCommand = new RelayCommand(() => _log.Clear());
         CopyLogCommand = new RelayCommand(CopyLogToClipboard);
@@ -196,7 +195,6 @@ public sealed class MainViewModel : ObservableObject
     public ICommand RepackClientCommand { get; }
     public ICommand OpenFolderCommand { get; }
     public ICommand OpenSourceFolderCommand { get; }
-    public ICommand OpenLogFolderCommand { get; }
     public ICommand OpenRepoCommand { get; }
     public ICommand ClearLogCommand { get; }
     public ICommand CopyLogCommand { get; }

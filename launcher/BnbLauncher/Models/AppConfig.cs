@@ -21,12 +21,6 @@ public sealed class AppConfig
     [JsonPropertyName("autoCheckLauncher")] public bool AutoCheckLauncher { get; set; } = true;
 
     /// <summary>
-    /// 可选：启动器更新源（latest.json）。留空则按「Release 滚动 tag → 仓库 raw」依次尝试。
-    /// 国内网络可以填镜像/反代地址；填了就只认这一个源。
-    /// </summary>
-    [JsonPropertyName("updateFeedUrl")] public string UpdateFeedUrl { get; set; } = "";
-
-    /// <summary>
     /// 可选：HTTPS 代理，形如 http://127.0.0.1:7890。留空则自动检测
     /// （环境变量 HTTPS_PROXY → 系统代理 → git 全局配置 http.proxy）。
     /// libgit2 只支持 http/https 代理，SOCKS 会被忽略并退化为直连。

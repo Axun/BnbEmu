@@ -17,7 +17,6 @@ public partial class SettingsWindow : Window
         AutoLauncherCheckBox.IsChecked = config.AutoCheckLauncher;
         AutoStartBox.IsChecked = config.AutoStartServer;
         ProxyBox.Text = config.Proxy;
-        FeedBox.Text = config.UpdateFeedUrl;
 
         foreach (var item in VendorBox.Items.OfType<ComboBoxItem>())
         {
@@ -49,21 +48,11 @@ public partial class SettingsWindow : Window
 
         var vendor = (VendorBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "Corretto";
         var proxy = ProxyBox.Text.Trim();
-        var feed = FeedBox.Text.Trim();
 
         if (proxy.Length > 0
             && !proxy.Contains("://", StringComparison.Ordinal))
         {
             proxy = "http://" + proxy;
-        }
-
-        if (feed.Length > 0
-            && !feed.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-            && !feed.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            MessageBox.Show(this, "The update feed must be a full http/https URL (latest.json).", "Settings",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
         }
 
         Result = new AppConfig
@@ -76,7 +65,6 @@ public partial class SettingsWindow : Window
             AutoCheckLauncher = AutoLauncherCheckBox.IsChecked == true,
             AutoStartServer = AutoStartBox.IsChecked == true,
             Proxy = proxy,
-            UpdateFeedUrl = feed,
         };
 
         DialogResult = true;

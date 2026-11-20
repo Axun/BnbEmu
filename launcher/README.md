@@ -87,7 +87,7 @@ Windows 桌面启动器（WPF / .NET 9 / C#）：用 git 拉取 BnbEmu 最新源
 
 ### 流程
 
-1. 启动时 `GET` 清单（默认依次尝试 `releases/download/launcher-latest/latest.json`
+1. 启动时 `GET` 清单（依次尝试 `releases/download/launcher-latest/latest.json`
    和 `raw.../launcher/latest.json`），比版本号；有新版就在窗口顶部出横幅
 2. 点「下载更新」→ 下到 `runtime\update\new-<版本>.exe.part`（支持断点续传）→ 校验长度与 SHA-256
 3. 点「立即重启并更新」，或直接关掉启动器 → 写 `runtime\update\pending.json`、
@@ -197,7 +197,6 @@ dotnet publish BnbLauncher -c Release -o dist
 | `autoStartServer` | 环境就绪后自动运行服务，默认 `true` |
 | `autoCheckUpdates` | 启动时检测远端更新（只提示），默认 `true` |
 | `autoCheckLauncher` | 启动时检查启动器自身更新，默认 `true` |
-| `updateFeedUrl` | 可选。启动器更新清单地址（`latest.json`）。留空依次尝试滚动 release 与仓库 raw；国内可填镜像/反代 |
 | `proxy` | 可选。HTTPS 代理，如 `http://127.0.0.1:7890`；留空自动检测环境变量 / 系统代理 / git 全局 `http.proxy`。libgit2 只支持 http/https 代理，SOCKS 会被忽略并退化为直连 |
 
 ## 说明

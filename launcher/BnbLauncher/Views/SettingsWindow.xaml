@@ -21,7 +21,7 @@
         <StackPanel Grid.Row="0" Margin="2,0,2,12">
             <TextBlock Text="Settings" FontSize="18" FontWeight="SemiBold"
                        Foreground="{StaticResource TextPrimaryBrush}" />
-            <TextBlock Text="Click Save to apply; settings are written to launcher.config.json in this folder"
+            <TextBlock Text="Written to launcher.config.json in this folder"
                        Style="{StaticResource CaptionText}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" />
         </StackPanel>
 
@@ -54,7 +54,7 @@
                     <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,14" />
 
                     <TextBlock Text="JDK Vendor" Style="{StaticResource CardTitleText}" />
-                    <ComboBox x:Name="VendorBox" Margin="0,8,0,0" Style="{StaticResource LightComboBox}" Height="32" FontSize="13">
+                    <ComboBox x:Name="VendorBox" Margin="0,8,0,0" Style="{StaticResource LightComboBox}" FontSize="13">
                         <ComboBoxItem Content="Amazon Corretto 21" Tag="Corretto" />
                         <ComboBoxItem Content="Azul Zulu 21" Tag="Zulu" />
                     </ComboBox>
@@ -62,22 +62,19 @@
                     <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,14" />
 
                     <TextBlock Text="Startup Behavior" Style="{StaticResource CardTitleText}" />
-                    <CheckBox x:Name="AutoCheckBox" Content="Check for updates on startup (notify only, no automatic download)" FontSize="13"
+                    <CheckBox x:Name="AutoCheckBox" Content="Check for server code updates on startup" FontSize="13"
                               Foreground="{StaticResource TextBodyBrush}" Margin="0,10,0,0" />
-                    <CheckBox x:Name="AutoLauncherCheckBox" Content="Check for launcher updates on startup (shown in the top banner)" FontSize="13"
+                    <CheckBox x:Name="AutoLauncherCheckBox" Content="Check for launcher updates on startup" FontSize="13"
                               Foreground="{StaticResource TextBodyBrush}" Margin="0,8,0,0" />
-                    <CheckBox x:Name="AutoStartBox" Content="Start the background server automatically when the runtime is ready" FontSize="13"
+                    <CheckBox x:Name="AutoStartBox" Content="Start server automatically on startup" FontSize="13"
                               Foreground="{StaticResource TextBodyBrush}" Margin="0,8,0,0" />
 
                     <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,14" />
 
                     <TextBlock Text="Network" Style="{StaticResource CardTitleText}" />
-                    <TextBlock Text="HTTPS proxy (optional): leave empty to auto-detect environment variables / system proxy / git global config; libgit2 does not support SOCKS."
+                    <TextBlock Text="HTTPS proxy (optional): leave empty to auto-detect system config; does not support SOCKS."
                                Style="{StaticResource MutedText}" Margin="0,10,0,6" TextWrapping="Wrap" />
                     <TextBox x:Name="ProxyBox" Style="{StaticResource LightTextBox}" />
-                    <TextBlock Text="Launcher update feed (optional): URL of latest.json. Leave empty to try the rolling Release tag (launcher-latest), then the repository raw file; a mirror can be used."
-                               Style="{StaticResource MutedText}" Margin="0,10,0,6" TextWrapping="Wrap" />
-                    <TextBox x:Name="FeedBox" Style="{StaticResource LightTextBox}" />
                 </StackPanel>
             </ScrollViewer>
         </Border>

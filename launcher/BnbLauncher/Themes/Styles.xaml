@@ -145,12 +145,65 @@
         <Setter Property="Height" Value="20" />
     </Style>
 
-    <!-- 悬停提示气泡：深底浅字。用于把图标按钮省略掉的文字说明补回来。 -->
+    <!-- 工具栏里的图标开关（日志区的 Auto-scroll 用）：未选中时和普通图标按钮完全一致
+         —— 透明底、灰图标、24×24 命中区；选中时把底填成「按下去」的浅灰方块、图标提深，
+         一眼就能看出该功能正开着，不用再挤一行文字标签。
+         填充色刻意用中性灰而不是强调色：这一排图标（清空/复制）都是灰的，突然冒出一块
+         青绿会比功能本身更抢眼。 -->
+    <Style x:Key="ToolbarToggle" TargetType="ToggleButton">
+        <Setter Property="Width" Value="24" />
+        <Setter Property="Height" Value="24" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Grid>
+                        <Border x:Name="Bd" CornerRadius="6"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" />
+                        <Border x:Name="Hover" CornerRadius="6" Background="#12000000" Opacity="0" />
+                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- 选中＝按下：底比透明重一档，图标同步提深 -->
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#E3E7EC" />
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="#D2D8DF" />
+                            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Hover" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.42" />
+                            <Setter Property="Cursor" Value="Arrow" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 悬停提示气泡：深底浅字。用于把图标按钮省略掉的文字说明补回来。
+         MaxWidth 取 320：240 时那句话长的说明（重新打包、首启动准备客户端）要拆成
+         五六行，气球又高又窄，读起来像一条竖排文字；320 一行能放 45~50 个字符，
+         通常两到三行就说完了，宽度也还远小于窗口最小宽度（880）。 -->
     <Style x:Key="HintToolTip" TargetType="ToolTip">
         <Setter Property="Foreground" Value="White" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Padding" Value="10,7" />
-        <Setter Property="MaxWidth" Value="240" />
+        <Setter Property="MaxWidth" Value="320" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
@@ -168,9 +221,10 @@
 
     <!-- ── 输入框 ──────────────────────────────────────────────────── -->
     <Style x:Key="LightTextBox" TargetType="TextBox">
+        <Setter Property="Height" Value="32" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="Foreground" Value="{StaticResource TextBodyBrush}" />
-        <Setter Property="Padding" Value="9,6" />
+        <Setter Property="Padding" Value="4,0" />
         <Setter Property="CaretBrush" Value="{StaticResource AccentDarkBrush}" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
         <Setter Property="Template">
@@ -223,7 +277,7 @@
     </Style>
 
     <Style x:Key="LightComboBox" TargetType="ComboBox">
-        <Setter Property="Height" Value="30" />
+        <Setter Property="Height" Value="32" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="Foreground" Value="{StaticResource TextBodyBrush}" />
         <Setter Property="Padding" Value="11,0,0,0" />

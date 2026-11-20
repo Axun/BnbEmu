@@ -68,16 +68,13 @@ public static class LauncherUpdater
     // ── 清单 ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// 更新源。默认两个，按顺序试：
+    /// 更新源，两个按顺序试：
     ///   1. 滚动 tag `launcher-latest` 下的 latest.json —— 发布流程每次覆盖上传，路径永远不变；
     ///   2. 仓库 raw 里的 launcher/latest.json —— 万一哪天改成提交进仓库，也不用动客户端。
     /// 注意别用 /releases/latest/download/：那个 latest 会被客户端资源那条 release 抢走。
     /// </summary>
     public static IReadOnlyList<string> FeedUrls(AppConfig cfg)
     {
-        var custom = cfg.UpdateFeedUrl?.Trim();
-        if (!string.IsNullOrEmpty(custom)) return [custom];
-
         return
         [
             $"https://github.com/{cfg.Owner}/{cfg.Repo}/releases/download/launcher-latest/latest.json",
