@@ -9,9 +9,34 @@
     <SolidColorBrush x:Key="TextBodyBrush" Color="#374151" />
     <SolidColorBrush x:Key="TextSecondaryBrush" Color="#6B7280" />
     <SolidColorBrush x:Key="TextMutedBrush" Color="#9CA3AF" />
-    <SolidColorBrush x:Key="AccentBrush" Color="#0D9488" />
-    <SolidColorBrush x:Key="AccentDarkBrush" Color="#0B7A70" />
-    <SolidColorBrush x:Key="AccentSoftBrush" Color="#E6FFFA" />
+    <!-- 主题色取自游戏本体：PopTag「My Page」界面里那族按钮蓝。
+         取 #1D74D8 而不是底部按钮面的 #1463CE：后者压在白色卡片上偏沉，
+         这一个亮度高约 37%（相对亮度 0.13 → 0.18），既还是游戏那支蓝，也不显笨。
+         白字对比度 4.6:1，仍过 AA 线（13px SemiBold）；再往上调一档到 #2A80E0
+         就只剩 4:1，白字会开始发飘，所以这里差不多是上限。
+         AccentDark 仍按旧配色的实测关系推：×0.824（旧 #0D9488→#0B7A70 就是这个系数），
+         保证「本色深一档」的含义不随换色而变。 -->
+    <SolidColorBrush x:Key="AccentBrush" Color="#1D74D8" />
+    <SolidColorBrush x:Key="AccentDarkBrush" Color="#1860B2" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#E8F1FB" />
+
+    <!-- 主题色按钮面的「受光明暗」：不含任何具体颜色，只有白色/黑色的半透明，
+         叠在底色上现算——等效于把底色调亮 6% / 压暗 4%，但底色一改（换主题色、
+         甚至换成白底）这层明暗自动跟着走，不用再手算一组十六进制。
+         两头不对称是故意的：上半段要撑起「受光面」，6% 才够在浅蓝上读出来；
+         底部只要一点收口，给到 6% 就会把浅蓝压成脏灰——蓝色底一旦往暗处走，
+         饱和度掉得比明度快，4% 是还能看出「底边厚一点」的最大值。
+
+         ⚠️ 中段必须放两个 alpha=0 的停点（0.5 白透明 / 0.55 黑透明）：
+         WPF 渐变按 RGBA 四个分量各自线性插值，若让「白透明」直接插到「黑透明」，
+         中间会经过 50% 灰——哪怕 alpha 只剩零点几，按钮中段也会蒙上一层脏灰。
+         两个零 alpha 停点之间插值全程 alpha=0，那点灰就不可见。 -->
+    <LinearGradientBrush x:Key="FaceReliefBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0" Color="#0FFFFFFF" />
+        <GradientStop Offset="0.5" Color="#00FFFFFF" />
+        <GradientStop Offset="0.55" Color="#00000000" />
+        <GradientStop Offset="1" Color="#0A000000" />
+    </LinearGradientBrush>
     <SolidColorBrush x:Key="DangerBrush" Color="#B91C1C" />
     <SolidColorBrush x:Key="DangerSoftBrush" Color="#FDECEC" />
     <SolidColorBrush x:Key="DividerBrush" Color="#EEF0F4" />
@@ -100,11 +125,102 @@
         </Setter>
     </Style>
 
+    <!-- 主按钮的落影：只挂在下层那块底色 Border 上（不含文字），
+         所以文字不会被 Effect 拍成位图后发糊——这是给按钮加阴影最容易踩的坑。
+         参数克制到「只够离开纸面 1px」：ShadowDepth 1 / Blur 3 / 15% 中性黑。
+         颜色用中性 #0F172A 而不是主题蓝：这个模板也被「停止服务」（白底红字）复用，
+         带色阴影压在白面上会读成一圈蓝边。 -->
+    <DropShadowEffect x:Key="PrimaryShadowEffect" x:Shared="False"
+                      BlurRadius="3" ShadowDepth="1" Opacity="0.15" Color="#0F172A" />
+
+    <!-- ── 主题色填充按钮的模板（微拟物） ──────────────────────────
+         比 BaseButton 多几层，自下而上：底色 Border（带落影）、受光明暗、顶边亮光、
+         悬停/按下的薄纱。除底色外每一层都只是白/黑的半透明，所以「主题色」只需要
+         Background 一个来源——连白底红字的「停止服务」态也共用同一套光，
+         它得到的是「raised 白按钮」，不需要另配一份配色。
+         刻意不放进 BaseButton：次要/危险/幽灵按钮都是平面白，套上渐变和阴影反而脏。 -->
+    <ControlTemplate x:Key="PrimaryButtonTemplate" TargetType="Button">
+        <Grid>
+            <Border x:Name="Bd" CornerRadius="7"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    Effect="{StaticResource PrimaryShadowEffect}" />
+
+            <!-- 受光明暗：白 12% → 透明 → 黑 9%，直接铺在底色上做乘加，
+                 底色是青的就是青的、是白的就是白的。内缩 1px + 圆角减 1，
+                 是为了不盖住外面那道描边——否则顶部 12% 白会糊在描边上，
+                 把那条最需要清晰的边线洗淡。 -->
+            <Border x:Name="Relief" Margin="1" CornerRadius="6"
+                    Background="{StaticResource FaceReliefBrush}" IsHitTestVisible="False" />
+
+            <!-- 顶边那道亮光：3px 内由 28% 白淡到全透明（纵向 opacityMask），
+                 两端再用横向渐变淡出，合起来是一小片「从上方照下来」的软光，而不是一条硬白线。
+                 只做 1px 硬白的话，100% 下是一道刀切似的台阶，像塑料倒角；
+                 把同一笔光摊到 3px 并让它纵向衰减，边缘就化开了，也更贴「渐变亮光」的意图。
+                 这一笔是微拟物的关键——底下那层明暗只是「亮一档」，加上这层收口才像弧面受光。
+                 用 Rectangle 而不是 Border 的 BorderThickness="0,1,0,0"：后者在
+                 CornerRadius=7 且四边厚度不等时渲染路径会退化，不保证画出顶边。
+                 左右各留 2px + 两端淡出，正好避开圆角，不会在角上戳出一截白毛刺。
+                 上边距 1px 是让出外层描边，光落在描边内侧读作「倒角上的反光」。 -->
+            <Rectangle x:Name="Rim" Height="3" Margin="2,1,2,0" VerticalAlignment="Top"
+                       IsHitTestVisible="False">
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                        <GradientStop Offset="0" Color="#00FFFFFF" />
+                        <GradientStop Offset="0.12" Color="#33FFFFFF" />
+                        <GradientStop Offset="0.5" Color="#48FFFFFF" />
+                        <GradientStop Offset="0.88" Color="#33FFFFFF" />
+                        <GradientStop Offset="1" Color="#00FFFFFF" />
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+                <Rectangle.OpacityMask>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop Offset="0" Color="#FFFFFFFF" />
+                        <GradientStop Offset="0.45" Color="#3DFFFFFF" />
+                        <GradientStop Offset="1" Color="#00FFFFFF" />
+                    </LinearGradientBrush>
+                </Rectangle.OpacityMask>
+            </Rectangle>
+
+            <!-- 悬停/按下只叠一层薄纱，不动底色画刷本身：
+                 改画刷会把上面那套明暗关系（顶亮底暗）一起抹平，按钮就「瘪」了。
+                 悬停用 9% 白（面上提亮，像凑近光源），按下换成 15% 黑并把高光收掉，
+                 一升一降正好读出「按进去了」。 -->
+            <Border x:Name="Veil" CornerRadius="7" Background="#17FFFFFF" Opacity="0" />
+
+            <ContentPresenter Margin="{TemplateBinding Padding}"
+                              HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalAlignment="Center" />
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Veil" Property="Opacity" Value="1" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Veil" Property="Background" Value="#26000000" />
+                <Setter TargetName="Veil" Property="Opacity" Value="1" />
+                <Setter TargetName="Rim" Property="Opacity" Value="0" />
+                <!-- 落影一起收掉：面往下压的同时影子消失，深度差才有「物理感」 -->
+                <Setter TargetName="Bd" Property="Effect" Value="{x:Null}" />
+            </Trigger>
+            <!-- 放在最后：禁用时覆盖上面两个状态，不能再跟着悬停变色 -->
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.42" />
+                <Setter Property="Cursor" Value="Arrow" />
+                <Setter TargetName="Bd" Property="Effect" Value="{x:Null}" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
     <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource BaseButton}">
+        <!-- 只给本色，明暗全部由模板里的 FaceReliefBrush 现算；换主题色只改这一处 -->
         <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+        <!-- 描边比面深一档（AccentDark），配合顶边高光就是一条完整的倒角 -->
+        <Setter Property="BorderBrush" Value="{StaticResource AccentDarkBrush}" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Template" Value="{StaticResource PrimaryButtonTemplate}" />
     </Style>
 
     <Style x:Key="SecondaryButton" TargetType="Button" BasedOn="{StaticResource BaseButton}">
@@ -149,7 +265,7 @@
          —— 透明底、灰图标、24×24 命中区；选中时把底填成「按下去」的浅灰方块、图标提深，
          一眼就能看出该功能正开着，不用再挤一行文字标签。
          填充色刻意用中性灰而不是强调色：这一排图标（清空/复制）都是灰的，突然冒出一块
-         青绿会比功能本身更抢眼。 -->
+         亮蓝会比功能本身更抢眼。 -->
     <Style x:Key="ToolbarToggle" TargetType="ToggleButton">
         <Setter Property="Width" Value="24" />
         <Setter Property="Height" Value="24" />
@@ -264,7 +380,7 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#F0FBFA" />
+                            <Setter TargetName="Bd" Property="Background" Value="#F2F7FE" />
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentSoftBrush}" />
@@ -383,29 +499,66 @@
 
     <!-- ── 细进度条（唯一形态：确定 / 不确定都走这一条） ──────────────── -->
     <!-- 状态栏原来并排放着「圆环 + 条形」两个控件，按 IsIndeterminate 二选一显示。
-         问题是两者宽度差一截（环 14px、条 90+10px），切换时第 0 列跟着变宽，
-         右边整行状态文字横移 86px；而一个装 JDK 的操作里形态要跳两三次，
+         问题是两者宽度差一截（环 14px、条 150+10px），切换时第 0 列跟着变宽，
+         右边整行状态文字横移 146px；而一个装 JDK 的操作里形态要跳两三次，
          看起来像进度被重置了。现在收成一条：轨道、粗细、圆角、配色全程不动，
          只换轨道里的内容。
          确定：斜条填充按百分比伸展（宽度由 ProgressBar 自己按 Value 算）。
          不确定：一条纯色滑块循环跑，块里不叠条纹——不确定态本来就没有“填了多少”
          的含义，再叠流纹容易被读成进度正在涨。 -->
+
+    <!-- 轨道 = 纯白底 + 1px 浅冷灰描边（2026-11 调整）。
+         旧版轨道是 #E5E7EB 实心块，压在 #F4F5F7 的状态栏上只差一档明度，圆角又是
+         抗锯齿渲染，远看边缘和底色糊成一片，像浮着的一块半透明灰。
+         现在把边界交给 1px 实线、底色提亮到纯白：白底与上方卡片同色，整条读作
+         「卡片上挖出来的一道槽」，而不是压在底栏上的一团灰。
+         描边取 #DDE2E8——比 Settings 按钮（#D8DDE4）浅半档、比 Run Log 框（#E7E9EE）
+         深一档；12px 高的小控件直接用按钮那档会显得框线过重。 -->
+    <SolidColorBrush x:Key="ProgressTrackBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="ProgressTrackBorderBrush" Color="#DDE2E8" />
+
+    <!-- 极浅的顶部内阴影：只在最上面 4px 里由 7% 冷黑淡到全透明，方向性来自「上深下无」。
+         不做四边内阴影——10px 内腔四面一起压暗会直接变成一条脏灰；这里克制到只剩一道顶边，
+         刚好够读出「凹槽」，又不至于把白色轨道重新拉灰。 -->
+    <LinearGradientBrush x:Key="ProgressTrackInsetBrush" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0" Color="#110F172A" />
+        <GradientStop Offset="0.55" Color="#060F172A" />
+        <GradientStop Offset="1" Color="#000F172A" />
+    </LinearGradientBrush>
+
     <Style x:Key="ThinProgressBar" TargetType="ProgressBar">
-        <Setter Property="Height" Value="8" />
-        <Setter Property="Background" Value="#E5E7EB" />
+        <!-- 外高 12px = 上下各 1px 描边 + 10px 内腔。轨道从 90×8 加宽到 150 之后，
+             高度只跟着抬 2px：再高就变成一根粗条，状态栏那行也要被顶起来；
+             12px 与 150px 宽度配起来仍是「细长」的比例，视线不会被它抢走。 -->
+        <Setter Property="Height" Value="12" />
+        <Setter Property="Background" Value="{StaticResource ProgressTrackBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource ProgressTrackBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ProgressBar">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="4" ClipToBounds="True">
+                    <!-- 圆角 6 = 半高，胶囊形；内腔靠 BorderThickness 自动让出，描边不会被填充盖住。 -->
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="6" ClipToBounds="True">
                         <Grid>
+                            <!-- 内腔裁剪：Border 的 ClipToBounds 只按矩形裁（圆角是画上去的，
+                                 不参与裁剪），滑块滑到两端时方角会探进圆角里，把胶囊两头切成方头。
+                                 这里显式按内腔尺寸（148×10 = 150×12 各减去两侧描边）裁成胶囊，
+                                 RadiusX/Y 取半高 5；和后面 40 / 148 一样是绑死这条 150px 轨道的常量，
+                                 改轨道宽度要一起改。 -->
+                            <Grid.Clip>
+                                <RectangleGeometry Rect="0,0,148,10" RadiusX="5" RadiusY="5" />
+                            </Grid.Clip>
                             <Rectangle x:Name="PART_Track" />
-                            <!-- 圆角留给 Rectangle 自己（RadiusX/Y），填充色就是带状画刷，
-                                 这样斜条天然被圆角裁掉，不用额外 Clip 几何。 -->
+                            <!-- 圆角留给 Rectangle 自己（RadiusX/Y），斜条被自身圆角裁掉；
+                                 轨道两端的胶囊形收边由上面 Grid 的 Clip 负责。 -->
                             <Rectangle x:Name="PART_Indicator" HorizontalAlignment="Left"
-                                       RadiusX="4" RadiusY="4">
+                                       RadiusX="5" RadiusY="5">
                                 <Rectangle.Fill>
-                                    <!-- 一个平铺单元 10×10，底色铺绿、上面压白条。
+                                    <!-- 一个平铺单元 10×10，底色铺蓝、上面压白条。
                                          白条必须画两块：主斜带（x+y∈[5,10]）+ 右上角三角（x+y∈[15,20]）。
                                          只画主斜带的话，相邻 tile 拼接处会错开半格，斜条在边界断开。 -->
                                     <DrawingBrush TileMode="Tile" Stretch="Fill"
@@ -416,7 +569,7 @@
                                         </DrawingBrush.Transform>
                                         <DrawingBrush.Drawing>
                                             <DrawingGroup>
-                                                <!-- 绿色取 Foreground（模板里不能用 TemplateBinding 给画刷赋值，
+                                                <!-- 蓝色取 Foreground（模板里不能用 TemplateBinding 给画刷赋值，
                                                      所以用 Binding 绑到 TemplatedParent），换 Foreground 就换整条色带 -->
                                                 <GeometryDrawing Brush="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}">
                                                     <GeometryDrawing.Geometry>
@@ -435,16 +588,26 @@
                             </Rectangle>
 
                             <!-- 不确定进度用的滑块：纯色、无条纹，只有一条在轨道里跑。
-                                 宽 34 / 行程到 90 是按状态栏那条固定 90px 轨道写死的
-                                 （和上面 tile 的 10px 一样属于模板内的常量）；换轨道宽度要同步改。
-                                 圆角同样交给 Rectangle 自己，滑到轨道两端时不会被裁成直角。 -->
-                            <Rectangle x:Name="PART_Marquee" Width="34" HorizontalAlignment="Left"
-                                       RadiusX="4" RadiusY="4" Visibility="Collapsed"
+                                 宽 40 / 行程到 148 是按状态栏那条固定 150px 轨道写死的
+                                 （150 减去左右各 1px 描边 = 148 的内腔；和上面 tile 的 10px
+                                 一样属于模板内的常量）；换轨道宽度要同步改。
+                                 块宽没有按 90→150 等比放大（那样会到 57，占满四成轨道像个进度块），
+                                 只加到 40：在更长的轨道里留出「跑动」的余地。
+                                 圆角同样交给 Rectangle 自己，滑到两端时由上面 Grid 的 Clip 收边。 -->
+                            <Rectangle x:Name="PART_Marquee" Width="40" HorizontalAlignment="Left"
+                                       RadiusX="5" RadiusY="5" Visibility="Collapsed"
                                        Fill="{TemplateBinding Foreground}">
                                 <Rectangle.RenderTransform>
-                                    <TranslateTransform x:Name="MarqueeSlide" X="-34" />
+                                    <TranslateTransform x:Name="MarqueeSlide" X="-40" />
                                 </Rectangle.RenderTransform>
                             </Rectangle>
+
+                            <!-- 顶部内阴影压在最上层：它属于「槽」本身，不该被填充盖掉，
+                                 否则进度一满凹槽感就没了。4px 渐变里只有最上面一两像素够深，
+                                 落在白轨道上是极浅的一道灰、落在蓝色填充上只是略微深一档，
+                                 两处都不会抢走对进度本身的注意力。 -->
+                            <Rectangle Height="4" VerticalAlignment="Top" IsHitTestVisible="False"
+                                       Fill="{StaticResource ProgressTrackInsetBrush}" />
                         </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -476,8 +639,10 @@
                         <!-- 不确定进度：换成纯色滑块循环跑。
                              用 Hidden 而不是 Collapsed 收起身下的斜条填充——Collapsed 会让
                              它退出布局，确定态的宽度就丢了，切回来会先闪一帧空条。
-                             行程 -34 → 90 是一个完整周期：整块从轨道左外侧进入、右外侧离场，
-                             回到 -34 时前端刚好接上，看上去是一条连续流动的块。 -->
+                             行程 -40 → 148 是一个完整周期：整块从内腔左外侧进入、右外侧离场，
+                             回到 -40 时前端刚好接上，看上去是一条连续流动的块。
+                             1.6s 走 188px ≈ 118px/s，和旧版 90px 轨道上的 94px/s 同量级：
+                             轨道长了一半，时长不跟着拉长，否则看起来像慢动作。 -->
                         <MultiTrigger>
                             <MultiTrigger.Conditions>
                                 <Condition Property="IsVisible" Value="True" />
@@ -492,7 +657,7 @@
                                     <Storyboard RepeatBehavior="Forever">
                                         <DoubleAnimation Storyboard.TargetName="MarqueeSlide"
                                                          Storyboard.TargetProperty="X"
-                                                         From="-34" To="90" Duration="0:0:1.3" />
+                                                         From="-40" To="148" Duration="0:0:1.6" />
                                     </Storyboard>
                                 </BeginStoryboard>
                             </MultiTrigger.EnterActions>

@@ -30,11 +30,14 @@ public sealed class LogLine
             LogLevel.Warn => ("WARN", Ui.Brush("#B45309")),
             LogLevel.Error => ("ERR ", Ui.Brush("#B91C1C")),
             LogLevel.Success => ("OK  ", Ui.Brush("#15803D")),
-            LogLevel.Sys => ("SYS ", Ui.Brush("#0F766E")),
+            // SYS 原来和 TagBrush 同一个青色：主题换蓝之后它俩继续绑在一起（AccentDark），
+            // 免得日志里只剩一个孤零零的绿点，也不去抢 RUN 那个亮蓝。
+            LogLevel.Sys => ("SYS ", Ui.Brush("#1860B2")),
             LogLevel.Server => ("RUN ", Ui.Brush("#1D4ED8")),
             _ => ("INFO", Ui.Brush("#9CA3AF")),
         };
-        TagBrush = Ui.Brush("#0F766E");
+        // 分类标签（[GIT]/[JAVA]…）跟主题色走：AccentDark 一档，压得住 12px 等宽小字
+        TagBrush = Ui.Brush("#1860B2");
         TextBrush = Ui.Brush(level == LogLevel.Server ? "#1F2937" : "#374151");
     }
 

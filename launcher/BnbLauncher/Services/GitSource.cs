@@ -490,7 +490,9 @@ public static class GitSource
                   ?? throw new InvalidOperationException("The source has no resource submodule (.gitmodules is missing or has been modified)");
 
         var target = Path.IsPathRooted(sub.Path) ? sub.Path : Path.Combine(AppPaths.SourceDir, sub.Path);
-        var url = ResolveRelativeUrl(cfg.CloneUrl, sub.Url);
+        // 相对地址按父仓库（可能已经带镜像前缀）拼成绝对地址；如果 .gitmodules 直接写了 github.com
+        // 的绝对地址，这里再补一次镜像前缀 —— Rewrite 幂等，拼过的不会套两层。
+        var url = GitMirror.Rewrite(ResolveRelativeUrl(cfg.CloneUrl, sub.Url), cfg.Mirror);
 
         // 源码仓库 pin 的子模块提交：HEAD 树里的 gitlink，索引缺失时再退回 index
         var want = sub.HeadCommitId ?? sub.IndexCommitId;
@@ -886,7 +888,11 @@ public static class GitSource
         if (message.Contains("could not resolve host", StringComparison.OrdinalIgnoreCase)
             || message.Contains("Failed to resolve address", StringComparison.OrdinalIgnoreCase))
         {
-            return new InvalidOperationException("Cannot resolve github.com. Check your network or proxy settings. Original error: " + message, ex);
+            var host = GitMirror.Host(cfg.Mirror);
+            var hint = GitMirror.IsMirror(cfg.Mirror)
+                ? $"Cannot resolve {host} (the mirror). Check your network or proxy settings, or switch Settings → GitHub access back to Direct."
+                : $"Cannot resolve {host}. Check your network or proxy settings, or try a mirror under Settings → GitHub access.";
+            return new InvalidOperationException(hint + " Original error: " + message, ex);
         }
 
         if (message.Contains("authentication", StringComparison.OrdinalIgnoreCase)

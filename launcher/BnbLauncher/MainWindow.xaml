@@ -219,9 +219,12 @@
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource SecondaryButton}">
                                     <Style.Triggers>
+                                        <!-- 有更新时这颗按钮就变成主按钮：面、描边、模板一起换，
+                                             少换一样都会和旁边真正的 PrimaryButton 差一档（明暗/顶边亮光/落影各缺一点）。 -->
                                         <DataTrigger Binding="{Binding HasUpdate}" Value="True">
                                             <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-                                            <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                                            <Setter Property="BorderBrush" Value="{StaticResource AccentDarkBrush}" />
+                                            <Setter Property="Template" Value="{StaticResource PrimaryButtonTemplate}" />
                                             <Setter Property="Foreground" Value="White" />
                                             <Setter Property="FontWeight" Value="SemiBold" />
                                         </DataTrigger>
@@ -540,8 +543,11 @@
 
             <!-- 进度只有这一条：确定进度铺斜条、不确定进度跑纯色滑块，
                  形态和占位宽度全程不变，右侧状态文字不会因为相位切换而横移。
-                 粗细由 ThinProgressBar 自己定（8px），这里别再写 Height 覆盖它。 -->
-            <ProgressBar Style="{StaticResource ThinProgressBar}" Width="90" Margin="0,0,10,0"
+                 粗细由 ThinProgressBar 自己定（12px 外高 = 1px 描边 + 10px 内腔），
+                 这里别再写 Height 覆盖它。
+                 宽度 150 是模板内好几个常量的基准（内腔裁剪、滑块行程都按它算），
+                 改这里要同步 Themes/Styles.xaml 里的 ThinProgressBar。 -->
+            <ProgressBar Style="{StaticResource ThinProgressBar}" Width="150" Margin="0,0,10,0"
                          VerticalAlignment="Center" HorizontalAlignment="Left" Minimum="0" Maximum="100"
                          Value="{Binding ProgressValue, Mode=OneWay}"
                          IsIndeterminate="{Binding IsIndeterminate, Mode=OneWay}"

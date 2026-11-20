@@ -27,8 +27,19 @@ public sealed class AppConfig
     /// </summary>
     [JsonPropertyName("proxy")] public string Proxy { get; set; } = "";
 
+    /// <summary>
+    /// GitHub 访问通道：direct（默认，直连 github.com）| ghproxy（经 gh-proxy.org 反代）。
+    /// 同时作用于源码 clone/更新、子模块、更新清单和启动器 exe 下载；
+    /// 和上面的 proxy 不冲突（先换成镜像地址，再按代理规则出网）。
+    /// </summary>
+    [JsonPropertyName("mirror")] public string Mirror { get; set; } = GitMirror.DirectId;
+
+    /// <summary>给浏览器用的仓库主页：始终直连 github.com，镜像只代理文件下载，不适合看网页。</summary>
     [JsonIgnore] public string RepoUrl => $"https://github.com/{Owner}/{Repo}";
-    [JsonIgnore] public string CloneUrl => $"https://github.com/{Owner}/{Repo}.git";
+
+    /// <summary>libgit2 的远端地址：跟着镜像设置走，换通道后 EnsureRemote 会自动改写 origin。</summary>
+    [JsonIgnore] public string CloneUrl => GitMirror.Rewrite($"https://github.com/{Owner}/{Repo}.git", Mirror);
+
     [JsonIgnore] public string DisplayName => $"{Owner}/{Repo}";
 }
 

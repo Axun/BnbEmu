@@ -11,6 +11,13 @@ Windows 桌面启动器（WPF / .NET 9 / C#）：用 git 拉取 BnbEmu 最新源
 - **源码走 git，不是 zip 下载**：内置 libgit2（LibGit2Sharp），目标机器**不需要装 git**。
   首次运行 `git clone` 当前分支到 `runtime/source`；之后启动只 `git fetch` 比对，显示「有 N 个新提交」，
   由用户点「拉取更新」执行 `pull`（快进对齐远端），不会擅自覆盖
+- **GitHub 访问通道可切换**：设置里可选 `Direct`（默认，直连 github.com）或 `gh-proxy mirror`。
+  选镜像后源码 clone/更新、`resource` 子模块、更新清单和启动器 exe 全部走
+  `https://gh-proxy.org/https://github.com/...`，github.com 拉不动时也能装起来；
+  镜像只换「从哪取字节」，启动器 exe 仍要过 SHA-256、源码仍是 git 对象，篡改会被拒
+- **中文用户提示**：系统显示语言是简体中文、且一条代理都没有（设置 / 环境变量 / 系统代理 /
+  git 全局 `http.proxy` 全空）时，启动日志里会多一行中文提示「GitHub 慢可以切镜像站」；
+  已经选了镜像或本来就有代理的用户不会看到这条（见 `Services/SystemLocale.cs`）
 - **客户端资源按需拉取**：`.gitmodules` 里的 `resource`（客户端资源，几百 MB）不跟源码一起下，
   点「启动客户端」时才初始化/更新这个子模块
 - **一键启动客户端**：把 `resource/other` 里的 exe/dll/字体复制到 `runtime/client`，
@@ -95,6 +102,10 @@ Windows 桌面启动器（WPF / .NET 9 / C#）：用 git 拉取 BnbEmu 最新源
 4. 脚本等启动器 PID **彻底退出**后：`BnbLauncher.exe` → `.prev`，`new.exe` → `BnbLauncher.exe`，
    再把启动器拉起来。任一步失败都会把 `.prev` 改回去，不会留下「目录里没有 exe」的状态
 5. 下次启动对账：版本已经是目标版本就记一次成功，**连续成功两次**才删 `.prev`
+
+选了镜像（设置 → GitHub access）时清单和 exe 都从镜像取：`latest.json` 里的 `exe.url` 写的是
+github.com 的 release 资产地址，启动器读清单时就地换成镜像地址再下；长度与 SHA-256 校验仍在本地，
+镜像换了字节会被直接丢弃。
 
 几个实现细节值得记一笔：
 
@@ -198,6 +209,7 @@ dotnet publish BnbLauncher -c Release -o dist
 | `autoCheckUpdates` | 启动时检测远端更新（只提示），默认 `true` |
 | `autoCheckLauncher` | 启动时检查启动器自身更新，默认 `true` |
 | `proxy` | 可选。HTTPS 代理，如 `http://127.0.0.1:7890`；留空自动检测环境变量 / 系统代理 / git 全局 `http.proxy`。libgit2 只支持 http/https 代理，SOCKS 会被忽略并退化为直连 |
+| `mirror` | GitHub 访问通道：`direct`（默认，直连 github.com）或 `ghproxy`（经 `gh-proxy.org` 反代）。同时作用于源码 clone/更新、`resource` 子模块、更新清单与启动器 exe 下载；和 `proxy` 可叠加（先换成镜像地址，再按代理规则出网） |
 
 ## 说明
 

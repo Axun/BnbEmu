@@ -172,7 +172,7 @@ public static class SelfTest
 
             // 3) 源码：git ls-remote 判断远端，没有本地仓库就 clone
             GitSource.Initialize();
-            Say($"[git] libgit2 {GitSource.Version} · {GitNetwork.Note(config)}");
+            Say($"[git] libgit2 {GitSource.Version} · {GitNetwork.Note(config)} · {GitMirror.Note(config.Mirror)}");
 
             var status = await GitSource.CheckAsync(config);
             Say($"[git] remote head = {status.RemoteHead?.ShortSha ?? "(unknown)"} {status.RemoteHead?.Title ?? ""}");

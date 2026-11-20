@@ -1,8 +1,9 @@
 <Window x:Class="BnbLauncher.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:BnbLauncher.Models"
         Title="Settings"
-        Width="560" Height="678" ResizeMode="NoResize"
+        Width="560" Height="770" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner"
         Background="{StaticResource WindowBgBrush}"
         FontFamily="Microsoft YaHei UI, Segoe UI"
@@ -72,8 +73,18 @@
                     <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,14" />
 
                     <TextBlock Text="Network" Style="{StaticResource CardTitleText}" />
+
+                    <!-- 下载通道：直连 / gh-proxy 镜像。Tag 直接取自 GitMirror 的常量，避免和代码里的 id 漂移。 -->
+                    <TextBlock Text="GitHub access" Style="{StaticResource MutedText}" Margin="0,10,0,4" />
+                    <ComboBox x:Name="MirrorBox" Style="{StaticResource LightComboBox}" FontSize="13">
+                        <ComboBoxItem Content="Direct (github.com)" Tag="{x:Static models:GitMirror.DirectId}" />
+                        <ComboBoxItem Content="gh-proxy mirror (gh-proxy.org)" Tag="{x:Static models:GitMirror.GhProxyId}" />
+                    </ComboBox>
+                    <TextBlock Text="Used for source clone/update and launcher updates."
+                               Style="{StaticResource MutedText}" Margin="0,6,0,12" TextWrapping="Wrap" />
+
                     <TextBlock Text="HTTPS proxy (optional): leave empty to auto-detect system config; does not support SOCKS."
-                               Style="{StaticResource MutedText}" Margin="0,10,0,6" TextWrapping="Wrap" />
+                               Style="{StaticResource MutedText}" Margin="0,0,0,6" TextWrapping="Wrap" />
                     <TextBox x:Name="ProxyBox" Style="{StaticResource LightTextBox}" />
                 </StackPanel>
             </ScrollViewer>

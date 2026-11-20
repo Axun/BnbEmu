@@ -429,7 +429,9 @@ public sealed class MainViewModel : ObservableObject
     public Brush ClientDot => ClientState switch
     {
         ClientState.Running => Ui.Brush("#16A34A"),
-        ClientState.Ready => Ui.Brush("#0D9488"),
+        // Ready 用主题蓝而不是绿：Running 已经占了绿，两态同色就分不出来了；
+        // 这里是整个界面里唯一一处「主题色出现在状态点上」，跟着 AccentBrush 一起换。
+        ClientState.Ready => Ui.Brush("#1D74D8"),
         ClientState.Preparing => Ui.Brush("#F59E0B"),
         _ => Ui.Brush("#9CA3AF"),
     };
@@ -694,8 +696,11 @@ public sealed class MainViewModel : ObservableObject
         _log.Sys($"BnbLauncher v{AppVersion} started");
         _log.Sys($"Launcher folder: {AppPaths.BaseDir}");
         _log.Info("GIT", $"Repository: {_config.CloneUrl}#{_config.Branch}");
-        _log.Info("GIT", $"libgit2 {GitSource.Version} · {GitNetwork.Note(_config)}");
+        _log.Info("GIT", $"libgit2 {GitSource.Version} · {GitNetwork.Note(_config)} · {GitMirror.Note(_config.Mirror)}");
         if (GitSource.InitError is not null) _log.Error("GIT", "Failed to load libgit2: " + GitSource.InitError);
+
+        // 简体中文 + 无代理 + 未开镜像：主动提一句可以换镜像（条件判断见 SystemLocale.MirrorTip）
+        if (SystemLocale.MirrorTip(_config) is { } mirrorTip) _log.Info("GIT", mirrorTip);
 
         // 启动器自身：先对账上一次替换有没有生效，再异步查一次远端。
         // 不直接 await：网络差的时候能卡十几秒；这里最多等 2.5 秒，够判断是否强制更新了。
@@ -1434,6 +1439,10 @@ public sealed class MainViewModel : ObservableObject
         var proxyChanged = config.Proxy != _config.Proxy;
         var vendorChanged = !string.Equals(config.JdkVendor, _config.JdkVendor, StringComparison.OrdinalIgnoreCase);
 
+        // 换了下载通道等于换了远端地址（origin 会在下一次 fetch 时被 EnsureRemote 改写），
+        // 所以「有新提交 / 有新版本」的判断全部作废重来，和改仓库地址一个待遇
+        var mirrorChanged = GitMirror.Normalize(config.Mirror) != GitMirror.Normalize(_config.Mirror);
+
         _config = config;
         SaveConfig();
 
@@ -1445,7 +1454,11 @@ public sealed class MainViewModel : ObservableObject
             _log.Info("GIT", GitNetwork.Note(_config));
             Downloader.Configure(_config);
         }
-        if (repoChanged || proxyChanged)
+        if (mirrorChanged)
+        {
+            _log.Info("GIT", GitMirror.Note(_config.Mirror) + $" · remote becomes {_config.CloneUrl}");
+        }
+        if (repoChanged || proxyChanged || mirrorChanged)
         {
             _remoteHead = null;
             _pendingCommits = [];
@@ -1455,8 +1468,8 @@ public sealed class MainViewModel : ObservableObject
             _ = CheckUpdatesAsync(silent: true);
         }
 
-        // 更新源/仓库变了就重新查一次；之前发现过的更新不重复提示
-        if (repoChanged || proxyChanged) _ = CheckLauncherUpdateAsync(silent: true);
+        // 更新源/仓库/通道变了就重新查一次；之前发现过的更新不重复提示
+        if (repoChanged || proxyChanged || mirrorChanged) _ = CheckLauncherUpdateAsync(silent: true);
 
         // 供应商只在设置里改，改完已装好的 JDK 不会自己换：提示一下该点哪儿
         if (vendorChanged && _jdk is not null)

@@ -97,7 +97,7 @@ internal static class GitNetwork
             || value.StartsWith("socks5://", StringComparison.OrdinalIgnoreCase)
             || value.StartsWith("socks4", StringComparison.OrdinalIgnoreCase))
         {
-            return (null, $"Network: direct ({source} is a SOCKS proxy, which libgit2 does not support; ignored)");
+            return (null, $"Network: direct ({source} is a unsupported SOCKS proxy; ignored)");
         }
 
         if (!value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)

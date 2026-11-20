@@ -72,13 +72,14 @@ public static class LauncherUpdater
     ///   1. 滚动 tag `launcher-latest` 下的 latest.json —— 发布流程每次覆盖上传，路径永远不变；
     ///   2. 仓库 raw 里的 launcher/latest.json —— 万一哪天改成提交进仓库，也不用动客户端。
     /// 注意别用 /releases/latest/download/：那个 latest 会被客户端资源那条 release 抢走。
+    /// 选了镜像时两条都换成镜像地址（清单在 github.com / raw 上，国内直连经常拿不到）。
     /// </summary>
     public static IReadOnlyList<string> FeedUrls(AppConfig cfg)
     {
         return
         [
-            $"https://github.com/{cfg.Owner}/{cfg.Repo}/releases/download/launcher-latest/latest.json",
-            $"https://raw.githubusercontent.com/{cfg.Owner}/{cfg.Repo}/main/launcher/latest.json",
+            GitMirror.Rewrite($"https://github.com/{cfg.Owner}/{cfg.Repo}/releases/download/launcher-latest/latest.json", cfg.Mirror),
+            GitMirror.Rewrite($"https://raw.githubusercontent.com/{cfg.Owner}/{cfg.Repo}/main/launcher/latest.json", cfg.Mirror),
         ];
     }
 
@@ -97,7 +98,7 @@ public static class LauncherUpdater
         {
             try
             {
-                var update = await FetchFeedAsync(feed, ct);
+                var update = await FetchFeedAsync(feed, cfg, ct);
                 if (update is null) continue;                     // 这个源还没有清单，试下一个
                 sawFeed = true;
                 return CompareVersion(CurrentVersion, update.Version) < 0 ? update : null;
@@ -117,7 +118,7 @@ public static class LauncherUpdater
         return null;
     }
 
-    private static async Task<LauncherUpdate?> FetchFeedAsync(string url, CancellationToken ct)
+    private static async Task<LauncherUpdate?> FetchFeedAsync(string url, AppConfig cfg, CancellationToken ct)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(TimeSpan.FromSeconds(10));
@@ -145,7 +146,9 @@ public static class LauncherUpdater
             NormalizeVersion(feed.Version),
             NormalizeVersion(feed.MinVersion),
             feed.Notes?.Trim() ?? "",
-            feed.Exe.Url.Trim(),
+            // 清单里写的是 github.com 的 release 资产地址；选了镜像就换成镜像地址再下。
+            // 校验还留在本地（长度 + SHA-256），所以镜像只影响「从哪拿」，不影响「拿到了算不算数」。
+            GitMirror.Rewrite(feed.Exe.Url.Trim(), cfg.Mirror),
             feed.Exe.Size,
             sha,
             feed.Page?.Trim() ?? "",

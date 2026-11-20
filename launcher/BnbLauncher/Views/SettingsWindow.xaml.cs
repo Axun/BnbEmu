@@ -28,6 +28,19 @@ public partial class SettingsWindow : Window
         }
 
         if (VendorBox.SelectedItem is null) VendorBox.SelectedIndex = 0;
+
+        // 未知/旧值（手改配置写了别的 id）统一落到第一项「直连」
+        var mirror = GitMirror.Normalize(config.Mirror);
+        foreach (var item in MirrorBox.Items.OfType<ComboBoxItem>())
+        {
+            if (string.Equals(item.Tag as string, mirror, StringComparison.OrdinalIgnoreCase))
+            {
+                MirrorBox.SelectedItem = item;
+                break;
+            }
+        }
+
+        if (MirrorBox.SelectedItem is null) MirrorBox.SelectedIndex = 0;
     }
 
     public AppConfig? Result { get; private set; }
@@ -47,6 +60,7 @@ public partial class SettingsWindow : Window
         }
 
         var vendor = (VendorBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "Corretto";
+        var mirror = (MirrorBox.SelectedItem as ComboBoxItem)?.Tag as string ?? GitMirror.DirectId;
         var proxy = ProxyBox.Text.Trim();
 
         if (proxy.Length > 0
@@ -61,6 +75,7 @@ public partial class SettingsWindow : Window
             Repo = repo,
             Branch = branch,
             JdkVendor = vendor,
+            Mirror = GitMirror.Normalize(mirror),
             AutoCheckUpdates = AutoCheckBox.IsChecked == true,
             AutoCheckLauncher = AutoLauncherCheckBox.IsChecked == true,
             AutoStartServer = AutoStartBox.IsChecked == true,
