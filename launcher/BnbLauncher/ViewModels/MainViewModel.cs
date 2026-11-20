@@ -424,7 +424,7 @@ public sealed class MainViewModel : ObservableObject
     {
         var size = ClientProvisioner.ArchiveBytes();
         return size > 0
-            ? $"{ByteSize.Format(size)} of resources · {AppPaths.ClientDir}"
+            ? $"{ByteSize.Format(size)}"
             : AppPaths.ClientDir;
     }
 
@@ -1433,7 +1433,6 @@ public sealed class MainViewModel : ObservableObject
         var repoChanged = !string.Equals(config.Owner, _config.Owner, StringComparison.OrdinalIgnoreCase)
                           || !string.Equals(config.Repo, _config.Repo, StringComparison.OrdinalIgnoreCase)
                           || !string.Equals(config.Branch, _config.Branch, StringComparison.Ordinal);
-        var tokenChanged = config.GithubToken != _config.GithubToken;
         var proxyChanged = config.Proxy != _config.Proxy;
         var vendorChanged = !string.Equals(config.JdkVendor, _config.JdkVendor, StringComparison.OrdinalIgnoreCase);
 
@@ -1448,7 +1447,7 @@ public sealed class MainViewModel : ObservableObject
             _log.Info("GIT", GitNetwork.Note(_config));
             Downloader.Configure(_config);
         }
-        if (repoChanged || tokenChanged || proxyChanged)
+        if (repoChanged || proxyChanged)
         {
             _remoteHead = null;
             _pendingCommits = [];

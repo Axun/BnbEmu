@@ -16,7 +16,6 @@ public partial class SettingsWindow : Window
         AutoCheckBox.IsChecked = config.AutoCheckUpdates;
         AutoLauncherCheckBox.IsChecked = config.AutoCheckLauncher;
         AutoStartBox.IsChecked = config.AutoStartServer;
-        TokenBox.Text = config.GithubToken;
         ProxyBox.Text = config.Proxy;
         FeedBox.Text = config.UpdateFeedUrl;
 
@@ -76,7 +75,6 @@ public partial class SettingsWindow : Window
             AutoCheckUpdates = AutoCheckBox.IsChecked == true,
             AutoCheckLauncher = AutoLauncherCheckBox.IsChecked == true,
             AutoStartServer = AutoStartBox.IsChecked == true,
-            GithubToken = TokenBox.Text.Trim(),
             Proxy = proxy,
             UpdateFeedUrl = feed,
         };

@@ -27,12 +27,6 @@ public sealed class AppConfig
     [JsonPropertyName("updateFeedUrl")] public string UpdateFeedUrl { get; set; } = "";
 
     /// <summary>
-    /// 可选：GitHub 个人令牌。公开仓库不用填；私有仓库必须填，
-    /// 填了还能避免匿名 HTTPS 拉取偶发被限流。作为 git 的 HTTPS 密码使用（用户名 x-access-token）。
-    /// </summary>
-    [JsonPropertyName("githubToken")] public string GithubToken { get; set; } = "";
-
-    /// <summary>
     /// 可选：HTTPS 代理，形如 http://127.0.0.1:7890。留空则自动检测
     /// （环境变量 HTTPS_PROXY → 系统代理 → git 全局配置 http.proxy）。
     /// libgit2 只支持 http/https 代理，SOCKS 会被忽略并退化为直连。

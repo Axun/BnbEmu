@@ -673,7 +673,7 @@ public static class GitSource
 
         var options = new FetchOptions
         {
-            CredentialsProvider = GitNetwork.Credentials(cfg),
+            CredentialsProvider = GitNetwork.Credentials,
             TagFetchMode = TagFetchMode.None,
             Prune = false,
         };
@@ -762,7 +762,7 @@ public static class GitSource
         IEnumerable<Reference> refs;
         try
         {
-            refs = Repository.ListRemoteReferences(cfg.CloneUrl, GitNetwork.Credentials(cfg),
+            refs = Repository.ListRemoteReferences(cfg.CloneUrl, GitNetwork.Credentials,
                 GitNetwork.ProxyOptions(cfg));
         }
         catch (LibGit2SharpException ex)
@@ -894,7 +894,7 @@ public static class GitSource
             || message.Contains("too many redirects", StringComparison.OrdinalIgnoreCase))
         {
             return new InvalidOperationException(
-                $"Authentication failed for {cfg.DisplayName}: the repository does not exist, the branch is protected, or a token is required (set one in Settings). Original error: " + message, ex);
+                $"Authentication failed for {cfg.DisplayName}: the repository does not exist or is not public (this launcher only supports public repositories). Original error: " + message, ex);
         }
 
         if (message.Contains("remote ref", StringComparison.OrdinalIgnoreCase)

@@ -7,7 +7,7 @@ using LibGit2Sharp.Handlers;
 namespace BnbLauncher.Services;
 
 /// <summary>
-/// libgit2 的网络细节：代理与凭据。
+/// libgit2 的网络细节：代理。仓库永远是公开的，读操作不需要任何凭据。
 ///
 /// 代理必须**显式**下发给 libgit2（ProxyType.Specified / None），原因有两个：
 ///   1. libgit2 默认自己读 git 全局配置的 http.proxy，而国内常见的
@@ -56,17 +56,13 @@ internal static class GitNetwork
         options.ProxyOptions.Url = proxy.Url;
     }
 
-    public static CredentialsHandler Credentials(AppConfig cfg) => (_, _, _) =>
-    {
-        var token = cfg.GithubToken?.Trim();
-        if (!string.IsNullOrEmpty(token))
-        {
-            // GitHub 的 HTTPS 令牌：用户名可任意，密码用 token
-            return new UsernamePasswordCredentials { Username = "x-access-token", Password = token };
-        }
-
-        return new DefaultCredentials();
-    };
+    /// <summary>
+    /// 只读公开仓库，本来不需要凭据。仍然给 libgit2 一个回调而不是留空：
+    /// 留空时遇到 401 会直接报 "authentication required but no callback set"，
+    /// 而 DefaultCredentials 会按 git 自己的 credential.helper 去找（装了 GCM 就能复用），
+    /// 失败时给出的也是可读的认证错误。
+    /// </summary>
+    public static readonly CredentialsHandler Credentials = (_, _, _) => new DefaultCredentials();
 
     // ── 代理解析 ────────────────────────────────────────────────────────
 

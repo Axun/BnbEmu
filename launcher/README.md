@@ -39,7 +39,7 @@ Windows 桌面启动器（WPF / .NET 9 / C#）：用 git 拉取 BnbEmu 最新源
   BnbLauncher.exe
   BnbLauncher.exe.prev      # 上一版本，替换时留下；新版成功启动两次后自动清理
   update-apply.cmd          # 替换脚本（纯 ASCII + 相对路径，换完 exe 自己留着）
-  launcher.config.json      # 设置（仓库、分支、JDK 供应商、Token、代理、更新源…）
+  launcher.config.json      # 设置（仓库、分支、JDK 供应商、代理、更新源…）
   runtime\
     state.json              # 已安装的提交与组件版本
     update\                 # 自更新暂存区：new.exe（下好的新版）、pending.json
@@ -198,7 +198,6 @@ dotnet publish BnbLauncher -c Release -o dist
 | `autoCheckUpdates` | 启动时检测远端更新（只提示），默认 `true` |
 | `autoCheckLauncher` | 启动时检查启动器自身更新，默认 `true` |
 | `updateFeedUrl` | 可选。启动器更新清单地址（`latest.json`）。留空依次尝试滚动 release 与仓库 raw；国内可填镜像/反代 |
-| `githubToken` | 可选。公开仓库不用填；私有仓库必填，作为 git 的 HTTPS 密码（用户名 `x-access-token`） |
 | `proxy` | 可选。HTTPS 代理，如 `http://127.0.0.1:7890`；留空自动检测环境变量 / 系统代理 / git 全局 `http.proxy`。libgit2 只支持 http/https 代理，SOCKS 会被忽略并退化为直连 |
 
 ## 说明
