@@ -15,7 +15,26 @@ public sealed record MavenInfo(string Home, string Version, bool IsLocal)
 public static partial class MavenProvisioner
 {
     private const string DlcdnIndex = "https://dlcdn.apache.org/maven/maven-3/";
+
+    /// <summary>
+    /// 简体中文系统的优先源。dlcdn 对国内出口常年只有几十 KB/s（实测 22 KB/s，10MB 要七八分钟），
+    /// 而这两个都是 Apache dist 的完整镜像，目录索引和 binaries 布局跟 dlcdn 逐字一致，
+    /// 所以换源只是换前缀。顺序按实测吞吐排：腾讯 8.8 MB/s 远快于阿里 0.25 MB/s。
+    /// 非简体中文系统不走这条——海外访问 dlcdn 本来就快，没必要多绕一跳。
+    /// </summary>
+    private static readonly string[] ChinaMirrors =
+    [
+        "https://mirrors.cloud.tencent.com/apache/maven/maven-3/",
+        "https://mirrors.aliyun.com/apache/maven/maven-3/",
+    ];
+
     private static readonly string[] PinnedFallback = ["3.9.11", "3.9.9", "3.9.6"];
+
+    /// <summary>
+    /// 索引 / HEAD 探测的超时。Downloader 的 HttpClient 是无限超时（大文件续传需要），
+    /// 探测必须自己掐表，否则镜像被墙时会一直挂着，永远轮不到后面的降级源。
+    /// </summary>
+    private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(12);
 
     [GeneratedRegex(@"href=""(3\.9\.\d+)/""")]
     private static partial Regex IndexRegex();
@@ -91,7 +110,9 @@ public static partial class MavenProvisioner
         // 命中缓存只可能是上次装到一半失败了（成功路径会把包删掉），否则一律重新下载
         if (!File.Exists(zipPath) || new FileInfo(zipPath).Length < 1024 * 1024)
         {
-            progress?.Report(new SetupProgress($"Downloading Maven {version}", 0));
+            // 把源写进进度文案：国内镜像 / dlcdn 的差别以后出现在用户截图里就能直接定位
+            var host = new Uri(baseUrl).Host;
+            progress?.Report(new SetupProgress($"Downloading Maven {version} from {host}", 0));
             var inner = new Progress<DownloadProgress>(p => progress?.Report(new SetupProgress(
                 $"Downloading Maven {version} ({TimeText.Size(p.Bytes)} / {TimeText.Size(p.Total)})",
                 p.Total > 0 ? p.Percent : -1)));
@@ -125,30 +146,27 @@ public static partial class MavenProvisioner
         return info;
     }
 
+    /// <summary>
+    /// 挑一个「能用的最新 3.9.x」，按「简体中文系统先国内镜像 → 官方 CDN → 写死的旧版本走 archive」
+    /// 的顺序降级。每一档失败都只是换下一档，不会抛出去。
+    /// </summary>
     private static async Task<(string Version, string BaseUrl)> ResolveLatestAsync(CancellationToken ct)
     {
-        try
+        if (SystemLocale.IsSimplifiedChinese)
         {
-            var html = await Downloader.Http.GetStringAsync(DlcdnIndex, ct);
-            var versions = IndexRegex().Matches(html)
-                .Select(m => m.Groups[1].Value)
-                .Distinct()
-                .Select(v => (Text: v, Parsed: Version.TryParse(v, out var pv) ? pv : null))
-                .Where(x => x.Parsed is not null)
-                .OrderByDescending(x => x.Parsed)
-                .Select(x => x.Text)
-                .ToList();
-
-            if (versions.Count > 0)
+            foreach (var index in ChinaMirrors)
             {
-                var v = versions[0];
-                return (v, $"{DlcdnIndex}{v}/binaries");
+                // 镜像这一档要 HEAD 验证：索引里列着版本、binaries 目录却没同步完
+                //（或者旧版本被镜像清掉了）是真实存在的情况，别把 404 交给下载器。
+                if (await TryResolveFromIndexAsync(index, verifyZip: true, ProbeTimeout, ct) is { } mirror)
+                    return mirror;
             }
         }
-        catch
-        {
-            // 走固定版本兜底
-        }
+
+        // 官方 CDN 不掐表：它是原来唯一的路，索引慢但文件快的情况真实存在（实测索引 0.3s~11s 抖动），
+        // 超时反而会把它误判成不可用、退到 archive 那个 11 KB/s 的坑里。
+        if (await TryResolveFromIndexAsync(DlcdnIndex, verifyZip: false, probeTimeout: null, ct) is { } official)
+            return official;
 
         foreach (var v in PinnedFallback)
         {
@@ -165,6 +183,69 @@ public static partial class MavenProvisioner
         }
 
         throw new InvalidOperationException("Could not resolve the Maven download URL. Check your network.");
+    }
+
+    /// <summary>
+    /// 从某个 dist 源（dlcdn / 腾讯 / 阿里，布局完全一样）的目录索引里取最新 3.9.x。
+    /// 拿到版本后可选地用 HEAD 确认 zip 真的在，任何失败都返回 null 表示「这个源不能用」。
+    /// probeTimeout = null 表示不额外掐表（沿用下载器自己的无限超时）。
+    /// </summary>
+    private static async Task<(string Version, string BaseUrl)?> TryResolveFromIndexAsync(
+        string indexUrl, bool verifyZip, TimeSpan? probeTimeout, CancellationToken ct)
+    {
+        CancellationTokenSource? timeout = null;
+        if (probeTimeout is { } limit)
+        {
+            timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(limit);
+        }
+
+        var token = timeout?.Token ?? ct;
+
+        try
+        {
+            var html = await Downloader.Http.GetStringAsync(indexUrl, token);
+            var versions = IndexRegex().Matches(html)
+                .Select(m => m.Groups[1].Value)
+                .Distinct()
+                .Select(v => (Text: v, Parsed: Version.TryParse(v, out var pv) ? pv : null))
+                .Where(x => x.Parsed is not null)
+                .OrderByDescending(x => x.Parsed)
+                .Select(x => x.Text)
+                .ToList();
+
+            if (versions.Count == 0) return null;
+
+            var version = versions[0];
+            var baseUrl = $"{indexUrl}{version}/binaries";
+
+            if (verifyZip)
+            {
+                var zipUrl = $"{baseUrl}/apache-maven-{version}-bin.zip";
+                using var head = await Downloader.Http.SendAsync(new HttpRequestMessage(HttpMethod.Head, zipUrl), token);
+                // 405 = 这个 CDN 不支持 HEAD，但不代表文件不存在，不能因此把好源丢掉
+                if (!head.IsSuccessStatusCode && head.StatusCode != System.Net.HttpStatusCode.MethodNotAllowed)
+                    return null;
+            }
+
+            return (version, baseUrl);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw; // 用户取消：别当成「这个源不可用」继续降级
+        }
+        catch (OperationCanceledException)
+        {
+            return null; // 探测超时：当这个源不可用，继续降级
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            timeout?.Dispose();
+        }
     }
 
     /// <summary>从 lib/maven-core-x.y.z.jar 文件名里读版本。</summary>

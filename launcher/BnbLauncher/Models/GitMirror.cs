@@ -17,7 +17,7 @@ public sealed record MirrorOption(string Id, string Label, string Prefix, string
 ///
 /// gh-proxy 的用法是把目标地址整段拼在路径里（和 `git clone` 手敲的一样）：
 ///   https://gh-proxy.org/https://github.com/krrr/BnbEmu.git
-///   https://gh-proxy.org/https://github.com/krrr/BnbEmu/releases/download/launcher-v1.1.0/BnbLauncher.exe
+///   https://gh-proxy.org/https://github.com/krrr/BnbEmu/releases/download/launcher-v1.2.0/BnbLauncher.exe
 /// 所以这里只需要一个前缀 + 一个白名单主机判断，改写是纯字符串操作、不联网。
 ///
 /// 镜像只影响「从哪取字节」，不影响校验：启动器 exe 仍然要过 SHA-256，

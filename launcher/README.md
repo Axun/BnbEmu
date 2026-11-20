@@ -28,6 +28,12 @@ Windows 桌面启动器（WPF / .NET 9 / C#）：用 git 拉取 BnbEmu 最新源
 - **Maven 自动安装**：从 Apache 官方镜像取最新的 3.9.x，解压到 `runtime/maven`；本地仓库按目录探测：
   用户目录下存在 `%USERPROFILE%\.m2` 就复用它（`%USERPROFILE%\.m2\repository`，省掉整份依赖重下），
   不存在才用 `runtime/m2repo`。两种情况都显式传 `-Dmaven.repo.local`，不靠 mvn 的默认值
+- **依赖走国内镜像（仅简体中文系统）**：系统显示语言是简体中文、且用户没有自己的
+  `%USERPROFILE%\.m2\settings.xml` 时，生成一份 `runtime\maven-settings.xml` 并用 `-s` 传给 mvn，
+  把内置的 `central` 指到阿里云 public 组（解析依赖从 20 秒级降到 2 秒级）。pom.xml 里那条多余的
+  `mavenCentral` 仓库已删除，整个工程只留一个仓库。镜像条的 `id` 故意与仓库同名：Maven 用镜像 id 写
+  `_remote.repositories`，换了 id 会让本地已有的 jar 全部判成「没从这个源下过」，离线构建直接失败。
+  用户自己有 settings.xml 时一律不碰（可能有私服或代理），只在日志里说明一行
 - **后台服务**：编译与运行分离。只有源码提交 / pom.xml / JDK 变化（或在源码里手改过）时才在
   `runtime/source` 执行一次 `mvn compile`，产物记进 `runtime/build/build-stamp.json`；
   平时启动直接用 `java -cp "target\classes;依赖 jar" bnbemu.MainKt`，不再每次都让 Kotlin 全量重编
@@ -52,6 +58,7 @@ Windows 桌面启动器（WPF / .NET 9 / C#）：用 git 拉取 BnbEmu 最新源
     update\                 # 自更新暂存区：new.exe（下好的新版）、pending.json
     jdk\                    # JDK 21
     maven\                  # Maven 3.9.x
+    maven-settings.xml      # 内置 Maven 镜像配置（仅简体中文系统、且用户没有 .m2\settings.xml 时生成）
     m2repo\                 # Maven 本地仓库（仅当 %USERPROFILE%\.m2 不存在时才用）
     build\                  # 服务端构建产物：server-cp.txt（依赖 classpath）、build-stamp.json（编译凭证，含仓库路径）
     source\                 # BnbEmu 源码（标准 git 仓库，含 .git）
@@ -124,8 +131,8 @@ github.com 的 release 资产地址，启动器读清单时就地换成镜像地
 ### 发布
 
 ```powershell
-git tag launcher-v1.1.0
-git push origin launcher-v1.1.0
+git tag launcher-v1.2.0
+git push origin launcher-v1.2.0
 ```
 
 `.github/workflows/launcher-release.yml` 会：publish → 算 SHA-256 → 生成 `latest.json` →

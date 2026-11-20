@@ -131,6 +131,12 @@ public static class AppPaths
     public static string UpdateScriptPath => Path.Combine(BaseDir, "update-apply.cmd");
 
     public static string MvnCmd => Path.Combine(MavenDir, "bin", "mvn.cmd");
+
+    /// <summary>
+    /// 内置 Maven 设置（只在简体中文系统、且用户没有自己的 settings.xml 时生成，见 MavenSettings）。
+    /// 放在 runtime 里而不是 %USERPROFILE%\.m2，是为了守住「不污染用户目录」这条。
+    /// </summary>
+    public static string MavenSettingsFile => Path.Combine(RuntimeDir, "maven-settings.xml");
     public static string JavaExe => Path.Combine(JdkDir, "bin", "java.exe");
 
     public static void EnsureDirectories()

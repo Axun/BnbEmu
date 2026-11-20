@@ -17,13 +17,6 @@
         <maven.compiler.source>${java.version}</maven.compiler.source>
     </properties>
 
-    <repositories>
-        <repository>
-            <id>mavenCentral</id>
-            <url>https://repo1.maven.org/maven2/</url>
-        </repository>
-    </repositories>
-
     <dependencies>
 
         <dependency>

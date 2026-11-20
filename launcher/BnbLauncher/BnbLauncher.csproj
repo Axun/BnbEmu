@@ -11,8 +11,8 @@
     <RootNamespace>BnbLauncher</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
-    <Version>1.1.0</Version>
-    <FileVersion>1.1.0.0</FileVersion>
+    <Version>1.2.0</Version>
+    <FileVersion>1.2.0.0</FileVersion>
     <Product>BnbEmu Launcher</Product>
     <Company>krrr</Company>
     <Platforms>x64</Platforms>

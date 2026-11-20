@@ -142,6 +142,9 @@ public static class ServerBuild
             ? $"Maven repo: {AppPaths.MavenRepoDir} (user .m2 detected)"
             : $"Maven repo: {AppPaths.MavenRepoDir} (no .m2, using bundled)");
 
+        // 依赖从哪下，是「慢 20 秒」和「慢 2 秒」的差别，值得单独一行
+        if (MavenSettings.Describe() is { } mirror) log(mirror);
+
         await RunMavenAsync(jdk, maven, "compile", log, "compile", ct);
 
         var classpathGoals = "dependency:build-classpath -DincludeScope=runtime" +
@@ -305,10 +308,17 @@ public static class ServerBuild
 
     /// <summary>
     /// cmd 的 /s /c 引号规则：整条命令再包一层引号，mvn 路径单独包引号
-    /// （路径里可能有空格）。最终形如：/d /s /c ""C:\...\mvn.cmd" "-Dmaven.repo.local=C:\..."" …"
+    /// （路径里可能有空格）。最终形如：/d /s /c ""C:\...\mvn.cmd" "-Dmaven.repo.local=C:\..." "-s" "C:\...\maven-settings.xml" compile"
     /// </summary>
     public static string BuildMvnArguments(MavenInfo maven, string goals)
-        => "/d /s /c \"" + "\"" + maven.MvnCmd + "\" " + MavenRepoArgument + " " + goals + "\"";
+        => "/d /s /c \"" + "\"" + maven.MvnCmd + "\" " + MavenRepoArgument + SettingsArgument + " " + goals + "\"";
+
+    /// <summary>
+    /// 依赖走国内镜像时追加的 -s（见 MavenSettings）。-s 与路径必须各自包引号：
+    /// cmd /s /c 只剥最外层那一对，内层引号原样交给 mvn.cmd，再由 java 的 argv 解析器去掉。
+    /// </summary>
+    private static string SettingsArgument
+        => MavenSettings.ActivePath is { } path ? " \"-s\" \"" + path + "\"" : "";
 
     /// <summary>
     /// 本地仓库必须钉死在命令行上：不传时 mvn 一律用 %USERPROFILE%\.m2\repository，
