@@ -19,6 +19,7 @@ EnterShopStage: 17
 # op 20 = 本機玩家動態檔案快照 (CUserDynamicInfo::OnPacket 0x006E6109, 44B, count×43B 記錄),
 # 不是 RTT。EN 客戶端沒有任何以 op 20 發包的位置, 純 S→C。詳見 packet/UserDynamicInfo.kt
 UserDynamicInfo: 20
+StageNotice: 22
 Whisper: 27
 SystemMsg: 30
 CurseFilterTable: 51

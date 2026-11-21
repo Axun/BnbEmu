@@ -4,6 +4,7 @@ import bnbemu.debugMode
 import bnbemu.netty.Decode1
 import bnbemu.netty.DecodeTokenStr
 import bnbemu.netty.PKTHandler
+import bnbemu.packet.StageNotice
 import bnbemu.server.Room
 
 /**
@@ -46,6 +47,7 @@ val ChatMsg = PKTHandler { c ->
     //   free <slot> [saverSlot]    -> op146 state=12「脱困」(不给 saver) 或 state=3「被救」
     //   shield <slot>              -> op146 state=9「护盾」；被撞时客户端会自己破盾并报 op112 0xA0
     //   st   <state> <slot> [x y]  -> 广播任意 state 的 op146，用来试每个 state 的语义
+    //   notice <文字>              -> 广播 S→C op22「舞台顶部公告横幅」，10 秒自动消失
     // 详见 packet/room/SetBomberState.kt 的 state 表。
     if (debugMode) {
         // 前缀无关：剥掉行首所有非字母（! # @ ~ 等，也支持 !! 这种多字符前缀）后按命令名匹配。
@@ -91,6 +93,24 @@ val ChatMsg = PKTHandler { c ->
             val saver = free.groupValues[2].trim().toIntOrNull() ?: -1
             battle?.freeBomber(slot, saver)
         }
+
+        // notice <文字> -> 广播 S→C op22 舞台顶部公告横幅（10 秒）
+        // 分派与包体见 packet/StageNotice.kt；任意舞台（大厅/房间/对局/商城）都能显示。
+        val notice = DEBUG_NOTICE.find(cmd)
+        if (notice != null) {
+            val msg = notice.groupValues[1].trim()
+            if (msg.isEmpty()) {
+                println("[ChatMsg] notice 命令缺少文本，已忽略")
+            } else if (msg.length > MAX_NOTICE_LEN) {
+                println("[ChatMsg] notice 文本过长 (${msg.length} > $MAX_NOTICE_LEN)，已忽略")
+            } else {
+                val pkt = StageNotice(msg)
+                // 房间里有其他玩家就一起看，否则至少回给自己（单机时 Room.uniqueClients 可能为空）
+                val clients = Room.uniqueClients.toList()
+                if (clients.isEmpty()) c send pkt else clients.forEach { it send pkt }
+                println("[ChatMsg] 下发 op22 公告 \"$msg\" 给 ${maxOf(clients.size, 1)} 条连线")
+            }
+        }
     }
 }
 
@@ -100,7 +120,11 @@ private val DEBUG_LIST = Regex("^list" + BLANK + "([\\d,\\s]+)")
 private val DEBUG_ST = Regex("^st" + BLANK + "(\\d+)" + BLANK + "(\\d+)(.*)")
 private val DEBUG_TRAP = Regex("^trap" + BLANK + "(\\d+)(.*)")
 private val DEBUG_FREE = Regex("^free" + BLANK + "(\\d+)(.*)")
+private val DEBUG_NOTICE = Regex("^notice" + BLANK + "(.+)$")
 private const val BLANK = "\\s+"
+
+/** op 22 公告文本上限：客户端公告控件按单行横幅排版，过长的文本会被截断或溢出 */
+private const val MAX_NOTICE_LEN = 120
 
 /*
   在大厅聊天框发送文字（实测文字 "asf"）由客户端发出 **C→S op 18 (0x12)**

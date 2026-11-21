@@ -52,7 +52,8 @@
   / SessionInfoResult（频道连线 65B 全零变体）/ UserSimpleInfoResult（13B 变体，三种同类名映射同 op 4；
   前两者已结构化为 `packet/AskFirstInfoResult.kt` 的 `UserInfo` 类，userId=7215/会话串
   f0ae35f3 等账号值暂用抓包常量 CAPTURE_USER_ID/SESSION_STRING）、
-  12 ChannelsNotice（**公告与PPL广告信息**，已结构化可动态生成）、48 PermissionInfo（**玩家权限设定与功能开关**，空体或 E4(id)+16×E1(flag) 列表，CPermissionMan）、97 ChangeStage（**切换游戏阶段**，E2(11) 大厅 / E2(20) 广场，CMainSystem::SetStage，触发客户端自动发 op 78 StageInitReq）、
+  12 ChannelsNotice（公告与PPL广告信息）、48 PermissionInfo（**玩家权限设定与功能开关**，空体或 E4(id)+16×E1(flag) 列表，CPermissionMan）、97 ChangeStage（**切换游戏阶段**，E2(11) 大厅 / E2(20) 广场，CMainSystem::SetStage，触发客户端自动发 op 78 StageInitReq）、
+  22 StageNotice（舞台中部系统提示气泡）、
   7 ResConnectToSvr（op 6 ReqConnectToSvr 的回应，见下方关键观察）、
   122 UserDynamicInfoValue（**CUserDynamicInfo 单Lucci同步**）、423（op 7 回应后的推送，原样重放）、87 RoomList（**房间列表**，已结构化可动态生成，见关键观察）、
   310 UserMarketItemList（**个人交易市场物品列表**）/ 302 UserMarketMyItemList（**个人在市场寄售物品列表**）、254 UserMapInfo（**频道在线用户地图/占位同步**，CUserMap）、227 MyPageInfo（**个人资料摘要与商城版本**，CMyPageDialog）、72 SessionList（**频道在线用户列表**，已结构化可动态
