@@ -13,6 +13,9 @@ const val DEFAULT_LUCCI = 1234567
  */
 const val MAX_CASH = 3_000_000
 
+/** 客户端默认金币上限（`sub_5062E9`: 3,000,000 × 倍率，倍率为 0 时按 1 计）。 */
+const val MAX_LUCCI = 3_000_000
+
 const val DEFAULT_LEVEL = 5
 
 data class UserItemEntry(

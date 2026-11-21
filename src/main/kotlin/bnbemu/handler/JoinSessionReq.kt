@@ -111,7 +111,13 @@ val JoinSessionReq = PKTHandler { c ->
         RoomList(),
         ShopStringTable(), ShopPackageMap(), ChannelsGameState(tailOnes = 2),
         // ⚠️ op 20 (UserDynamicInfo) 是本機玩家動態檔案快照, 第 12 欄 = 角色 ID, 必須按當前角色生成!
-        UserDynamicInfo(bomber, player?.level ?: 5), ShopVersion(), CoupleStateSync(), WelcomeNotice(),
+        UserDynamicInfo(
+            bomber = bomber,
+            level = player?.level ?: 5,
+            win = player?.win ?: 0,
+            lose = player?.lose ?: 0,
+            draw = player?.draw ?: 0,
+        ), ShopVersion(), CoupleStateSync(), WelcomeNotice(),
         UserInventoryInfo(),
         JoinSessionResult(
             player?.let { lobbyRosterFor(it.charName, it.userId) }

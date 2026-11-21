@@ -81,6 +81,9 @@ fun UserDynamicInfo(
     level: Int = 1,
     playerCount: Int = 1,
     bagLevel: Int = DEFAULT_BAG_LEVEL,
+    win: Int = 0,
+    lose: Int = 0,
+    draw: Int = 0,
 ) = PKT {
     Encode1(playerCount)          //   记录条数
     repeat(playerCount) {
@@ -103,8 +106,8 @@ fun UserDynamicInfo(
         Encode1(0)          //  35  #17 未知
         Encode1(0)          //  36  #18 未知
         Encode4(0)          //  37  #19 未知
-        Encode1(0)          //  41  #20 胜场
-        Encode1(0)          //  42  #21 负场
-        Encode1(0)          //  43  #22 场次统计第三项
+        Encode1(win.coerceIn(0, 255))   //  41  #20 胜场
+        Encode1(lose.coerceIn(0, 255))  //  42  #21 负场
+        Encode1(draw.coerceIn(0, 255))  //  43  #22 场次统计第三项
     }
 }

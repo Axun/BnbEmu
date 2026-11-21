@@ -15,7 +15,9 @@ import bnbemu.packet.battle.BackToRoom
 import bnbemu.packet.battle.GameResultSlotSnapshot
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.room.SetSlotState
+import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.service.PlayerService
+import bnbemu.service.player
 import io.netty.channel.EventLoop
 import org.tinylog.kotlin.Logger
 
@@ -203,6 +205,9 @@ object Room {
                 broadcastAll = { packets -> BC(*packets) },
                 clientsProvider = { uniqueClients },
                 resultSlotsProvider = { resultSlotSnapshots() },
+                onMatchFinished = { outcome, expGained, lucciGained ->
+                    settleMatch(outcome, expGained, lucciGained)
+                },
                 onReturnToRoom = { session -> backToRoomFromBattle(session) },
             ).also {
                 battle = it
@@ -268,7 +273,13 @@ object Room {
         )
 
         if (sendRoomChain) {
-            uniqueClients.forEach { sendRoomEntryChain(it, init = false) }
+            uniqueClients.forEach {
+                sendRoomEntryChain(it, init = false)
+                val lucci = it.player?.let { p -> PlayerService.findByUserId(p.userId)?.lucci ?: p.lucci }
+                if (lucci != null) {
+                    it.send(UserDynamicInfoValue(0, lucci))
+                }
+            }
             Logger.info("[Room] op155 之后补推房间链sendRoomEntryChain")
         }
         return true
@@ -296,6 +307,48 @@ object Room {
                 c send SetSlotState(index, slot)
             }
         }
+    }
+
+    /**
+     * 对局结束写回所有参战人类玩家的战绩、金币、经验与等级，并返回主玩家的进度前后快照。
+     */
+    internal fun settleMatch(
+        outcome: BattleSession.MatchOutcome,
+        expGained: Int,
+        lucciGained: Int,
+    ): BattleSession.MatchSettlement {
+        val won = outcome == BattleSession.MatchOutcome.HUMAN_WIN
+        val draw = outcome == BattleSession.MatchOutcome.DRAW
+        val distinctPlayers = slots.mapNotNull { it.player }.distinctBy { it.userId }
+        if (distinctPlayers.isEmpty()) {
+            return BattleSession.MatchSettlement(expBefore = 0, expAfter = expGained, lucciGained = lucciGained)
+        }
+        val primaryId = slots[0].player?.userId ?: distinctPlayers.first().userId
+        var primaryExpBefore = 0
+        var primaryExpAfter = expGained
+        for (slotPlayer in distinctPlayers) {
+            val liveProfile = PlayerService.findByUserId(slotPlayer.userId) ?: slotPlayer
+            val expBefore = liveProfile.exp.coerceIn(0, 999)
+            val settled = PlayerService.settleMatch(
+                profile = liveProfile,
+                won = won,
+                draw = draw,
+                expGained = expGained,
+                lucciGained = lucciGained,
+            )
+            if (liveProfile !== slotPlayer) {
+                slots.filter { it.player?.userId == slotPlayer.userId }.forEach { it.player = settled }
+            }
+            if (settled.userId == primaryId) {
+                primaryExpBefore = expBefore
+                primaryExpAfter = settled.exp.coerceIn(0, 999)
+            }
+        }
+        return BattleSession.MatchSettlement(
+            expBefore = primaryExpBefore,
+            expAfter = primaryExpAfter,
+            lucciGained = lucciGained,
+        )
     }
 
     fun resultSlotSnapshots(): List<GameResultSlotSnapshot> = slots.map { slot ->

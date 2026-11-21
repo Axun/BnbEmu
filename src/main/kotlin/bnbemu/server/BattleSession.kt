@@ -75,8 +75,18 @@ class BattleSession(
     private val broadcastAll: (Array<out PKT>) -> Unit = {},
     private val clientsProvider: () -> Sequence<ClientSocket> = { emptySequence() },
     private val resultSlotsProvider: () -> List<GameResultSlotSnapshot>,
+    private val onMatchFinished: (MatchOutcome, Int, Int) -> MatchSettlement? = { _, exp, lucci ->
+        MatchSettlement(expBefore = 0, expAfter = exp, lucciGained = lucci)
+    },
     private val onReturnToRoom: (BattleSession) -> Boolean = { false },
 ) {
+    /** 对局结算写回档案后的进度与收益快照，用于组装 S→C op 150 GameResult。 */
+    data class MatchSettlement(
+        val expBefore: Int = 0,
+        val expAfter: Int = 0,
+        val lucciGained: Int = 0,
+    )
+
     enum class Phase {
         CREATED,
         RUNNING,
@@ -703,7 +713,7 @@ class BattleSession(
                 phase = Phase.RESULT_DISPATCHED
                 finalOutcome = pendingOutcome ?: outcome
             }
-            val expAfter = when (finalOutcome) {
+            val expGained = when (finalOutcome) {
                 MatchOutcome.HUMAN_WIN -> config.winExpAfter
                 MatchOutcome.AI_WIN -> config.loseExpAfter
                 MatchOutcome.DRAW -> config.drawExpAfter
@@ -713,13 +723,15 @@ class BattleSession(
                 MatchOutcome.AI_WIN -> config.loseLucci
                 MatchOutcome.DRAW -> config.drawLucci
             }
+            val settlement = onMatchFinished(finalOutcome, expGained, lucciGained)
             broadcast(
                 InitGameResult(mode = 0, mapId = 0),
                 GameResult(
                     winnerTeam = finalOutcome.winnerTeam,
                     delayMs = 2000,
-                    expAfter = expAfter,
-                    lucciGained = lucciGained,
+                    expBefore = settlement?.expBefore ?: 0,
+                    expAfter = settlement?.expAfter ?: expGained,
+                    lucciGained = settlement?.lucciGained ?: lucciGained,
                     slots = resultSlotsProvider(),
                 )
             )

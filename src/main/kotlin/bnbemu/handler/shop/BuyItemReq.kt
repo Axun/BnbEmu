@@ -1,12 +1,18 @@
 package bnbemu.handler.shop
 
 import bnbemu.data.shop.ShopCatalogData
+import bnbemu.data.shop.ShopCurrency
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.user.UserDynamicInfoValue
+import bnbemu.packet.shop.BUY_RESULT_ALREADY_HAVE
+import bnbemu.packet.shop.BUY_RESULT_ERROR
+import bnbemu.packet.shop.BUY_RESULT_SUCCESS
 import bnbemu.packet.shop.BuyItemResult
+import bnbemu.packet.shop.CashBalance
+import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.service.PlayerService
+import bnbemu.service.PurchaseStatus
 import bnbemu.service.lucci
 import bnbemu.service.player
 
@@ -27,9 +33,8 @@ import bnbemu.service.player
  *   `v7 = opcode - 202; if (v7 == 0) { sub_5D171B(...); }`，见
  *   `packet/shop/BuyItemResult.kt` 的完整注释。
  *
- * 模拟器现状: 只做「查到商品 → 回 op 202 购买结果 → 同步金币」的最小闭环；
- * 物品由客户端自己在 `sub_5D171B` → `sub_66B4ED` 里应用进背包。
- * 扣款尚未接入。
+ * 完整扣款与入包流程: 查商品 → 校验余额与持有/堆叠上限 → 扣除 Lucci / NX Cash →
+ * 写入/累加玩家背包 → 回 op 202 购买结果 → 同步 Lucci (op 122) 与 Cash (op 201)。
  */
 val BuyItemReq = PKTHandler { c ->
     if (readableBytes() < 4) return@PKTHandler
@@ -41,21 +46,47 @@ val BuyItemReq = PKTHandler { c ->
     val entry = ShopCatalogData.findByProdId(prodId)
     println(
         "[BuyItemReq] prodId=$prodId arg=$arg flag=$flag -> " +
-            (entry?.let { "itemId=${it.itemId} cat=${it.category} name='${it.name}' count=${it.count}" }
-                ?: "目录里没找到该 prodId")
+            (entry?.let {
+                "itemId=${it.itemId} cat=${it.category} name='${it.name}' count=${it.count} " +
+                    "price=${it.price} currency=${it.currency}"
+            } ?: "目录里没找到该 prodId")
     )
 
-    // 购买结果：type=0（普通购买），到期时间 0 = 永久
-    c send BuyItemResult(type = 0)
-
-    // 服务端侧记录购买结果，保证重进频道/重连后物品还在。
-    // 物品本体由客户端在 sub_5D171B -> sub_66B4ED 里自己塞进背包向量，
-    // 这里只维护「服务端认账的背包清单」，下次 JoinSessionReq 用 op 320 补发。
     val player = c.player
-    if (player != null && entry != null && PlayerService.buyItem(player.userId, entry.itemId, count = 1)) {
-        println("[BuyItemReq] 已记入服务端背包: itemId=${entry.itemId}, 当前背包=${player.items.map { it.itemId }}")
+    if (player == null || entry == null) {
+        c send BuyItemResult(type = BUY_RESULT_ERROR)
+        c send UserDynamicInfoValue(0, c.lucci)
+        return@PKTHandler
     }
 
-    // 商城界面余额走 CUserDynamicInfo (op 122)，购买后补发一次避免显示漂移
-    c send UserDynamicInfoValue(0, c.lucci)
+    val result = PlayerService.purchaseCatalogItem(player.userId, entry)
+    if (!result.success) {
+        val errCode = when (result.status) {
+            PurchaseStatus.ALREADY_OWNED -> BUY_RESULT_ALREADY_HAVE
+            else -> BUY_RESULT_ERROR
+        }
+        println(
+            "[BuyItemReq] 购买失败: status=${result.status} errCode=$errCode " +
+                "lucci=${result.lucci} cash=${result.cash}"
+        )
+        c send BuyItemResult(type = errCode)
+        c send UserDynamicInfoValue(0, result.lucci)
+        if (entry.currency == ShopCurrency.CASH) {
+            c send CashBalance(result.cash)
+        }
+        return@PKTHandler
+    }
+
+    // 购买结果：type=0（普通购买），到期时间 0 = 永久
+    c send BuyItemResult(type = BUY_RESULT_SUCCESS, expire = 0L)
+    println(
+        "[BuyItemReq] 购买成功: itemId=${entry.itemId} newCount=${result.itemCount} " +
+            "lucci=${result.lucci} cash=${result.cash}, 当前背包=${player.items.map { "${it.itemId}x${it.count}" }}"
+    )
+
+    // 商城界面余额同步：Lucci 走 CUserDynamicInfo (op 122)，NX Cash 走 CashBalance (op 201)
+    c send UserDynamicInfoValue(0, result.lucci)
+    if (entry.currency == ShopCurrency.CASH) {
+        c send CashBalance(result.cash)
+    }
 }

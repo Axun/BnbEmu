@@ -12,11 +12,19 @@ import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+/** 商城支付币种（对应 CA.exe `CShopItem::GetPayType` `0x0066108D` = `ShopItemTail.payType`） */
+enum class ShopCurrency {
+    CASH,
+    LUCCI,
+    GCOUPON,
+}
+
 /**
  * 商城物品属性尾部 (36 字节)
  * 对应 CA.exe CShopItem::Read (0x00662171 ~ 0x0066228D) 反序列化的价格与属性字段:
- * - price1, price2: 2 × u32 LE (金币 / 点券价格)
- * - f3 ~ f13: 状态/参数栏位 (含期限、折扣率、限购等参数)
+ * - price1, price2: 2 × u32 LE (常规价 / 折扣价)
+ * - f3 ~ f8, f10 ~ f13: 状态/参数栏位
+ * - payType: u8 (支付币种: 0=NX Cash, 1=Lucci, 2=GCoupon)
  * - f14: u8 (0x01 = 激活/可拥有标志)
  */
 data class ShopItemTail(
@@ -28,7 +36,7 @@ data class ShopItemTail(
     val f6: Int = 0,
     val f7: Long = 0,
     val f8: Int = 0,
-    val f9: Int = 0,
+    val payType: Int = 0,
     val f10: Long = 0,
     val f11: Int = 0,
     val f12: Long = 0,
@@ -44,7 +52,7 @@ data class ShopItemTail(
         out.u16le(f6)
         out.u32le((f7 and 0xFFFFFFFFL).toInt())
         out.u8(f8)
-        out.u8(f9)
+        out.u8(payType)
         out.u32le((f10 and 0xFFFFFFFFL).toInt())
         out.u16le(f11)
         out.u32le((f12 and 0xFFFFFFFFL).toInt())
@@ -64,13 +72,13 @@ data class ShopItemTail(
             val f6 = buf.short.toInt() and 0xFFFF
             val f7 = buf.int.toLong() and 0xFFFFFFFFL
             val f8 = buf.get().toInt() and 0xFF
-            val f9 = buf.get().toInt() and 0xFF
+            val payType = buf.get().toInt() and 0xFF
             val f10 = buf.int.toLong() and 0xFFFFFFFFL
             val f11 = buf.short.toInt() and 0xFFFF
             val f12 = buf.int.toLong() and 0xFFFFFFFFL
             val f13 = buf.int.toLong() and 0xFFFFFFFFL
             val f14 = buf.get().toInt() and 0xFF
-            return ShopItemTail(p1, p2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14)
+            return ShopItemTail(p1, p2, f3, f4, f5, f6, f7, f8, payType, f10, f11, f12, f13, f14)
         }
     }
 }
@@ -88,6 +96,15 @@ data class ShopItemEntry(
     val desc: String = "",
     val tail: ShopItemTail = ShopItemTail.DEFAULT_ACTIVE,
 ) {
+    val price: Int get() = tail.price1
+
+    val currency: ShopCurrency
+        get() = when (tail.payType) {
+            1 -> ShopCurrency.LUCCI
+            2 -> ShopCurrency.GCOUPON
+            else -> ShopCurrency.CASH
+        }
+
     fun encode(out: ByteArrayOutputStream) {
         out.u32le(prodId)
         out.u8(category)

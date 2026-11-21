@@ -1,15 +1,39 @@
 package bnbemu.service
 
+import bnbemu.data.shop.ShopCurrency
+import bnbemu.data.shop.ShopItemEntry
 import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.domain.EquipChangeEntry
 import bnbemu.domain.EquipChangeResult
 import bnbemu.domain.EquipSlot
+import bnbemu.domain.InventoryRules
 import bnbemu.domain.MAX_CASH
+import bnbemu.domain.MAX_LUCCI
+import bnbemu.domain.MAX_STACK_COUNT
 import bnbemu.domain.PlayerProfile
 import bnbemu.domain.UserItemEntry
 import bnbemu.netty.ClientSocket
 import bnbemu.repository.InMemoryPlayerRepository
 import bnbemu.repository.PlayerRepository
+
+enum class PurchaseStatus {
+    SUCCESS,
+    PLAYER_NOT_FOUND,
+    INSUFFICIENT_LUCCI,
+    INSUFFICIENT_CASH,
+    UNSUPPORTED_CURRENCY,
+    ALREADY_OWNED,
+    AMOUNT_LIMIT_EXCEEDED,
+}
+
+data class PurchaseResult(
+    val status: PurchaseStatus,
+    val lucci: Int = 0,
+    val cash: Int = 0,
+    val itemCount: Int = 0,
+) {
+    val success: Boolean get() = status == PurchaseStatus.SUCCESS
+}
 
 /**
  * 玩家档案应用服务层。
@@ -59,22 +83,98 @@ object PlayerService {
     fun chargeCash(userId: Int, amount: Int): Int {
         val profile = repository.getOrCreateByUserId(userId)
         synchronized(profile) {
-            profile.cash = minOf(profile.cash + amount, MAX_CASH)
+            profile.cash = minOf(profile.cash + amount.coerceAtLeast(0), MAX_CASH)
             repository.save(profile)
             return profile.cash
         }
     }
 
-    /** 记录购买物品入包（暂保留原有去重语义，后续步骤接入扣款与堆叠） */
-    fun buyItem(userId: Int, itemId: Int, count: Int = 1): Boolean {
-        val profile = repository.findByUserId(userId) ?: return false
+    /** 充值金币 (Lucci), 返回充值后的余额 (封顶 [MAX_LUCCI]) */
+    fun chargeLucci(userId: Int, amount: Int): Int {
+        val profile = repository.getOrCreateByUserId(userId)
         synchronized(profile) {
-            if (profile.mutableItems.any { it.itemId == itemId }) {
-                return false
-            }
-            profile.mutableItems += UserItemEntry(itemId = itemId, count = count)
+            profile.lucci = minOf(profile.lucci + amount.coerceAtLeast(0), MAX_LUCCI)
             repository.save(profile)
-            return true
+            return profile.lucci
+        }
+    }
+
+    /** 记录购买物品入包（免费/直接入包便捷入口，走统一的堆叠与去重规则） */
+    fun buyItem(userId: Int, itemId: Int, count: Int = 1): Boolean =
+        purchaseItem(
+            userId = userId,
+            itemId = itemId,
+            count = count,
+            price = 0,
+            currency = ShopCurrency.LUCCI,
+        ).success
+
+    /** 按商城目录条目执行完整购买（校验持有/堆叠上限、扣除 Lucci/Cash、写入或累加背包）。 */
+    fun purchaseCatalogItem(userId: Int, entry: ShopItemEntry): PurchaseResult =
+        purchaseItem(
+            userId = userId,
+            itemId = entry.itemId,
+            count = entry.count,
+            price = entry.price,
+            currency = entry.currency,
+            stackable = InventoryRules.isStackableItem(entry.itemId, fallbackCategory = entry.category),
+        )
+
+    /** 购买物品统一写方法：余额校验、扣款、非堆叠去重、消耗品堆叠。 */
+    fun purchaseItem(
+        userId: Int,
+        itemId: Int,
+        count: Int = 1,
+        price: Int = 0,
+        currency: ShopCurrency = ShopCurrency.LUCCI,
+        stackable: Boolean = InventoryRules.isStackableItem(itemId),
+    ): PurchaseResult {
+        val profile = repository.findByUserId(userId)
+            ?: return PurchaseResult(PurchaseStatus.PLAYER_NOT_FOUND)
+        val grantedCount = count.coerceAtLeast(1)
+        val unitPrice = price.coerceAtLeast(0)
+        synchronized(profile) {
+            val existingIdx = profile.mutableItems.indexOfFirst { it.itemId == itemId }
+            val isEquipped = profile.mutableEquips.values.any { it == itemId }
+            if (!stackable && (existingIdx != -1 || isEquipped)) {
+                return PurchaseResult(PurchaseStatus.ALREADY_OWNED, lucci = profile.lucci, cash = profile.cash)
+            }
+            val existingCount = if (existingIdx != -1) profile.mutableItems[existingIdx].count else 0
+            if (stackable && existingCount + grantedCount > MAX_STACK_COUNT) {
+                return PurchaseResult(PurchaseStatus.AMOUNT_LIMIT_EXCEEDED, lucci = profile.lucci, cash = profile.cash)
+            }
+            when (currency) {
+                ShopCurrency.LUCCI -> {
+                    if (profile.lucci < unitPrice) {
+                        return PurchaseResult(PurchaseStatus.INSUFFICIENT_LUCCI, lucci = profile.lucci, cash = profile.cash)
+                    }
+                    profile.lucci -= unitPrice
+                }
+                ShopCurrency.CASH -> {
+                    if (profile.cash < unitPrice) {
+                        return PurchaseResult(PurchaseStatus.INSUFFICIENT_CASH, lucci = profile.lucci, cash = profile.cash)
+                    }
+                    profile.cash -= unitPrice
+                }
+                ShopCurrency.GCOUPON -> {
+                    return PurchaseResult(PurchaseStatus.UNSUPPORTED_CURRENCY, lucci = profile.lucci, cash = profile.cash)
+                }
+            }
+            val newCount = if (stackable && existingIdx != -1) {
+                val updated = profile.mutableItems[existingIdx].copy(count = existingCount + grantedCount)
+                profile.mutableItems[existingIdx] = updated
+                updated.count
+            } else {
+                profile.mutableItems += UserItemEntry(itemId = itemId, count = grantedCount)
+                grantedCount
+            }
+            repository.save(profile)
+            return PurchaseResult(
+                status = PurchaseStatus.SUCCESS,
+                lucci = profile.lucci,
+                cash = profile.cash,
+                itemCount = newCount,
+            )
         }
     }
 
@@ -156,6 +256,28 @@ object PlayerService {
         maxExpPerLevel: Int = 1000,
     ): PlayerProfile? {
         val profile = repository.findByUserId(userId) ?: return null
+        return settleMatch(
+            profile = profile,
+            won = won,
+            draw = draw,
+            expGained = expGained,
+            lucciGained = lucciGained,
+            maxExpPerLevel = maxExpPerLevel,
+        )
+    }
+
+    /**
+     * 对局结算写回指定 [PlayerProfile] 实例。
+     * 若该玩家存在于仓储中会同步调用 [PlayerRepository.save] 落盘。
+     */
+    fun settleMatch(
+        profile: PlayerProfile,
+        won: Boolean,
+        draw: Boolean,
+        expGained: Int,
+        lucciGained: Int,
+        maxExpPerLevel: Int = 1000,
+    ): PlayerProfile {
         synchronized(profile) {
             when {
                 draw -> profile.draw += 1
@@ -169,7 +291,9 @@ object PlayerService {
                 profile.level += 1
             }
             profile.exp = totalExp
-            repository.save(profile)
+            if (repository.findByUserId(profile.userId) != null) {
+                repository.save(profile)
+            }
             return profile
         }
     }

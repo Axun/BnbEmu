@@ -67,7 +67,13 @@ val ShopToRoomReq = PKTHandler { c ->
     // 按服务端权威角色回灌客户端 CUserDynamicInfo 的角色字段 (op 20 第 12 项)，
     // 它直接决定下一次 C→S op 73 的上报值；op 122 补回被 op 20 刷成 0 的 Lucci。
     c.send(
-        UserDynamicInfo(bomber, player?.level ?: 5),
+        UserDynamicInfo(
+            bomber = bomber,
+            level = player?.level ?: 5,
+            win = player?.win ?: 0,
+            lose = player?.lose ?: 0,
+            draw = player?.draw ?: 0,
+        ),
         UserDynamicInfoValue(0, c.lucci),
     )
 }

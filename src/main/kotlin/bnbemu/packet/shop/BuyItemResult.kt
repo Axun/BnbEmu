@@ -35,12 +35,18 @@ import bnbemu.netty.PKT
  * 因此包体 = `E1(type) + E4(expireHi) + E4(expireLo)`（**不含** 202，202 本身就是 opcode），
  * 到期时间传 0 表示永久。
  */
+const val BUY_RESULT_SUCCESS = 0
+const val BUY_RESULT_ERROR = 1
+const val BUY_RESULT_DUPLICATE = 4
+const val BUY_RESULT_ALREADY_HAVE = 33
 const val BUY_RESULT_OK = 202
 
-/** type: 0=普通购买；22=礼包/赠送分支（`v55 == 22` 会作为 sub_66B4ED 的第 7 个参数 a7） */
-fun BuyItemResult(type: Int = 0, expire: Long = 0L) = PKT {
+/** type: 0=普通购买；22=礼包/赠送分支；非 0/2/22/31 为错误码（`sub_66B4ED` 直接弹窗并解除等待锁） */
+fun BuyItemResult(type: Int = BUY_RESULT_SUCCESS, expire: Long = 0L) = PKT {
     Encode1(type)
-    // 8 字节到期时间按两个 Encode4 写（客户端 sub_78F1C0(buf, 8) 按 dword 反混淆）
-    Encode4((expire ushr 32).toInt())
-    Encode4((expire and 0xFFFFFFFFL).toInt())
+    if (type == 0 || type == 2 || type == 22 || type == 31) {
+        // 8 字节到期时间按两个 Encode4 写（客户端 sub_78F1C0(buf, 8) 按 dword 反混淆）
+        Encode4((expire ushr 32).toInt())
+        Encode4((expire and 0xFFFFFFFFL).toInt())
+    }
 }

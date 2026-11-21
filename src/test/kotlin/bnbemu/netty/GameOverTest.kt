@@ -571,4 +571,78 @@ class GameOverTest {
         Thread.sleep(100)
         assertTrue(drain().isEmpty(), "超时结算后迟到上报不得再发任何包")
     }
+
+    // ---- 对局结算写回 PlayerProfile（战绩、金币、经验与升级） ----
+
+    @Test
+    fun testMatchSettlementUpdatesPlayerProfileOnWinLoseAndDraw() {
+        val profile = PlayerProfile(userId = 1001, username = "settler", charName = "settler", level = 5, exp = 0, lucci = 1000)
+        Room.slots[0].assignHuman(profile, cs)
+
+        // 1. 胜利
+        val battle1 = Room.startGame()
+        ch.outboundMessages().clear()
+        battle1.onLastTeamStanding(0)
+        val sent1 = collectSent()
+        val body1 = bodyOf(sent1.first { opcodeOf(it) == 150 })
+        assertEquals(1, profile.win)
+        assertEquals(0, profile.lose)
+        assertEquals(0, profile.draw)
+        assertEquals(1000 + Room.battleConfig.winLucci, profile.lucci)
+        assertEquals(Room.battleConfig.winExpAfter, profile.exp)
+        assertEquals(0, dec2(body1, 11 + 31), "战前 EXP=0")
+        assertEquals(Room.battleConfig.winExpAfter, dec2(body1, 11 + 33), "战后 EXP=winExpAfter")
+        assertEquals(1, dec1(body1[11 + 40]), "op150 +240 win 必须反映战后胜场")
+
+        // 2. 失败
+        val battle2 = Room.startGame()
+        ch.outboundMessages().clear()
+        battle2.onBomberDie(0)
+        collectSent()
+        assertEquals(1, profile.win)
+        assertEquals(1, profile.lose)
+        assertEquals(1000 + Room.battleConfig.winLucci + Room.battleConfig.loseLucci, profile.lucci)
+        assertEquals(Room.battleConfig.winExpAfter + Room.battleConfig.loseExpAfter, profile.exp)
+
+        // 3. 平局
+        val prevTimeout = Room.battleConfig.matchTimeoutMs
+        val prevTick = Room.battleConfig.tickIntervalMs
+        try {
+            Room.battleConfig.matchTimeoutMs = 40L
+            Room.battleConfig.tickIntervalMs = 15L
+            Room.startGame()
+            ch.outboundMessages().clear()
+            collectSent()
+        } finally {
+            Room.battleConfig.matchTimeoutMs = prevTimeout
+            Room.battleConfig.tickIntervalMs = prevTick
+        }
+        assertEquals(1, profile.win)
+        assertEquals(1, profile.lose)
+        assertEquals(1, profile.draw)
+        assertEquals(
+            1000 + Room.battleConfig.winLucci + Room.battleConfig.loseLucci + Room.battleConfig.drawLucci,
+            profile.lucci,
+        )
+    }
+
+    @Test
+    fun testMatchSettlementHandlesLevelUpExpWraparound() {
+        val profile = PlayerProfile(userId = 1002, username = "leveler", charName = "leveler", level = 5, exp = 970, lucci = 500)
+        Room.slots[0].assignHuman(profile, cs)
+
+        val battle = Room.startGame()
+        ch.outboundMessages().clear()
+        battle.onLastTeamStanding(0)
+        val sent = collectSent()
+        val body = bodyOf(sent.first { opcodeOf(it) == 150 })
+
+        val expectedExpAfter = (970 + Room.battleConfig.winExpAfter) % 1000
+        assertEquals(6, profile.level, "跨 1000 经验必须升级")
+        assertEquals(expectedExpAfter, profile.exp)
+        assertEquals(970, dec2(body, 11 + 31), "+124 战前 EXP 进度 = 970")
+        assertEquals(expectedExpAfter, dec2(body, 11 + 33), "+128 战后 EXP 进度应回卷为升级后余数")
+        assertEquals(6, dec2(body, 11 + 35), "+132 房间槽位等级必须为战后等级 6")
+        assertEquals(6, dec2(body, 11 + 37), "+136 CUserDynamicInfo 等级必须为战后等级 6")
+    }
 }
