@@ -1,8 +1,6 @@
 package bnbemu.packet.battle
 
 import bnbemu.netty.PKT
-import bnbemu.server.Room
-import bnbemu.server.state
 
 /**
  * S→C op 155 —— 对局结束「回房间」推送（客户端据此拆掉 CGameStage，切回 stage 12 房间）。
@@ -56,8 +54,8 @@ import bnbemu.server.state
  */
 fun BackToRoom(
     chState: Int = 0,
-    /** 槽 0..2 的状态字节；默认取 [Room.slots] 的真实 state（0 = 房主旗标丢失） */
-    slotStates: List<Int> = defaultSlotStates()
+    /** 槽 0..2 的状态字节（必填）；调用方必须传房间前 3 槽真实 state（0x02 = 房主，0x04 = 准备） */
+    slotStates: List<Int>,
 ) = PKT {
     Encode1(chState)
     repeat(3) { i ->
@@ -67,7 +65,3 @@ fun BackToRoom(
         Encode1(0)                      // y
     }
 }
-
-/** 默认状态：直接读 [Room.slots] 的前 3 个槽位，保住房主位（槽 0 = FLAG_CHIEF） */
-private fun defaultSlotStates(): List<Int> =
-    (0 until 3).map { Room.slots.getOrNull(it)?.state?.toInt() ?: 0 }

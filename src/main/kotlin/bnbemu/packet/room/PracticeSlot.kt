@@ -1,8 +1,6 @@
 package bnbemu.packet.room
 
 import bnbemu.netty.PKT
-import bnbemu.server.Room
-import bnbemu.server.bomber
 
 // ============================================================================
 // 进练习房 (op 75) 回应链中的逐槽位包 — 按 tst.pcap stream4 真实字节逆向出的公式
@@ -30,7 +28,8 @@ fun SetSlotColor(slot: Int, color: Int = if (slot == 0) 0 else 8) = PKT {
 // ---- op 105 单槽 2B: E1(slot) E1(bomber) ----
 fun PracticeSetPlayer(
     slot: Int,
-    bomber: Int = Room.slots.getOrNull(slot)?.bomber?.toInt() ?: (if (slot == 0) 0 else 5)
+    /** 该槽位真实角色 ID（必填） */
+    bomber: Int,
 ) = PKT {
     Encode1(slot)
     Encode1(bomber)

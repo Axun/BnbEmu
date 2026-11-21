@@ -1,8 +1,8 @@
 package bnbemu.packet.user
 
+import bnbemu.domain.EquipSlot
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
-import bnbemu.server.EquipSlot
 import bnbemu.packet.lobby.encodeName
 
 /**

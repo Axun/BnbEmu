@@ -1,9 +1,9 @@
 package bnbemu.netty
 
 import bnbemu.data.FxdynMapInfo
+import bnbemu.data.item.ItemDefCatalog
 import bnbemu.packet.DynamicMapInfo
 import bnbemu.packet.FxConfig
-import bnbemu.packet.ItemDef
 import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -78,8 +78,8 @@ class FxdynMapInfoPacketTest {
 
     @Test
     fun `op60 ItemDef 默认启用 zlib 压缩且可无损解压`() {
-        val rawBlock = ItemDef.buildBlock(ItemDef.DEFAULT_ITEMS, compress = false)
-        val compressedBlock = ItemDef.buildBlock(ItemDef.DEFAULT_ITEMS)
+        val rawBlock = ItemDefCatalog.buildBlock(ItemDefCatalog.DEFAULT_ITEMS, compress = false)
+        val compressedBlock = ItemDefCatalog.buildBlock(ItemDefCatalog.DEFAULT_ITEMS)
         assertEquals(0x18, compressedBlock[0].toInt() and 0xFF)
         assertEquals(1, compressedBlock[5].toInt() and 0xFF, "ItemDef compress=1")
         assertEquals(rawBlock.size - 6, u32le(compressedBlock, 6))
@@ -87,7 +87,7 @@ class FxdynMapInfoPacketTest {
             rawBlock.copyOfRange(6, rawBlock.size),
             zlibDecompress(compressedBlock, 10, compressedBlock.size - 10),
         )
-        assertTrue(ItemDef.blobFor(0).size < 20_000, "压缩后 op60 块应小于 20 KB，实际=${ItemDef.blobFor(0).size}")
+        assertTrue(ItemDefCatalog.blobFor(0).size < 20_000, "压缩后 op60 块应小于 20 KB，实际=${ItemDefCatalog.blobFor(0).size}")
     }
 
     @Test

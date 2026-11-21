@@ -8,9 +8,12 @@ import bnbemu.netty.PKT
 // ⚠️ channelTabCount 例外: 抓包為 0, 但客戶端會用本包覆寫 [CShareContext+0x20C],
 // 令 sub_626742 回傳 0 而否決全部頁索引 (記住的 LastChannelType 被丟棄、每次退回 Beginner 頁)。
 // 故與登入版統一為 CHANNEL_TAB_COUNT; replay_test 的 65B 基準只豁免末位元組。
-fun SessionInfoResult() = PKT {
+fun SessionInfoResult(
+    userId: Int = CAPTURE_USER_ID,
+    session: ByteArray = SESSION_STRING,
+) = PKT {
     UserInfo(
-        userId2 = CAPTURE_USER_ID, session = SESSION_STRING,
+        userId2 = userId, session = session,
         channelTabCount = CHANNEL_TAB_COUNT,
     ).Encode(this)
 }

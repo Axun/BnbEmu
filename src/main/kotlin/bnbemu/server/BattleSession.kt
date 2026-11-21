@@ -13,6 +13,7 @@ import bnbemu.packet.battle.BomberDeathList
 import bnbemu.packet.battle.BomberDie
 import bnbemu.packet.battle.DrillResult
 import bnbemu.packet.battle.GameResult
+import bnbemu.packet.battle.GameResultSlotSnapshot
 import bnbemu.packet.battle.InitGameResult
 import bnbemu.packet.battle.MovableBoxMove
 import bnbemu.packet.battle.ReviveBomber
@@ -73,6 +74,7 @@ class BattleSession(
     initialSlots: Array<BattleSlotState> = Array(MAX_SESSION_SLOTS) { BattleSlotState(it, isHuman = false, isAI = false) },
     private val broadcastAll: (Array<out PKT>) -> Unit = {},
     private val clientsProvider: () -> Sequence<ClientSocket> = { emptySequence() },
+    private val resultSlotsProvider: () -> List<GameResultSlotSnapshot>,
     private val onReturnToRoom: (BattleSession) -> Boolean = { false },
 ) {
     enum class Phase {
@@ -717,7 +719,8 @@ class BattleSession(
                     winnerTeam = finalOutcome.winnerTeam,
                     delayMs = 2000,
                     expAfter = expAfter,
-                    lucciGained = lucciGained
+                    lucciGained = lucciGained,
+                    slots = resultSlotsProvider(),
                 )
             )
             // 结算后停掉对局主循环 (水泡倒计时), 与客户端离开棋盘同步

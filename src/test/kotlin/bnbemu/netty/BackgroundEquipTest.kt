@@ -4,10 +4,10 @@ import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
 import bnbemu.domain.PlayerProfile
 import bnbemu.handler.user.ChangeEquipReq
 import bnbemu.handler.JoinSessionReq
-import bnbemu.packet.user.EQUIP_SLOTS_PER_GROUP
 import bnbemu.server.Room
 import bnbemu.server.state
 import bnbemu.service.PlayerService

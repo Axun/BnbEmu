@@ -1,7 +1,7 @@
 package bnbemu.packet.shop
 
+import bnbemu.data.shop.ShopCatalogData
 import bnbemu.netty.PKT
-import bnbemu.packet.shop.ShopCatalog
 
 /**
  * S->C op 17: 进入商城阶段 (EnterShopStage)
@@ -22,7 +22,7 @@ import bnbemu.packet.shop.ShopCatalog
  *     并置 `[CShopConnectionMan + 0x10] = 1` (IsInShop = true)
  */
 fun EnterShopStage(
-    shopVersion: Int = ShopCatalog.CATALOG_HASH,
+    shopVersion: Int = ShopCatalogData.CATALOG_HASH,
     lucci: Int = 0,
 ) = PKT {
     Encode1(0)          //  1 slot (本机玩家槽)

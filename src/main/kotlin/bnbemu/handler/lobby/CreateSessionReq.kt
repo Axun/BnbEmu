@@ -1,6 +1,7 @@
 package bnbemu.handler.lobby
 
 import bnbemu.constants.CharacterType
+import bnbemu.domain.CharacterRules
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode4
 import bnbemu.netty.DecodeCipherStr
@@ -87,7 +88,7 @@ val CreateSessionReq = PKTHandler { c ->
     } else if (player != null) {
         val requestedBomber = bombers.firstOrNull() ?: player.bomber
         val chosenBomber = if (requestedBomber in 0..15) requestedBomber else player.bomber
-        val effectiveBomber = if (chosenBomber == 4) 10 else chosenBomber
+        val effectiveBomber = CharacterRules.resolveEffectiveBomber(chosenBomber)
         PlayerService.selectBomber(player.userId, effectiveBomber)
 
         Room.slots[0].apply {

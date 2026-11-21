@@ -49,8 +49,8 @@ private const val FLAG_COUNT = 16
 /** 固定用戶的全部正向特性。抑制位 7/10 與處罰位 13/14/15 保持 0, 9/12 為無讀取點的保留位。 */
 private val ALL_PRIVILEGE_FLAGS = setOf(0, 1, 2, 3, 4, 5, 6, 8, 9, 11, 12)
 
-/** CPermissionMan 的三個查表鍵: 0 = 頻道版權限項 id, 1000 = 登入版, 7215 = 固定用戶帳號數值。 */
-private val PRIVILEGE_IDS = listOf(0, 1000, CAPTURE_USER_ID)
+/** CPermissionMan 的三个查表键构造 helper: 0 = 频道版权限项 id, 1000 = 登录版, userId = 玩家账号数值。 */
+fun defaultPrivilegeIds(userId: Int): List<Int> = listOf(0, 1000, userId)
 
 /**
  * @param ids  要賦予特性的帳號/權限項 id (客戶端按 id 精確匹配)

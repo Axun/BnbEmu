@@ -1,4 +1,4 @@
-package bnbemu.server
+package bnbemu.domain
 
 /**
  * 装备槽位定义 (CA.exe CUserInventory / CUserInventoryMan):

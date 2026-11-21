@@ -4,11 +4,11 @@ import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import bnbemu.domain.EquipSlot
 import bnbemu.domain.PlayerProfile
 import bnbemu.handler.JoinSessionReq
 import bnbemu.handler.user.UserInfoReq
 import bnbemu.handler.user.sendUserInfo
-import bnbemu.server.EquipSlot
 import bnbemu.packet.user.UserInfoResult
 import bnbemu.packet.user.defaultUserInventoryItems
 import bnbemu.server.Room

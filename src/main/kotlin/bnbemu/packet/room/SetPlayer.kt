@@ -1,14 +1,14 @@
 package bnbemu.packet.room
 
 import bnbemu.constants.CharacterType
+import bnbemu.data.item.ItemDefCatalog
+import bnbemu.data.item.ItemDefEntry
+import bnbemu.domain.EquipSlot
 import bnbemu.domain.PlayerProfile
 import bnbemu.netty.PKT
 import bnbemu.packet.CAPTURE_USER_ID
-import bnbemu.packet.ItemDef
-import bnbemu.packet.ItemDefEntry
 import bnbemu.packet.SESSION_STRING
 import bnbemu.server.EncodeSlotMeta
-import bnbemu.server.EquipSlot
 import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.FLAG_READY
 import bnbemu.server.Slot
@@ -144,7 +144,7 @@ data class SlotAccessories(
  */
 fun slotAccessoriesOf(
     equips: Map<Int, Int>,
-    findItem: (Int) -> ItemDefEntry? = ItemDef::find,
+    findItem: (Int) -> ItemDefEntry? = ItemDefCatalog::find,
 ): SlotAccessories {
     val decorations = ArrayList<Pair<Int, Int>>()
     val effects = ArrayList<Triple<Int, Int, Int>>()

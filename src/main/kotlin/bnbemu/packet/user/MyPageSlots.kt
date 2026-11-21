@@ -1,7 +1,8 @@
 package bnbemu.packet.user
 
+import bnbemu.data.item.ItemDefCatalog
+import bnbemu.domain.CharacterRules
 import bnbemu.netty.PKT
-import bnbemu.packet.ItemDef
 
 // ============================================================================
 // S→C op 200：CUserInventoryMan 的「我的名片」槽位表（My Page slots，进频道握手推送 #3）
@@ -86,7 +87,7 @@ data class MyPageSlot(
 
         /** 只给 SN，模型名自动去 op 60 定义表解析（查不到的留空串）。 */
         fun of(itemId: Int): MyPageSlot =
-            MyPageSlot(itemId, if (itemId == 0) "" else ItemDef.find(itemId)?.name.orEmpty())
+            MyPageSlot(itemId, if (itemId == 0) "" else ItemDefCatalog.find(itemId)?.name.orEmpty())
     }
 }
 
@@ -100,7 +101,7 @@ data class MyPageSlot(
  * 因此 slot 7 只起占位作用；真正有内容的是 0..6 的表情/动作槽。
  */
 fun MyPageSlots(bomber: Int = 0): PKT {
-    val (charItemId, charName) = bomberCharCard(bomber)
+    val (charItemId, charName) = CharacterRules.bomberCharCard(bomber)
     val page = List(MY_PAGE_SLOTS_PER_PAGE) { slot ->
         if (slot == MY_PAGE_COUPLE_SLOT) MyPageSlot(charItemId, charName) else MyPageSlot.EMPTY
     }

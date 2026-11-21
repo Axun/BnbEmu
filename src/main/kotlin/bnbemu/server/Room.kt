@@ -2,6 +2,7 @@ package bnbemu.server
 
 import bnbemu.constants.MAX_SESSION_SLOTS
 import bnbemu.data.map.MapCatalog
+import bnbemu.domain.CharacterRules
 import bnbemu.domain.PlayerProfile
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.NettyServer.workerGroup
@@ -11,6 +12,7 @@ import bnbemu.packet.room.PracticeSetSlotAI
 import bnbemu.packet.room.PracticeSlotReady
 import bnbemu.packet.lobby.SESSION_TYPE_BATTLE
 import bnbemu.packet.battle.BackToRoom
+import bnbemu.packet.battle.GameResultSlotSnapshot
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.room.SetSlotState
 import bnbemu.service.PlayerService
@@ -93,7 +95,7 @@ object Room {
         if (player != null) {
             val requestedBomber = requestedBombers.firstOrNull() ?: player.bomber
             val chosenBomber = if (requestedBomber in 0..15) requestedBomber else player.bomber
-            val effectiveBomber = if (chosenBomber == 4) 10 else chosenBomber
+            val effectiveBomber = CharacterRules.resolveEffectiveBomber(chosenBomber)
             PlayerService.selectBomber(player.userId, effectiveBomber)
 
             slots[0].apply {
@@ -200,6 +202,7 @@ object Room {
                 initialSlots = initialSlots,
                 broadcastAll = { packets -> BC(*packets) },
                 clientsProvider = { uniqueClients },
+                resultSlotsProvider = { resultSlotSnapshots() },
                 onReturnToRoom = { session -> backToRoomFromBattle(session) },
             ).also {
                 battle = it
@@ -292,6 +295,20 @@ object Room {
             } else {
                 c send SetSlotState(index, slot)
             }
+        }
+    }
+
+    fun resultSlotSnapshots(): List<GameResultSlotSnapshot> = slots.map { slot ->
+        val p = slot.player
+        when {
+            p != null -> GameResultSlotSnapshot.Human(
+                level = p.level,
+                win = p.win,
+                lose = p.lose,
+                draw = p.draw,
+            )
+            slot.isAI -> GameResultSlotSnapshot.Ai(aiLevel = slot.aILevel)
+            else -> GameResultSlotSnapshot.Empty
         }
     }
 

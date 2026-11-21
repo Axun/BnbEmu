@@ -1,12 +1,9 @@
 package bnbemu.packet.battle
 
-import bnbemu.constants.CharacterType
 import bnbemu.constants.MAX_SESSION_SLOTS
 import bnbemu.data.map.MapCatalog
 import bnbemu.netty.PKT
 import bnbemu.packet.lobby.SESSION_TYPE_PRACTICE
-import bnbemu.server.Room
-import bnbemu.server.bomber
 import kotlin.random.Random
 
 // ============================================================================
@@ -46,6 +43,18 @@ fun assignSpawnPositions(mapId: Int, activeSlots: List<Int>): IntArray {
 }
 
 /**
+ * 开局单槽位只读配置快照（解耦 GameStartMapInfo 与 Room 单例）。
+ *
+ * op 112 名册的**唯一**数据来源: 谁参战、出生点、角色、队伍全在这里带进来。
+ */
+data class GameStartSlotConfig(
+    val slotIdx: Int,
+    val spawnPos: Int,
+    val bomber: Int,
+    val team: Int,
+)
+
+/**
  * S→C op 112: GameStartMapInfo (對局地圖與槽位出生點/角色初始化)
  *
  * 逆向確認:
@@ -81,11 +90,8 @@ fun assignSpawnPositions(mapId: Int, activeSlots: List<Int>): IntArray {
  *    SetSlotTeam, 之後 CGameStage 才依這份資料建立 bomber。
  *    房間階段 op 89 踢掉的 AI 只改了 CPrepareStrategyAIBattle 的本地槽位,
  *    若這裡仍固定發 8 筆 (1..7 全 team=8), 開局就會把 7 個 AI 原樣重建回來。
- *    因此由 [StartGameReq] 把 Room.slots 中「有人或 isAI」的真實槽號傳進 activeSlots;
- *    預設值 0..7 保留給抓包重放/單元測試, 與 cap/practice_s2c_op112_167B_0.bin 逐位元組一致。
- *
- * ⚠️ spawnPositions 的預設值同樣是抓包裡的固定排列, 只供重放比對;
- *    正式開局由 [StartGameReq] 傳入 [assignSpawnPositions] 的每局分配結果。
+ *    因此由 [StartGameReq] 把 Room.slots 中「有人或 isAI」的真實槽號 + 出生點 + 角色 + 隊伍
+ *    組成 [GameStartSlotConfig] 傳進來; 包層不讀 Room, 也沒有第二套 activeSlots 入口。
  */
 fun GameStartMapInfo(
     randomSeed: Int = 0x7E022E6B,
@@ -94,8 +100,8 @@ fun GameStartMapInfo(
     mapId: Int = 176,
     gameOptions: Int = SESSION_TYPE_PRACTICE,
     flag: Int = 0,
-    spawnPositions: IntArray = intArrayOf(2, 1, 6, 0, 3, 4, 5, 7),
-    activeSlots: List<Int> = (0..7).toList(),
+    /** 本局參戰名冊（唯一入口，必填）。 */
+    slotConfigs: List<GameStartSlotConfig>,
     obsCount: Int = 0,
     field1: Int = 0,
     field2: Int = 0,
@@ -108,29 +114,16 @@ fun GameStartMapInfo(
     Encode1(gameOptions)
     Encode1(flag)
 
-    // 只發「本局真的參戰」的槽位。槽號不重排 (踢掉 3 號就跳過 3 號),
-    // spawnPositions 也按真實槽號取, 否則剩下的人出生點會全部錯位。
-    val roster = activeSlots.filter { it in 0..7 }.distinct().sorted().take(8)
-        .ifEmpty { (0..7).toList() }
+    // 只發「本局真的參戰」的槽位。槽號不重排 (踢掉 3 號就跳過 3 號), 出生點也按真實槽號帶進來。
+    // 客戶端 CGameContext 只有 8 組槽位陣列, 多餘條目會越界寫, 這裡兜底截斷。
+    val roster = slotConfigs.take(MAX_SESSION_SLOTS)
     Encode1(roster.size)
 
-    for (i in roster) {
-        val slot = Room.slots.getOrNull(i)
-        val bomberId = if (slot?.bomber?.toInt() == RANDOM_CHARACTER_ID) {
-            CharacterType.Lucy.value
-        } else if (i == 0) {
-            slot?.bomber?.toInt() ?: CharacterType.Dao.value
-        } else {
-            slot?.bomber?.toInt() ?: CharacterType.Boz.value
-        }
-        // 激战模式下，0..3 号槽位属于真人方，所以判断player
-        val team = if (i == 0 || slot?.player != null) 0 else 8
-        val spawn = if (i < spawnPositions.size) spawnPositions[i] else i
-
-        Encode1(i)
-        Encode1(spawn)
-        Encode1(bomberId)
-        Encode1(team)
+    for (cfg in roster) {
+        Encode1(cfg.slotIdx)
+        Encode1(cfg.spawnPos)
+        Encode1(cfg.bomber)
+        Encode1(cfg.team)
         Encode1(0)
         Encode4(0)
         Encode4(0)

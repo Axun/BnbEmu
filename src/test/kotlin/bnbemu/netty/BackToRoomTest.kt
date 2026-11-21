@@ -1,5 +1,6 @@
 package bnbemu.netty
 
+import bnbemu.CaptureFixtures
 import bnbemu.packet.battle.BackToRoom
 import bnbemu.packet.battle.GameResult
 import bnbemu.packet.battle.InitGameResult
@@ -102,7 +103,7 @@ class BackToRoomTest {
 
     @Test
     fun testOpcodeIs155() {
-        assertEquals(155, OpcodeManager.getSendOp(BackToRoom()::class.java), "BackToRoom 必须绑到 op 155")
+        assertEquals(155, OpcodeManager.getSendOp(BackToRoom(slotStates = listOf(0, 0, 0))::class.java), "BackToRoom 必须绑到 op 155")
     }
 
     /**
@@ -111,7 +112,9 @@ class BackToRoomTest {
      */
     @Test
     fun testMinimalBodyLayout() {
-        val body = bodyOf(BackToRoom())
+        // 默认 slotStates 为空（真实状态由 Room.backToRoom 按 slots 传入），
+        // 这里显式给 [FLAG_CHIEF, 0, 0] 只为校验 13B 布局与房主位的编码位置。
+        val body = bodyOf(BackToRoom(slotStates = listOf(FLAG_CHIEF, 0, 0)))
         assertEquals(13, body.size, "最小体必须是 1 + 3×4 字节")
         assertEquals(0, dec1(body[0]), "首字节 chState")
 
@@ -128,14 +131,15 @@ class BackToRoomTest {
 
     @Test
     fun testChStateIsEchoed() {
-        val body = bodyOf(BackToRoom(chState = 3))
+        val body = bodyOf(BackToRoom(chState = 3, slotStates = listOf(0, 0, 0)))
         assertEquals(3, dec1(body[0]))
     }
 
     @Test
     fun testSlotStatesComeFromRoomSlots() {
         Room.slots[1].state = 0x04 // 准备位
-        val body = bodyOf(BackToRoom())
+        assertTrue(Room.backToRoom(force = true))
+        val body = bodyOf(drain().first { opcodeOf(it) == 155 })
         assertEquals(FLAG_CHIEF, dec1(body[2]), "槽 0 房主位")
         assertEquals(0x04, dec1(body[6]), "槽 1 应回显 Room.slots[1].state")
     }
@@ -205,7 +209,7 @@ class BackToRoomTest {
         assertTrue(ops.none { it == 155 }, "未结算时不得下发 op 155, ops=$ops")
         assertTrue(ops.none { it == 150 }, "未结算时不得下发 op 150, ops=$ops")
         // 对照：确认 GameResult 未被误发（防止上面的断言因包类名映射失败而空过）
-        assertTrue(OpcodeManager.getSendOp(GameResult(0)::class.java) == 150)
+        assertTrue(OpcodeManager.getSendOp(GameResult(0, slots = CaptureFixtures.OP150_PRACTICE_SLOTS)::class.java) == 150)
         assertTrue(OpcodeManager.getSendOp(InitGameResult(0, 0, 0)::class.java) == 169)
     }
 }

@@ -2,7 +2,6 @@ package bnbemu.server
 
 import bnbemu.constants.MAX_SESSION_SLOTS
 import bnbemu.netty.ClientSocket
-import bnbemu.packet.CAPTURE_USER_ID
 import bnbemu.packet.lobby.EnterSessionResult
 import bnbemu.packet.room.NpcAvailability
 import bnbemu.packet.room.PracticeSetPlayer
@@ -18,6 +17,7 @@ import bnbemu.packet.UserSimpleInfoResult
 import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.room.RoomName
 import bnbemu.packet.room.SelectMap
+import bnbemu.service.PlayerService
 import bnbemu.service.player
 
 /**
@@ -33,12 +33,12 @@ import bnbemu.service.player
  *    106×8, 每槽(114, 104, 105) + 下一槽的 103, WelcomeNotice]
  */
 fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
-    val player = c.player
+    val player = c.player ?: PlayerService.activeProfile
     val closedSlots = Room.slots.count { (it.state.toInt() and FLAG_CLOSED) != 0 }
     val humanCount = Room.slots.count { it.player != null }.coerceAtLeast(1)
     val roomEntry = RoomEntry(
         roomId = Room.sessionId,
-        handle = player?.userId ?: CAPTURE_USER_ID,
+        handle = player.userId,
         name = Room.name,
         hasPassword = Room.password.isNotEmpty(),
         curPlusClosed = humanCount + closedSlots,
@@ -51,11 +51,11 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
         RoomList(listOf(roomEntry)),
         // 进房结果 (op 83): 房型必须原样回显, 客户端 0x0068626F 存进 CFxContext[0x570]。
         EnterSessionResult(sessionId = Room.sessionId, sessionType = Room.sessionType),
-        UserSimpleInfoResult(), SessionInfoResult(),
+        UserSimpleInfoResult(), SessionInfoResult(userId = player.userId),
         // op 113 房名同步: 客户端把字符串直接写进会话对象 +0x1C4 并刷新房间标题。
         // 必须发 Room.name 而不是空串 —— 空串会把 op 87/op 83 刚填好的房名清掉（变空白）。
         RoomName(Room.name),
-        SetPlayer(slotId = 0, slot = Room.slots[0], player = player),
+        SetPlayer(slotId = 0, slot = Room.slots[0], player = c.player),
     )
     if (init) {
         c.send(SelectMap(result = 0, themeId = Room.themeId, mapId = Room.mapId))
@@ -109,7 +109,7 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
             c.send(
                 SetSlotFanfare(slot),
                 SetSlotColor(slot),
-                PracticeSetPlayer(slot),
+                PracticeSetPlayer(slot, bomber = Room.slots[slot].bomber.toInt()),
             )
             // op 103 第 3 字段 refSlot = 槽位引用 (抓包等于槽号, 客户端要求 ≤7)，
             // 第 4 字段 aiLevel = 难度档 0..4 (抓包初始 = 1)。

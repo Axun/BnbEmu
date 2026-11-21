@@ -1,17 +1,21 @@
 package bnbemu.service
 
+import bnbemu.domain.CharacterRules
 import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.domain.EquipChangeEntry
+import bnbemu.domain.EquipSlot
 import bnbemu.domain.MAX_CASH
+import bnbemu.handler.AskFirstInfo
 import bnbemu.handler.OnConnEstablished
 import bnbemu.handler.shop.BuyItemReq
 import bnbemu.handler.shop.CHARGE_NX_AMOUNT
 import bnbemu.handler.shop.ChargeNxReq
 import bnbemu.handler.shop.ShopUserSyncReq
 import bnbemu.netty.ClientSocket
+import bnbemu.netty.Decode4
+import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
 import bnbemu.repository.InMemoryPlayerRepository
-import bnbemu.server.EquipSlot
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.AfterEach
@@ -160,5 +164,38 @@ class PlayerServiceTest {
         assertEquals(initialLevel + 1, profile.level)
         assertEquals(250, profile.exp)
         assertEquals(initialLucci + 300, profile.lucci)
+    }
+
+    @Test
+    fun `askFirstInfo passes logged-in player userId rather than hardcoded 7215`() {
+        val profile = PlayerService.loginOrRegister("custom_player")
+        assertNotEquals(7215, profile.userId)
+
+        val cs = ClientSocket()
+        val ch = EmbeddedChannel(cs)
+        try {
+            val req = Unpooled.buffer()
+            SendPacketBase(req).Encode4(0)
+            with(AskFirstInfo) { req.handle(cs) }
+
+            // op 4 直接回显登录档案的 userId（登录连线不再把 activeProfile 绑成 c.playerId）
+            val pkt = ch.readOutbound<PKT>()
+            assertNotNull(pkt)
+            val body = Unpooled.buffer()
+            pkt!!.encode(SendPacketBase(body))
+            // AskFirstInfoResult -> UserInfo: E1(0), E2(scWord), E1(1), E4(permId), E4(userId)
+            body.skipBytes(1 + 2 + 1 + 4)
+            assertEquals(profile.userId, body.Decode4)
+        } finally {
+            ch.finishAndReleaseAll()
+        }
+    }
+
+    @Test
+    fun `character rules resolve Marid 4 to LuxuryMarid 10`() {
+        assertEquals(10, CharacterRules.resolveEffectiveBomber(4))
+        assertEquals(5, CharacterRules.resolveEffectiveBomber(5))
+        assertEquals(2082 to "Marid", CharacterRules.bomberCharCard(4))
+        assertEquals(2082 to "Marid", CharacterRules.bomberCharCard(10))
     }
 }

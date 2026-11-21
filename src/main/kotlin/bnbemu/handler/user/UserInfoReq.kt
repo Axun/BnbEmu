@@ -1,19 +1,19 @@
 package bnbemu.handler.user
 
 import io.netty.util.AttributeKey
+import bnbemu.domain.CharacterRules
 import bnbemu.domain.DEFAULT_LUCCI
+import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
+import bnbemu.domain.EquipSlot
+import bnbemu.domain.InventoryRules
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.user.UserDynamicInfoValue
-import bnbemu.packet.user.EQUIP_SLOTS_PER_GROUP
 import bnbemu.packet.user.UserEquipEntry
 import bnbemu.packet.user.UserInfoResult
-import bnbemu.packet.user.bomberCharCard
-import bnbemu.packet.user.equipSlotKey
 import bnbemu.server.Room
 import bnbemu.server.bomber
-import bnbemu.server.EquipSlot
 import bnbemu.service.PlayerService
 import bnbemu.service.player
 
@@ -32,7 +32,7 @@ private val LAST_USER_INFO_SEND_TIME = AttributeKey.valueOf<Long>("LAST_USER_INF
 private fun buildEquipEntries(charItemId: Int, equips: Map<Int, Int>): List<UserEquipEntry> {
     val merged = LinkedHashMap<Pair<Int, Int>, UserEquipEntry>()
     fun put(e: UserEquipEntry) {
-        merged[equipSlotKey(e.itemId, e.slot)] = e
+        merged[InventoryRules.equipSlotKey(e.itemId, e.slot)] = e
     }
     put(UserEquipEntry(itemId = charItemId, slot = EquipSlot.CHARACTER, param1 = 20, param2 = 0))
     put(UserEquipEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param1 = 1, param2 = 0))
@@ -69,12 +69,12 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
     val safeSlotIndex = slotIndex.coerceIn(0, 1)
 
     // 根据当前槽位选中的角色动态配置角色卡与装扮
-    // 走与 op 198 同一份映射 (bomberCharCard)
+    // 走与 op 198 同一份映射 (CharacterRules.bomberCharCard)
     val userSlot = Room.slots.find {
         it.client === c || (player != null && it.player?.userId == player.userId)
     }
     val currentBomber = userSlot?.bomber?.toInt() ?: player?.bomber ?: 0
-    val charItemId = bomberCharCard(currentBomber).first
+    val charItemId = CharacterRules.bomberCharCard(currentBomber).first
     // 装备槽位列表: 默认三条 + C→S op 273 记录下来的装备 (背景/旗帜/边框…)
     val equips = buildEquipEntries(charItemId, player?.equips.orEmpty())
     if (player != null && player.equips.isNotEmpty()) {
@@ -111,7 +111,7 @@ fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
 
     val bomberId = targetSlot?.bomber?.toInt() ?: targetPlayer?.bomber ?: 0
     // 与 op 198 / 自己名片同一份角色→角色卡映射
-    val charItemId = bomberCharCard(bomberId).first
+    val charItemId = CharacterRules.bomberCharCard(bomberId).first
     val equips = buildEquipEntries(charItemId, targetPlayer?.equips.orEmpty())
 
     val win = targetPlayer?.win ?: 10
@@ -181,7 +181,7 @@ val UserInfoReq = PKTHandler { c ->
     }
     if (bomberIds.isNotEmpty() && bomberIds[0] in 0..15) {
         // 与 op 87 SelectBomberReq 同一约定: 蓝蓝 (4) 走进阶形态 10
-        val effective = if (bomberIds[0] == 4) 10 else bomberIds[0]
+        val effective = CharacterRules.resolveEffectiveBomber(bomberIds[0])
         if (player != null && player.bomber != effective) {
             println("[UserInfoReq] 角色同步: bomber ${player.bomber} → $effective (上报 ${bomberIds[0]})")
             PlayerService.selectBomber(player.userId, effective)

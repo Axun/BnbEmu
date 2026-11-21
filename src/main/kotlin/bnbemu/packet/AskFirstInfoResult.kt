@@ -7,10 +7,14 @@ import bnbemu.netty.toBA
 // AskFirstInfo (C→S op 2, 登錄連線第一個業務包, op 之後跟 40B 票據資料) 的回應
 // login.pcap sq=43, 65B (63B body); 內含抓包帳號 kcworms1 的身份值 — 模擬器暫無帳號體系,
 // 暫以抓包值重放 (會話串另見 op7 OnConnEstablished / op254 / op297, 同串)
-fun AskFirstInfoResult() = PKT {
+fun AskFirstInfoResult(
+    userId: Int = CAPTURE_USER_ID,
+    session: ByteArray = SESSION_STRING,
+    level: Int = 1,
+) = PKT {
     UserInfo(
-        userId = CAPTURE_USER_ID, userId2 = CAPTURE_USER_ID, session = SESSION_STRING,
-        shareContextWord = 1, permissionId = 1000, level = 1,
+        userId = userId, userId2 = userId, session = session,
+        shareContextWord = 1, permissionId = 1000, level = level,
         gidIndex = 1, connectTimeoutMs = 5000,
         channelTabCount = CHANNEL_TAB_COUNT,
     ).Encode(this)

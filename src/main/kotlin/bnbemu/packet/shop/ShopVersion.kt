@@ -1,5 +1,6 @@
 package bnbemu.packet.shop
 
+import bnbemu.data.shop.ShopCatalogData
 import bnbemu.netty.PKT
 
 // ============================================================================
@@ -17,7 +18,7 @@ import bnbemu.netty.PKT
 //       若版本不一致或未載入, 於 0x00670D2A 自動向伺服器發送 C→S op 276 (0x114) 請求商城完整資料.
 fun ShopVersion(
     enableShop: Boolean = true,
-    catalogVersion: Int = ShopCatalog.CATALOG_HASH
+    catalogVersion: Int = ShopCatalogData.CATALOG_HASH
 ) = PKT {
     Encode1(if (enableShop) 1 else 0)
     Encode4(catalogVersion)

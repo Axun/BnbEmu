@@ -14,6 +14,15 @@ fun JoinSessionResult(entries: List<RosterEntry> = EN_SAMPLE_ROSTER) = PKT {
     entries.forEachIndexed { i, e -> e.Encode(this, i) }
 }
 
+/**
+ * 为指定玩家构建大厅名册：保留示例同频玩家，将当前玩家槽位替换为真实角色名与 userId。
+ * （当传入 7215 / "ffdf" 时输出与抓包逐字节一致。）
+ */
+fun lobbyRosterFor(charName: String, userId: Int): List<RosterEntry> =
+    EN_SAMPLE_ROSTER.mapIndexed { idx, entry ->
+        if (idx == 6) RosterEntry(charName, userId) else entry
+    }
+
 class RosterEntry(val name: String, val accountId: Int) {
     fun Encode(p: SendPacketBase, slot: Int) {
         val token = encodeName(name)

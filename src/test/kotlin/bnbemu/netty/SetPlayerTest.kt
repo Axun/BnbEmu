@@ -1,10 +1,10 @@
 package bnbemu.netty
 
+import bnbemu.data.item.ItemDefCatalog
+import bnbemu.data.item.ItemDefEntry
+import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
 import bnbemu.domain.PlayerProfile
-import bnbemu.packet.user.EQUIP_SLOTS_PER_GROUP
 import bnbemu.handler.user.ChangeEquipReq
-import bnbemu.packet.ItemDef
-import bnbemu.packet.ItemDefEntry
 import bnbemu.packet.room.PracticeRoomInfo
 import bnbemu.packet.room.PracticeStartInfo
 import bnbemu.packet.room.SetPlayer
@@ -207,7 +207,7 @@ class SetPlayerTest {
         )
         val acc = slotAccessoriesOf(
             equips = mapOf(220 to 710418, 240 to 2040, 5 * EQUIP_SLOTS_PER_GROUP + 3 to 990019),
-            findItem = { id -> if (id == 990019) avatarDef else ItemDef.find(id) },
+            findItem = { id -> if (id == 990019) avatarDef else ItemDefCatalog.find(id) },
         )
         assertEquals(listOf(1 to 418), acc.decorations)
         assertEquals(listOf(Triple(-1, 0, 16)), acc.effects)
@@ -234,7 +234,7 @@ class SetPlayerTest {
     @Test
     fun testRealItemDefForBomb655() {
         // 防止 op 60 定义表漂移: 930000655 必须是 category 14 / param 655
-        val def = ItemDef.find(930000655)
+        val def = ItemDefCatalog.find(930000655)
         assertEquals(14, def?.category)
         assertEquals(655, def?.param)
         assertEquals("BombDeco/Bomb655", def?.name)

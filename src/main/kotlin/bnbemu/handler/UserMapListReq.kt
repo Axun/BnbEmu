@@ -4,6 +4,7 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.lobby.SessionList
 import bnbemu.packet.lobby.UserMapEntry
 import bnbemu.packet.lobby.UserMapInfo
+import bnbemu.service.PlayerService
 import bnbemu.service.player
 
 /**
@@ -14,9 +15,9 @@ import bnbemu.service.player
  * 2. 由 CLobbyStage 发起。空载荷包。
  */
 val UserMapListReq = PKTHandler { c ->
-    val player = c.player
+    val player = c.player ?: PlayerService.activeProfile
     c.send(
-        UserMapInfo(UserMapEntry(level = player?.level ?: 5)),
+        UserMapInfo(UserMapEntry(level = player.level)),
         SessionList(),
     )
 }

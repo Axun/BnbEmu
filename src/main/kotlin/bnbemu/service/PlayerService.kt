@@ -3,13 +3,13 @@ package bnbemu.service
 import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.domain.EquipChangeEntry
 import bnbemu.domain.EquipChangeResult
+import bnbemu.domain.EquipSlot
 import bnbemu.domain.MAX_CASH
 import bnbemu.domain.PlayerProfile
 import bnbemu.domain.UserItemEntry
 import bnbemu.netty.ClientSocket
 import bnbemu.repository.InMemoryPlayerRepository
 import bnbemu.repository.PlayerRepository
-import bnbemu.server.EquipSlot
 
 /**
  * 玩家档案应用服务层。

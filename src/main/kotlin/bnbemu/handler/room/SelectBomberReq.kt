@@ -1,5 +1,6 @@
 package bnbemu.handler.room
 
+import bnbemu.domain.CharacterRules
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.room.SlotBomber
@@ -33,7 +34,7 @@ val SelectBomberReq = PKTHandler { c ->
     val slotIdx = Decode1
     val bomberIdx = Decode1
 
-    val effectiveBomber = if (bomberIdx == 4) 10 else bomberIdx
+    val effectiveBomber = CharacterRules.resolveEffectiveBomber(bomberIdx)
 
     val player = c.player
     if (player != null && slotIdx == 0) {

@@ -1,9 +1,11 @@
 package bnbemu.netty
 
+import bnbemu.CaptureFixtures
 import bnbemu.handler.battle.BomberActionReq
 import bnbemu.packet.battle.BOMBER_STATE_DEATH_LIST
 import bnbemu.packet.battle.ReviveBomber
 import bnbemu.packet.battle.GameResult
+import bnbemu.packet.battle.GameResultSlotSnapshot
 import bnbemu.packet.battle.InitGameResult
 import bnbemu.packet.battle.WINNER_TEAM_DRAW
 import bnbemu.domain.PlayerProfile
@@ -124,7 +126,7 @@ class GameOverTest {
     @Test
     fun testPacketClassesAreBoundToOpcodes() {
         assertEquals(169, OpcodeManager.getSendOp(InitGameResult(0, 0, 0)::class.java), "InitGameResult 必须是 op 169")
-        assertEquals(150, OpcodeManager.getSendOp(GameResult(0)::class.java), "GameResult 必须是 op 150")
+        assertEquals(150, OpcodeManager.getSendOp(GameResult(0, slots = CaptureFixtures.OP150_PRACTICE_SLOTS)::class.java), "GameResult 必须是 op 150")
         assertEquals(160, OpcodeManager.getSendOp(ReviveBomber(0)::class.java), "ReviveBomber 必须是 op 160")
     }
 
@@ -413,7 +415,7 @@ class GameOverTest {
     @Test
     fun testGameResultResultScreenFields() {
         // 玩家胜：真人 = WIN 帧、AI = LOSE 帧；gameType 必须 0
-        val body = bodyOf(GameResult(winnerTeam = 0, delayMs = 2000))
+        val body = bodyOf(GameResult(winnerTeam = 0, delayMs = 2000, slots = CaptureFixtures.OP150_PRACTICE_SLOTS))
         assertEquals(119, body.size, "op150 包体长度必须仍是 119B")
         assertEquals(0, dec1(body[0]), "header.gameType 必须 0 —— 非 0 会多盖一个 MISSION PERFECT!! 印章")
         assertEquals(0, dec1(body[1]), "header.winnerTeam = 0 (玩家胜)")
@@ -437,7 +439,7 @@ class GameOverTest {
     @Test
     fun testGameResultAiWinSwapsFrames() {
         // AI 胜：真人 = LOSE 帧、AI = WIN 帧
-        val body = bodyOf(GameResult(winnerTeam = 1))
+        val body = bodyOf(GameResult(winnerTeam = 1, slots = CaptureFixtures.OP150_PRACTICE_SLOTS))
         assertEquals(2, dec1(body[11 + 5]), "玩家阵亡 → 真人 +68 = LOSE 帧(2)")
         assertEquals(0, dec1(body[11 + 64 + 1]), "AI 胜 → AI 槽 +68 = WIN 帧(0)")
         assertEquals(1, dec1(body[1]), "header.winnerTeam = 1 (AI 胜)")
@@ -476,13 +478,13 @@ class GameOverTest {
     fun testGameResultPreservesCustomPlayerLevelAndClampsZero() {
         val human = 11
         Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester", level = 12), cs)
-        val body12 = bodyOf(GameResult(winnerTeam = 1))
+        val body12 = bodyOf(GameResult(winnerTeam = 1, slots = Room.resultSlotSnapshots()))
         assertEquals(12, dec2(body12, human + 35), "+132 必须写入 PlayerProfile.level")
         assertEquals(12, dec2(body12, human + 37), "+136 必须写入 PlayerProfile.level")
 
         // 即使 PlayerProfile.level 异常为 0，也必须钳制到 >= 1，防止 CUserDynamicInfo 等级被写成 0 触发 sub_67CAC3(1) 踢回大厅
-        Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester", level = 0), cs)
-        val bodyClamped = bodyOf(GameResult(winnerTeam = 1))
+        val zeroSlots = listOf(GameResultSlotSnapshot.Human(level = 0)) + List(7) { GameResultSlotSnapshot.Ai(1) }
+        val bodyClamped = bodyOf(GameResult(winnerTeam = 1, slots = zeroSlots))
         assertTrue(dec2(bodyClamped, human + 35) >= 1, "+132 绝不可为 0")
         assertTrue(dec2(bodyClamped, human + 37) >= 1, "+136 绝不可为 0")
     }
@@ -492,7 +494,7 @@ class GameOverTest {
     @Test
     fun testGameResultDrawEncodesDrawFrames() {
         for (wt in listOf(WINNER_TEAM_DRAW, -1)) {
-            val body = bodyOf(GameResult(winnerTeam = wt))
+            val body = bodyOf(GameResult(winnerTeam = wt, slots = CaptureFixtures.OP150_PRACTICE_SLOTS))
             assertEquals(WINNER_TEAM_DRAW, dec1(body[1]), "平局 header.winnerTeam 必须是 0xFF")
             assertEquals(3, dec1(body[11 + 5]), "平局真人 +68 必须是 DRAW 帧(3)")
             assertEquals(3, dec1(body[11 + 64 + 1]), "平局 AI +68 必须是 DRAW 帧(3)")

@@ -1,5 +1,6 @@
 package bnbemu.handler
 
+import bnbemu.domain.CharacterRules
 import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ChannelsGameState
@@ -8,10 +9,10 @@ import bnbemu.packet.DynamicMapInfo
 import bnbemu.packet.FxConfig
 import bnbemu.packet.ItemDef
 import bnbemu.packet.lobby.JoinSessionResult
+import bnbemu.packet.lobby.lobbyRosterFor
 import bnbemu.packet.user.MyPageSlots
 import bnbemu.packet.lobby.RoomList
 import bnbemu.packet.lobby.SessionList
-import bnbemu.packet.shop.ShopCatalog
 import bnbemu.packet.shop.ShopPackageMap
 import bnbemu.packet.shop.ShopStringTable
 import bnbemu.packet.shop.ShopVersion
@@ -19,11 +20,11 @@ import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.user.UserDynamicInfo
 import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.packet.user.UserInventory
-import bnbemu.packet.user.bomberCharCard
 import bnbemu.packet.user.defaultUserInventoryItems
 import bnbemu.packet.user.inventoryEntries
 import bnbemu.packet.user.UserInventoryInfo
 import bnbemu.packet.user.UserItemUpdate
+import bnbemu.service.PlayerService
 import bnbemu.service.player
 
 // C→S op 81 進頻道自動空包 —— ⚠️ 不是「進房」請求
@@ -74,7 +75,7 @@ val JoinSessionReq = PKTHandler { c ->
         "[JoinSessionReq] op 198 清单: 默认 ${defaults.size} 条 + 背包 ${bag.size} 件" +
             " + 装备 ${equips.size} 件 → 共 ${inventory.size} 条"
     )
-    val (charItemId, charToken) = bomberCharCard(bomber)
+    val (charItemId, charToken) = CharacterRules.bomberCharCard(bomber)
     println(
         "[JoinSessionReq] 角色: bomber=$bomber → item $charItemId ($charToken)" +
             " [op 198 角色卡 + op 274 玩家槽 0/1 + op 20 玩家槽 0]"
@@ -112,6 +113,10 @@ val JoinSessionReq = PKTHandler { c ->
         // ⚠️ op 20 (UserDynamicInfo) 是本機玩家動態檔案快照, 第 12 欄 = 角色 ID, 必須按當前角色生成!
         UserDynamicInfo(bomber, player?.level ?: 5), ShopVersion(), CoupleStateSync(), WelcomeNotice(),
         UserInventoryInfo(),
-        JoinSessionResult(), SessionList(),
+        JoinSessionResult(
+            player?.let { lobbyRosterFor(it.charName, it.userId) }
+                ?: lobbyRosterFor(PlayerService.activeProfile.charName, PlayerService.activeProfile.userId)
+        ),
+        SessionList(),
     )
 }

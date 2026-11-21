@@ -1,9 +1,9 @@
 package bnbemu.handler.shop
 
+import bnbemu.data.shop.ShopCatalogData
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.shop.ShopCatalog
 import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.packet.shop.BuyItemResult
 import bnbemu.service.PlayerService
@@ -38,7 +38,7 @@ val BuyItemReq = PKTHandler { c ->
     val arg = if (readableBytes() >= 4) Decode4 else 0
     val flag = if (readableBytes() >= 1) Decode1 else 0
 
-    val entry = ShopCatalog.DEFAULT_ITEMS.firstOrNull { it.prodId == prodId }
+    val entry = ShopCatalogData.findByProdId(prodId)
     println(
         "[BuyItemReq] prodId=$prodId arg=$arg flag=$flag -> " +
             (entry?.let { "itemId=${it.itemId} cat=${it.category} name='${it.name}' count=${it.count}" }

@@ -4,15 +4,15 @@ import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import bnbemu.data.item.ItemDefCatalog
+import bnbemu.domain.EquipSlot
 import bnbemu.domain.PlayerProfile
 import bnbemu.handler.JoinSessionReq
 import bnbemu.handler.user.UserInfoReq
 import bnbemu.handler.user.sendUserInfo
 import bnbemu.packet.user.DEFAULT_BAG_LEVEL
-import bnbemu.packet.ItemDef
 import bnbemu.packet.user.UserDynamicInfo
 import bnbemu.packet.user.UserDynamicInfoValue
-import bnbemu.server.EquipSlot
 import bnbemu.service.PlayerService
 import java.io.File
 
@@ -67,13 +67,13 @@ class CharSelectSyncTest {
     @Test
     fun testCharacterCardDefsExistForAllBombers() {
         for (itemId in 1..7) {
-            val def = ItemDef.find(itemId)
+            val def = ItemDefCatalog.find(itemId)
             assertNotNull(def, "op 60 必须包含角色卡 itemId=$itemId, 否则客户端会整条丢弃")
             assertEquals(15, def!!.category, "角色卡分类应为 15 (与抓包 itemId=1 一致)")
         }
-        assertEquals("Dao", ItemDef.find(1)?.name)
-        assertEquals("Boz", ItemDef.find(5)?.name, "练习房抓包里 Boz = item 5 / token Boz")
-        assertEquals("Plunk", ItemDef.find(7)?.name)
+        assertEquals("Dao", ItemDefCatalog.find(1)?.name)
+        assertEquals("Boz", ItemDefCatalog.find(5)?.name, "练习房抓包里 Boz = item 5 / token Boz")
+        assertEquals("Plunk", ItemDefCatalog.find(7)?.name)
     }
 
     @Test
@@ -169,7 +169,7 @@ class CharSelectSyncTest {
         // 抓包实证 (cap/chan_s2c_op60_46885B vs cap/practice_s2c_op60_46883B, 同为 882 条):
         //   皮蛋会话: 角色卡 item 1 / name "Dao" / skinId 0, 所有 cat=3 定义 name "Dao" / skin 0
         //   宝宝会话: 角色卡 item 5 / name "Boz" / skinId 5, 所有 cat=3 定义 name "Boz" / skin 5
-        val boz = ItemDef.itemsFor(5)
+        val boz = ItemDefCatalog.itemsFor(5)
         assertEquals(882, boz.size, "两张角色版 op60 条目数一致 (882)")
         val bozCard = boz.firstOrNull { it.itemId == 5 }
         assertNotNull(bozCard, "宝宝版 op60 的角色卡是 itemId 5")
@@ -185,14 +185,14 @@ class CharSelectSyncTest {
             "所有 cat=3 定义必须换成当前角色的模型名与 skinId"
         )
 
-        val dao = ItemDef.itemsFor(0)
+        val dao = ItemDefCatalog.itemsFor(0)
         val daoCard = dao.firstOrNull { it.itemId == 1 }!!
         assertEquals("Dao", daoCard.name)
         assertEquals(0, daoCard.skinId)
         assertTrue(dao.filter { it.category == 3 }.all { it.name == "Dao" && it.skinId == 0 })
 
         assertFalse(
-            ItemDef.blobFor(0).contentEquals(ItemDef.blobFor(5)),
+            ItemDefCatalog.blobFor(0).contentEquals(ItemDefCatalog.blobFor(5)),
             "不同角色的 op60 数据块必须不同"
         )
     }

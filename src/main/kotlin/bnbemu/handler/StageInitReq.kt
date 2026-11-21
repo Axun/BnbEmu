@@ -1,16 +1,18 @@
 package bnbemu.handler
 
+import bnbemu.domain.CharacterRules
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ClientStage
 import bnbemu.packet.ItemDef
-import bnbemu.packet.user.bomberCharCard
 import bnbemu.packet.user.MyPageInfo
+import bnbemu.packet.user.MyPageUser
 import bnbemu.packet.QuestConfigTable
 import bnbemu.packet.SessionInfoResult
 import bnbemu.packet.Unk293
 import bnbemu.packet.lobby.UserMarketItemList
 import bnbemu.packet.lobby.UserMarketMyItemList
 import bnbemu.packet.UserSimpleInfoResult
+import bnbemu.service.PlayerService
 import bnbemu.service.player
 
 /**
@@ -30,13 +32,16 @@ val StageInitReq = PKTHandler { c ->
     // 所以收到它就说明已经在大厅了 —— 清除房间舞台状态, 避免下次进商城误回房间。
     c.stage = ClientStage.Lobby.value
     // op 60 先按当前角色生成 (角色卡 itemId/skinId + 所有 cat=3 模型名都在里面),
-    val bomber = c.player?.bomber ?: 0
-    val (charItemId, charToken) = bomberCharCard(bomber)
+    val player = c.player ?: PlayerService.activeProfile
+    val bomber = player.bomber
+    val (charItemId, charToken) = CharacterRules.bomberCharCard(bomber)
     println("[StageInitReq] op 60 物品定义表: bomber=$bomber → 角色卡 item $charItemId ($charToken), cat=3 模型同步")
     c.send(
         Unk293(), QuestConfigTable(),
-        UserSimpleInfoResult(), SessionInfoResult(),
-        MyPageInfo(), ItemDef(bomber),
+        UserSimpleInfoResult(),
+        SessionInfoResult(userId = player.userId),
+        MyPageInfo(users = listOf(MyPageUser(slotIndex = 0, userId = player.userId))),
+        ItemDef(bomber),
         UserMarketItemList(), UserMarketMyItemList(),
     )
 }

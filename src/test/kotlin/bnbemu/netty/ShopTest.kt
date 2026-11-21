@@ -13,13 +13,13 @@ import bnbemu.handler.StageStateSyncReq
 import bnbemu.handler.user.UserInfoReq
 import bnbemu.handler.user.sendUserInfo
 import bnbemu.handler.room.ShopToRoomReq
+import bnbemu.data.shop.ShopCatalogData
+import bnbemu.domain.CharacterRules
+import bnbemu.domain.PlayerProfile
+import bnbemu.domain.UserItemEntry
 import bnbemu.packet.ClientStage
 import bnbemu.packet.user.DEFAULT_BAG_LEVEL
 import bnbemu.packet.room.PracticeSetSlotAI
-import bnbemu.packet.user.bomberCharCard
-import bnbemu.domain.PlayerProfile
-import bnbemu.domain.UserItemEntry
-import bnbemu.packet.shop.ShopCatalog
 import bnbemu.packet.shop.ShopVersion
 import bnbemu.server.Room
 import bnbemu.server.bomber
@@ -161,7 +161,7 @@ class ShopTest {
         assertEquals(0, f3)
         assertEquals(0, f4)
         assertEquals(0, f5)
-        assertEquals(ShopCatalog.CATALOG_HASH, catalogRev)
+        assertEquals(ShopCatalogData.CATALOG_HASH, catalogRev)
         assertEquals(0, rev2)
         assertEquals(0, rev3)
         assertEquals("", msg)
@@ -176,16 +176,16 @@ class ShopTest {
         // 下发值必须等于压缩块的戳；用未压缩块的 0x75D92163 会让客户端每次进频道都发 op 276。
         assertEquals(
             0xFF866FBC.toInt(),
-            ShopCatalog.CATALOG_HASH,
+            ShopCatalogData.CATALOG_HASH,
             "CATALOG_HASH 必须等于客户端读盘后的 COSmartStream+0x14"
         )
         assertEquals(
             0x75D92163,
-            ShopCatalog.PLAIN_HASH,
+            ShopCatalogData.PLAIN_HASH,
             "未压缩块戳仍是抓包 op 261 原值，仅作对照，不能再下发"
         )
 
-        val block = ShopCatalog.CACHE_BLOCK
+        val block = ShopCatalogData.CACHE_BLOCK
         assertEquals(0x18, block[0].toInt() and 0xFF)
         val payloadLen = (block[1].toInt() and 0xFF) or
             ((block[2].toInt() and 0xFF) shl 8) or
@@ -197,7 +197,7 @@ class ShopTest {
             ((block[7].toInt() and 0xFF) shl 8) or
             ((block[8].toInt() and 0xFF) shl 16) or
             ((block[9].toInt() and 0xFF) shl 24)
-        val expectedRaw = ShopCatalog.buildBlock(ShopCatalog.DEFAULT_ITEMS).let {
+        val expectedRaw = ShopCatalogData.buildBlock(ShopCatalogData.DEFAULT_ITEMS).let {
             it.copyOfRange(6, it.size)
         }
         assertEquals(expectedRaw.size, rawSize, "rawSize 必须等于 [count][items] 长度")
@@ -217,7 +217,7 @@ class ShopTest {
         ShopVersion().encode(SendPacketBase(out))
         val inBuf = Unpooled.wrappedBuffer(out.array(), 0, out.writerIndex())
         assertEquals(1, inBuf.Decode1, "enableShop=1")
-        assertEquals(ShopCatalog.CATALOG_HASH, inBuf.Decode4)
+        assertEquals(ShopCatalogData.CATALOG_HASH, inBuf.Decode4)
         assertEquals(0, inBuf.readableBytes())
     }
 
@@ -225,16 +225,16 @@ class ShopTest {
     fun testShopCatalogShipsCompressedBlock() {
         // op 65 现在下发压缩块（[0x18][u32 len][1][rawSize][zlib]），线上包体从 50.5KB 降到 ~6.8KB。
         // 客户端 sub_78BB60 的 *a2==1 分支负责解压，解出的仍是 [count][items]。
-        val blob = ShopCatalog.CACHED_BLOB
+        val blob = ShopCatalogData.CACHED_BLOB
         assertTrue(blob.size < 10_000, "压缩后线上块应远小于 50KB，实际 ${blob.size} B")
         assertArrayEquals(
-            ShopCatalog.CACHE_BLOCK,
+            ShopCatalogData.CACHE_BLOCK,
             ssdDecode(blob),
             "线上块经 ssdEncode 逆变换后必须等于缓存块（0x18 头 + compress=1）"
         )
         assertEquals(0x18, ssdDecode(blob)[0].toInt() and 0xFF)
         assertEquals(1, ssdDecode(blob)[5].toInt() and 0xFF, "compress 标志必须是 1")
-        assertArrayEquals(blob, ShopCatalog.encode(ShopCatalog.DEFAULT_ITEMS), "缓存 blob 必须与实时编码一致")
+        assertArrayEquals(blob, ShopCatalogData.encode(ShopCatalogData.DEFAULT_ITEMS), "缓存 blob 必须与实时编码一致")
     }
 
     /** CA.exe sub_75DAF0 的逆变换，用于验证线上块解码（仅测试用） */
@@ -269,7 +269,7 @@ class ShopTest {
         // CATALOG_HASH 可预测的前提：服务端 buildBlock 必须与 shop_catalog_base.bin 逐字节相同，
         // 也就是与客户端 CShopItemMan 重序列化后写盘的记录表同源。改动 ShopItemEntry.encode 会在这里失败。
         val base = bnbemu.data.DataResource.bytes("data/shop_catalog_base.bin")
-        assertArrayEquals(base, ShopCatalog.buildBlock(ShopCatalog.loadBaseItems()))
+        assertArrayEquals(base, ShopCatalogData.buildBlock(ShopCatalogData.loadBaseItems()))
     }
 
     @Test
@@ -546,7 +546,7 @@ class ShopTest {
                 .firstOrNull { OpcodeManager.getSendOp(it::class.java) == 73 }
             assertNotNull(profile, "必须下发 S→C op 73 UserInfoResult")
             val hex = bodyOf(profile!!).joinToString("") { "%02x".format(it) }
-            val expectedCard = bomberCharCard(chosen).first
+            val expectedCard = CharacterRules.bomberCharCard(chosen).first
             // 角色卡条目 = Encode4(itemId) + Encode1(slot 15)
             val cardHex = "%08x".format(expectedCard xor 0x96CA5395.toInt()) + "55"
             assertTrue(hex.contains(cardHex), "名片角色卡必须是 Plunk (item $expectedCard @ slot 15)")

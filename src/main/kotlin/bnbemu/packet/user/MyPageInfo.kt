@@ -1,7 +1,7 @@
 package bnbemu.packet.user
 
+import bnbemu.data.shop.ShopCatalogData
 import bnbemu.netty.PKT
-import bnbemu.packet.shop.ShopCatalog
 import bnbemu.packet.CAPTURE_USER_ID
 import bnbemu.packet.SESSION_STRING
 
@@ -32,7 +32,7 @@ data class MyPageUser(
 
 fun MyPageInfo(
     hasProfile: Boolean = true,
-    shopVersion: Int = ShopCatalog.CATALOG_HASH,
+    shopVersion: Int = ShopCatalogData.CATALOG_HASH,
     packageVersion: Int = 0,
     bannerVersion: Int = 0,
     session: ByteArray = SESSION_STRING,

@@ -9,6 +9,7 @@ import bnbemu.domain.PlayerProfile
 import bnbemu.handler.lobby.CreateSessionReq
 import bnbemu.packet.room.PracticeSetPlayer
 import bnbemu.packet.battle.GameStartMapInfo
+import bnbemu.packet.battle.GameStartSlotConfig
 import bnbemu.server.Room
 import bnbemu.server.bomber
 import bnbemu.service.PlayerService
@@ -20,24 +21,21 @@ class PracticeSetPlayerTest {
         val savedBomber = Room.slots[0].bomber
         try {
             // 1. 验证皮蛋 (bomber = 0)
-            Room.slots[0].bomber = 0
-            val pkt0 = PracticeSetPlayer(slot = 0)
+            val pkt0 = PracticeSetPlayer(slot = 0, bomber = 0)
             val buf0 = Unpooled.buffer()
             pkt0.encode(SendPacketBase(buf0))
             assertEquals(0, buf0.Decode1, "Slot index must be 0")
             assertEquals(0, buf0.Decode1, "PracticeSetPlayer must return 0 (Dao)")
 
             // 2. 验证宝宝 (bomber = 5)
-            Room.slots[0].bomber = 5
-            val pkt5 = PracticeSetPlayer(slot = 0)
+            val pkt5 = PracticeSetPlayer(slot = 0, bomber = 5)
             val buf5 = Unpooled.buffer()
             pkt5.encode(SendPacketBase(buf5))
             assertEquals(0, buf5.Decode1)
             assertEquals(5, buf5.Decode1, "PracticeSetPlayer must return 5 (Bazzi)")
 
             // 3. 验证蓝妹妹 (bomber = 10)
-            Room.slots[0].bomber = 10
-            val pkt10 = PracticeSetPlayer(slot = 0)
+            val pkt10 = PracticeSetPlayer(slot = 0, bomber = 10)
             val buf10 = Unpooled.buffer()
             pkt10.encode(SendPacketBase(buf10))
             assertEquals(0, buf10.Decode1)
@@ -50,13 +48,12 @@ class PracticeSetPlayerTest {
             assertEquals(0, bufOverride.Decode1)
             assertEquals(6, bufOverride.Decode1, "Explicit bomber parameter must be respected")
 
-            // 5. AI 槽位 (slot 1..7) 默认为 5
-            Room.slots[1].bomber = 5
-            val pktAi = PracticeSetPlayer(slot = 1)
+            // 5. AI 槽位 (slot 1..7) 传 5（抓包样本行为，但已无默认值）
+            val pktAi = PracticeSetPlayer(slot = 1, bomber = 5)
             val bufAi = Unpooled.buffer()
             pktAi.encode(SendPacketBase(bufAi))
             assertEquals(1, bufAi.Decode1)
-            assertEquals(5, bufAi.Decode1, "AI slot must default to 5")
+            assertEquals(5, bufAi.Decode1, "AI slot 传 5 时必须原样编码")
         } finally {
             Room.slots[0].bomber = savedBomber
         }
@@ -186,29 +183,25 @@ class PracticeSetPlayerTest {
 
     @Test
     fun testGameStartMapInfoRetainsDaoBomberZero() {
-        val savedBomber = Room.slots[0].bomber
-        try {
-            Room.slots[0].bomber = 0
+        val configs = listOf(GameStartSlotConfig(slotIdx = 0, spawnPos = 2, bomber = 0, team = 0)) +
+            (1..7).map { i -> GameStartSlotConfig(slotIdx = i, spawnPos = i, bomber = 5, team = 8) }
 
-            val pkt = GameStartMapInfo()
-            val buf = Unpooled.buffer()
-            pkt.encode(SendPacketBase(buf))
+        val pkt = GameStartMapInfo(slotConfigs = configs)
+        val buf = Unpooled.buffer()
+        pkt.encode(SendPacketBase(buf))
 
-            buf.Decode4 // seed
-            buf.Decode2 // theme
-            buf.DecodeCipherStr // mapName
-            buf.Decode4 // mapId
-            buf.Decode1 // gameOptions
-            buf.Decode1 // flag
-            buf.Decode1 // slotCount
+        buf.Decode4 // seed
+        buf.Decode2 // theme
+        buf.DecodeCipherStr // mapName
+        buf.Decode4 // mapId
+        buf.Decode1 // gameOptions
+        buf.Decode1 // flag
+        buf.Decode1 // slotCount
 
-            val idx0 = buf.Decode1
-            val spawn0 = buf.Decode1
-            val bomber0 = buf.Decode1
-            assertEquals(0, idx0)
-            assertEquals(0, bomber0, "GameStartMapInfo must retain bomber 0 (Dao) and not clobber it to 5")
-        } finally {
-            Room.slots[0].bomber = savedBomber
-        }
+        val idx0 = buf.Decode1
+        val spawn0 = buf.Decode1
+        val bomber0 = buf.Decode1
+        assertEquals(0, idx0)
+        assertEquals(0, bomber0, "GameStartMapInfo must retain bomber 0 (Dao) and not clobber it to 5")
     }
 }

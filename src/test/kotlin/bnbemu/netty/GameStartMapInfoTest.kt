@@ -7,6 +7,8 @@ import org.junit.jupiter.api.Test
 import bnbemu.data.map.MapCatalog
 import bnbemu.handler.room.StartGameReq
 import bnbemu.packet.battle.GameStartMapInfo
+import bnbemu.CaptureFixtures
+import bnbemu.packet.battle.GameStartSlotConfig
 import bnbemu.packet.battle.assignSpawnPositions
 import bnbemu.packet.battle.spawnRandom
 import bnbemu.server.Room
@@ -25,9 +27,9 @@ class GameStartMapInfoTest {
     private lateinit var savedBombers: List<Number>
 
     /**
-     * op112 的 bomber 现在按槽位从 Room.slots 读取（不再写死角色 5），
-     * 而抓包基准 cap/practice_s2c_op112_167B_0.bin 里 8 个槽位角色都是 5。
-     * 这里显式铺好前置状态并在用例结束后还原，避免依赖进程级单例的默认值。
+     * op112 已无默认名册，所有用例显式传 [CaptureFixtures.OP112_SLOT_CONFIGS]（抓包里 8 个槽位角色都是 5）。
+     * 这里仍把 Room 槽位角色铺成 5：走 C→S op 92 [StartGameReq] 的用例依然从 Room 取角色，
+     * 固定输入才能保证断言稳定；用例结束后还原。
      */
     @BeforeEach
     fun setUp() {
@@ -42,7 +44,7 @@ class GameStartMapInfoTest {
 
     @Test
     fun testGameStartMapInfoOpcodeBinding() {
-        val sendOp = OpcodeManager.getSendOp(GameStartMapInfo()::class.java)
+        val sendOp = OpcodeManager.getSendOp(GameStartMapInfo(slotConfigs = CaptureFixtures.OP112_SLOT_CONFIGS)::class.java)
         assertEquals(112, sendOp, "GameStartMapInfo send opcode must be 112")
     }
 
@@ -80,10 +82,7 @@ class GameStartMapInfoTest {
             val fileBytes = binFile.readBytes()
             val expectedBody = fileBytes.copyOfRange(2, fileBytes.size)
 
-            // 重置 slot 0 角色为默认 5
-            Room.slots[0].bomber = 5
-
-            val pkt = GameStartMapInfo()
+            val pkt = GameStartMapInfo(slotConfigs = CaptureFixtures.OP112_SLOT_CONFIGS)
             val buf = Unpooled.buffer()
             val sendPkt = SendPacketBase(buf)
             pkt.encode(sendPkt)
@@ -98,14 +97,14 @@ class GameStartMapInfoTest {
 
     @Test
     fun testGameStartMapInfoFieldsDecode() {
-        Room.slots[0].bomber = 5
         val pkt = GameStartMapInfo(
             randomSeed = 0x7E022E6B,
             themeId = 29,
             mapName = "Cemetery04",
             mapId = 176,
             gameOptions = 15,
-            flag = 0
+            flag = 0,
+            slotConfigs = CaptureFixtures.OP112_SLOT_CONFIGS,
         )
         val buf = Unpooled.buffer()
         val sendPkt = SendPacketBase(buf)
@@ -162,10 +161,11 @@ class GameStartMapInfoTest {
 
     @Test
     fun testGameStartMapInfoDynamicBomber() {
-        // 当玩家更换角色为 2 时
-        Room.slots[0].bomber = 2
+        // 显式传入槽位快照: slot 0 bomber = 2
+        val configs = listOf(GameStartSlotConfig(slotIdx = 0, spawnPos = 2, bomber = 2, team = 0)) +
+            (1..7).map { i -> GameStartSlotConfig(slotIdx = i, spawnPos = i, bomber = 5, team = 8) }
 
-        val pkt = GameStartMapInfo()
+        val pkt = GameStartMapInfo(slotConfigs = configs)
         val buf = Unpooled.buffer()
         val sendPkt = SendPacketBase(buf)
         pkt.encode(sendPkt)
@@ -183,10 +183,7 @@ class GameStartMapInfoTest {
         val bomber0 = buf.Decode1
         assertEquals(0, idx0)
         assertEquals(2, spawn0)
-        assertEquals(2, bomber0, "Slot 0 bomber must reflect Room.slots[0].bomber")
-
-        // 还原
-        Room.slots[0].bomber = 5
+        assertEquals(2, bomber0, "Slot 0 bomber must reflect passed GameStartSlotConfig.bomber")
     }
 
     @Test
@@ -297,7 +294,7 @@ class GameStartMapInfoTest {
     @Test
     fun testGameStartMapInfoSkipsKickedAiSlot() {
         // 踢掉 3 號 AI 後, op112 名冊只能有 7 筆, 且槽號/出生點不得壓縮重排。
-        val pkt = GameStartMapInfo(activeSlots = listOf(0, 1, 2, 4, 5, 6, 7))
+        val pkt = GameStartMapInfo(slotConfigs = CaptureFixtures.OP112_SLOT_CONFIGS.filter { it.slotIdx != 3 })
         val buf = Unpooled.buffer()
         pkt.encode(SendPacketBase(buf))
 

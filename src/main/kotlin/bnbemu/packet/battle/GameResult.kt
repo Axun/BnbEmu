@@ -1,7 +1,6 @@
 package bnbemu.packet.battle
 
 import bnbemu.netty.PKT
-import bnbemu.server.Room
 
 // S→C GameResult (Opcode 150 in EN / CA.exe 0x00559854)
 // 结构 (约 119 字节):
@@ -65,12 +64,28 @@ val AI_LEVEL_TO_LEVEL = mapOf(
     4 to 163,
 )
 
+/**
+ * 对局结算单槽位只读快照（让 GameResult 脱离对 Room 单例的直接读取）。
+ */
+sealed class GameResultSlotSnapshot {
+    data object Empty : GameResultSlotSnapshot()
+    data class Human(
+        val level: Int = 5,
+        val win: Int = 0,
+        val lose: Int = 0,
+        val draw: Int = 0,
+    ) : GameResultSlotSnapshot()
+    data class Ai(val aiLevel: Int = 1) : GameResultSlotSnapshot()
+}
+
 fun GameResult(
     winnerTeam: Int = 1,
     delayMs: Int = 2500,
     expBefore: Int = 0,      // +124 战前等级进度，千分比（0..1000 = 00.0%..100.0%）
     expAfter: Int = 50,      // +128 战后等级进度，EXP% 列动画的终点（0 → 5.0%）
-    lucciGained: Int = 100   // +152 本局获得金币
+    lucciGained: Int = 100,  // +152 本局获得金币
+    /** 本局结算名册（必填）。抓包基准见测试侧 `CaptureFixtures.OP150_PRACTICE_SLOTS`。 */
+    slots: List<GameResultSlotSnapshot>,
 ) = PKT {
     val isDraw = winnerTeam < 0 || winnerTeam == WINNER_TEAM_DRAW
     val headerWinnerTeam = if (isDraw) WINNER_TEAM_DRAW else winnerTeam
@@ -87,9 +102,8 @@ fun GameResult(
 
     // 2. 8 Slots
     for (slotIndex in 0 until 8) {
-        val slot = Room.slots.getOrNull(slotIndex)
-        val isHuman = slot?.player != null
-        val isAI = slot?.isAI == true
+        val slot = slots.getOrNull(slotIndex) ?: GameResultSlotSnapshot.Empty
+        val isHuman = slot is GameResultSlotSnapshot.Human
         // 该槽是否属于胜利方（真人 = 蓝队/team 0，AI = 红队/team 1）；平局双方均写 RESULT_FRAME_DRAW
         val frame = when {
             isDraw -> RESULT_FRAME_DRAW
@@ -100,58 +114,60 @@ fun GameResult(
         val expFrom = expBefore.coerceIn(0, 1000)
         val expTo = expAfter.coerceIn(0, 1000)
 
-        if (isHuman) {
-            val player = slot.player
-            val playerLevel = (player?.level ?: 5).coerceAtLeast(1)
-            Encode1(1) // slotType = 1 (Human)
-            Encode4(0) // score / unk（客户端读完即丢弃）
-            Encode1(frame) // +68 结果标签帧 (RESULT_FRAME_WIN / RESULT_FRAME_LOSE)
-            Encode1(0) // +72 KILLS
-            Encode1(0) // +76 SAVES
-            Encode1(0) // +80
-            Encode4(expTo) // +84 EXP（备用列布局，header unk4 != 0 时用；0x5599B4 写入 CLadderInfo / 房间槽 +0x3C）
-            Encode1(0) // +88 exp bonus % / CLadderInfo / 房间槽 +0x30
-            Encode4(lucciGained) // +92 LUCCI（备用列布局）
-            Encode1(0) // +96 lucci bonus %
-            Encode4(0) // +100 CLadderInfo / 房间槽 +0x54
-            Encode1(0) // +104 CLadderInfo / 房间槽 +0x48
-            Encode4(0) // +108
-            Encode1(0) // +112
-            Encode1(0) // +116
-            Encode1(0) // +120
-            Encode2(expFrom) // +124 战前等级进度
-            Encode2(expTo) // +128 战后等级进度 —— EXP% 列真正的数据源
-            Encode2(playerLevel) // +132 房间槽位 (edi+0x6C) / CUserMap (0x4E03C1) 玩家等级
-            Encode2(playerLevel) // +136 CUserDynamicInfo (0x6E4AAD) 战后等级（>=1，防回房触发 InvalidLevelPlayGame）
-            Encode1(0) // +140
-            Encode1(player?.win ?: 0) // +240 CUserDynamicInfo 胜场 (0x6E4C72)
-            Encode1(player?.lose ?: 0) // +241 CUserDynamicInfo 负场 (0x6E4C8C)
-            Encode1(player?.draw ?: 0) // +242 CUserDynamicInfo 平局/场次统计第三项 (0x6E4CA6)
-            Encode4(0) // +144
-            Encode2(0) // +148 带正负号的 EXP 变体（feature 36 分支才读）
-            Encode4(lucciGained) // +152 LUCCI 列 (同时 0x559965 写入房间槽 edi+0xB8)
-            // (feature 6 disabled, skipped)
-            Encode2(0) // +160
-            Encode4(0) // +164
-            Encode4(0) // +168
-            Encode1(0) // +172
-        } else if (isAI) {
-            val aiPlayerLevel = AI_LEVEL_TO_LEVEL[slot.aILevel] ?: 1
-            Encode1(2) // slotType = 2 (AI Bot)
-            Encode1(frame) // +68 结果标签帧 —— 输的一方必须写 LOSE 帧，
-                           // 写 0 会让电脑对手那行显示 "YOU WIN!!"
-            Encode1(0) // +72 KILLS
-            Encode1(0) // +76 SAVES
-            Encode2(aiPlayerLevel) // +132
-        } else {
-            Encode1(0) // slotType = 0 (Empty)
+        when (slot) {
+            is GameResultSlotSnapshot.Human -> {
+                val playerLevel = slot.level.coerceAtLeast(1)
+                Encode1(1) // slotType = 1 (Human)
+                Encode4(0) // score / unk（客户端读完即丢弃）
+                Encode1(frame) // +68 结果标签帧 (RESULT_FRAME_WIN / RESULT_FRAME_LOSE)
+                Encode1(0) // +72 KILLS
+                Encode1(0) // +76 SAVES
+                Encode1(0) // +80
+                Encode4(expTo) // +84 EXP（备用列布局，header unk4 != 0 时用；0x5599B4 写入 CLadderInfo / 房间槽 +0x3C）
+                Encode1(0) // +88 exp bonus % / CLadderInfo / 房间槽 +0x30
+                Encode4(lucciGained) // +92 LUCCI（备用列布局）
+                Encode1(0) // +96 lucci bonus %
+                Encode4(0) // +100 CLadderInfo / 房间槽 +0x54
+                Encode1(0) // +104 CLadderInfo / 房间槽 +0x48
+                Encode4(0) // +108
+                Encode1(0) // +112
+                Encode1(0) // +116
+                Encode1(0) // +120
+                Encode2(expFrom) // +124 战前等级进度
+                Encode2(expTo) // +128 战后等级进度 —— EXP% 列真正的数据源
+                Encode2(playerLevel) // +132 房间槽位 (edi+0x6C) / CUserMap (0x4E03C1) 玩家等级
+                Encode2(playerLevel) // +136 CUserDynamicInfo (0x6E4AAD) 战后等级（>=1，防回房触发 InvalidLevelPlayGame）
+                Encode1(0) // +140
+                Encode1(slot.win) // +240 CUserDynamicInfo 胜场 (0x6E4C72)
+                Encode1(slot.lose) // +241 CUserDynamicInfo 负场 (0x6E4C8C)
+                Encode1(slot.draw) // +242 CUserDynamicInfo 平局/场次统计第三项 (0x6E4CA6)
+                Encode4(0) // +144
+                Encode2(0) // +148 带正负号的 EXP 变体（feature 36 分支才读）
+                Encode4(lucciGained) // +152 LUCCI 列 (同时 0x559965 写入房间槽 edi+0xB8)
+                // (feature 6 disabled, skipped)
+                Encode2(0) // +160
+                Encode4(0) // +164
+                Encode4(0) // +168
+                Encode1(0) // +172
+            }
+            is GameResultSlotSnapshot.Ai -> {
+                val aiPlayerLevel = AI_LEVEL_TO_LEVEL[slot.aiLevel] ?: 1
+                Encode1(2) // slotType = 2 (AI Bot)
+                Encode1(frame) // +68 结果标签帧 —— 输的一方必须写 LOSE 帧，
+                               // 写 0 会让电脑对手那行显示 "YOU WIN!!"
+                Encode1(0) // +72 KILLS
+                Encode1(0) // +76 SAVES
+                Encode2(aiPlayerLevel) // +132
+            }
+            GameResultSlotSnapshot.Empty -> {
+                Encode1(0) // slotType = 0 (Empty)
+            }
         }
     }
 
     // 3. Trailer (CA.exe 0x0053E034)
     for (slotIndex in 0 until 8) {
-        val slot = Room.slots.getOrNull(slotIndex)
-        if (slot?.player != null) {
+        if (slots.getOrNull(slotIndex) is GameResultSlotSnapshot.Human) {
             Encode1(0)
             Encode1(0)
         }

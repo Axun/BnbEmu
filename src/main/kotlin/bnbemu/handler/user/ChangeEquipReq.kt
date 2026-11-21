@@ -1,15 +1,15 @@
 package bnbemu.handler.user
 
+import bnbemu.data.item.ItemDefCatalog
+import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
 import bnbemu.domain.EquipChangeEntry
+import bnbemu.domain.EquipSlot
+import bnbemu.domain.InventoryRules
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.user.EQUIP_SLOTS_PER_GROUP
-import bnbemu.packet.ItemDef
-import bnbemu.packet.user.equipGroupOfCategory
 import bnbemu.packet.room.SetPlayer
-import bnbemu.server.EquipSlot
 import bnbemu.server.Room
 import bnbemu.service.PlayerService
 import bnbemu.service.player
@@ -98,11 +98,8 @@ private fun describeSlot(slot: Int): String {
     return "0x${slot.toString(16).uppercase()}($slot) → 大类$group$name 子槽$sub"
 }
 
-/** 按 itemId 查 大类, 用于校验上报槽位与物品分类是否自洽 */
-private fun groupOfItem(itemId: Int): Int {
-    val cat = ItemDef.find(itemId)?.category ?: return -1
-    return equipGroupOfCategory(cat)
-}
+/** 按 itemId 查大类, 用于校验上报槽位与物品分类是否自洽 */
+private fun groupOfItem(itemId: Int): Int = InventoryRules.groupOfItem(itemId)
 
 val ChangeEquipReq = PKTHandler { c ->
     val total = readableBytes()
@@ -137,7 +134,7 @@ val ChangeEquipReq = PKTHandler { c ->
             println("[ChangeEquipReq]   slot=0x${it.equipSlot.toString(16)} item=0 → 忽略 (客户端跳过空记录)")
             continue
         }
-        if (it.equipSlot == NON_EQUIP_SLOT && ItemDef.find(it.itemId)?.category == 14) {
+        if (it.equipSlot == NON_EQUIP_SLOT && ItemDefCatalog.find(it.itemId)?.category == 14) {
             // 水泡皮肤只有在真实装备槽 (大类 10 → 0xF0~0xF8) 里才会被 op 100 的
             // f32 字段下发; 0xFF 只代表"买到了 / 在背包里", 对局内仍是默认水泡。
             println(
@@ -177,7 +174,7 @@ val ChangeEquipReq = PKTHandler { c ->
             }
             println(
                 "[ChangeEquipReq]   slot=${describeSlot(it.equipSlot)} → 装备 item=${it.itemId}" +
-                    " (${ItemDef.find(it.itemId)?.name ?: "无定义"})" +
+                    " (${ItemDefCatalog.find(it.itemId)?.name ?: "无定义"})" +
                     (if (it.itemId in result.removedFromBag) " [从背包移到装备]" else "") + mismatch
             )
         }

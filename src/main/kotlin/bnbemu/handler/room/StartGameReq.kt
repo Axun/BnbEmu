@@ -1,5 +1,6 @@
 package bnbemu.handler.room
 
+import bnbemu.constants.CharacterType
 import bnbemu.data.map.MapCatalog
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
@@ -11,8 +12,11 @@ import bnbemu.packet.room.PracticeStartInfo
 import bnbemu.packet.lobby.SESSION_TYPE_BATTLE
 import bnbemu.packet.lobby.SESSION_TYPE_PRACTICE
 import bnbemu.packet.battle.GameStartMapInfo
+import bnbemu.packet.battle.GameStartSlotConfig
+import bnbemu.packet.battle.RANDOM_CHARACTER_ID
 import bnbemu.packet.battle.assignSpawnPositions
 import bnbemu.server.Room
+import bnbemu.server.bomber
 import bnbemu.service.player
 import org.tinylog.kotlin.Logger
 import kotlin.random.Random
@@ -79,6 +83,21 @@ val StartGameReq = PKTHandler { c ->
         .ifEmpty { (0..7).toList() }
     println("StartGame. activeSlots=$activeSlots (AI=${activeSlots.count { Room.slots[it].isAI }})")
 
+    val spawnPositions = assignSpawnPositions(mapId, activeSlots)
+    val slotConfigs = activeSlots.map { i ->
+        val slot = Room.slots.getOrNull(i)
+        val rawBomber = slot?.bomber?.toInt()
+        val bomberId = when {
+            rawBomber == RANDOM_CHARACTER_ID -> CharacterType.Lucy.value
+            rawBomber != null -> rawBomber
+            i == 0 -> CharacterType.Dao.value
+            else -> CharacterType.Boz.value
+        }
+        val team = if (i == 0 || slot?.player != null) 0 else 8
+        val spawn = if (i < spawnPositions.size) spawnPositions[i] else i
+        GameStartSlotConfig(slotIdx = i, spawnPos = spawn, bomber = bomberId, team = team)
+    }
+
     val player = c.player
     c.send(
         PracticeAiLevel(),
@@ -88,9 +107,9 @@ val StartGameReq = PKTHandler { c ->
             themeId = themeId,
             mapName = mapName,
             gameOptions = if (Room.isAIBattle) SESSION_TYPE_BATTLE else SESSION_TYPE_PRACTICE,
-            activeSlots = activeSlots,
-            // 出生点数量由地图决定（4 人图只有 0..3），按参战槽顺序分配，见 assignSpawnPositions
-            spawnPositions = assignSpawnPositions(mapId, activeSlots),
+            // 名冊唯一入口: 誰參戰 / 出生點 / 角色 / 隊伍全部在這裡定死 (見 GameStartSlotConfig)。
+            // 出生點數量由地圖決定（4 人图只有 0..3），按参战槽顺序分配，见 assignSpawnPositions
+            slotConfigs = slotConfigs,
         ),
         PracticeStartInfo(player = player),
         PracticeBoard(),
