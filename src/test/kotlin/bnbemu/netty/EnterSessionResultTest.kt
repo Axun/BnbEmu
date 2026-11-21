@@ -1,9 +1,9 @@
 package bnbemu.netty
 
-import bnbemu.packet.SESSION_ENTER_CANT_JOIN
-import bnbemu.packet.SESSION_TYPE_NORMAL
-import bnbemu.packet.SESSION_TYPE_PRACTICE
-import bnbemu.packet.EnterSessionResult
+import bnbemu.packet.lobby.SESSION_ENTER_CANT_JOIN
+import bnbemu.packet.lobby.SESSION_TYPE_NORMAL
+import bnbemu.packet.lobby.SESSION_TYPE_PRACTICE
+import bnbemu.packet.lobby.EnterSessionResult
 import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals

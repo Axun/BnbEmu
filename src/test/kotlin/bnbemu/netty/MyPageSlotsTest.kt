@@ -1,10 +1,10 @@
 package bnbemu.netty
 
-import bnbemu.packet.MY_PAGE_COUPLE_SLOT
-import bnbemu.packet.MY_PAGE_MAX_PAGES
-import bnbemu.packet.MY_PAGE_SLOTS_PER_PAGE
-import bnbemu.packet.MyPageSlot
-import bnbemu.packet.MyPageSlots
+import bnbemu.packet.user.MY_PAGE_COUPLE_SLOT
+import bnbemu.packet.user.MY_PAGE_MAX_PAGES
+import bnbemu.packet.user.MY_PAGE_SLOTS_PER_PAGE
+import bnbemu.packet.user.MyPageSlot
+import bnbemu.packet.user.MyPageSlots
 import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals

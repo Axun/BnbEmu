@@ -1,6 +1,6 @@
 package bnbemu.netty
 
-import bnbemu.handler.room.ObjectHitReq
+import bnbemu.handler.battle.ObjectHitReq
 import bnbemu.server.BattleSession
 import bnbemu.server.Bomb
 import bnbemu.server.Room

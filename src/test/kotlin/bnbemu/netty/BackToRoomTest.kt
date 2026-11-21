@@ -1,8 +1,8 @@
 package bnbemu.netty
 
-import bnbemu.packet.room.BackToRoom
-import bnbemu.packet.room.GameResult
-import bnbemu.packet.room.InitGameResult
+import bnbemu.packet.battle.BackToRoom
+import bnbemu.packet.battle.GameResult
+import bnbemu.packet.battle.InitGameResult
 import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.Room
 import bnbemu.server.User

@@ -2,7 +2,7 @@ package bnbemu.handler.room
 
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.PracticeSetSlotAI
+import bnbemu.packet.room.PracticeSetSlotAI
 import bnbemu.packet.room.SlotBomber
 import bnbemu.server.Room
 import bnbemu.server.bomber

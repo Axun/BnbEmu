@@ -4,11 +4,11 @@ import bnbemu.constants.CharacterType
 import bnbemu.isEN
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.PracticeSetPlayer
-import bnbemu.packet.PracticeSetSlotAI
-import bnbemu.packet.PracticeSlotReady
-import bnbemu.packet.SetSlotColor
-import bnbemu.packet.SetSlotFanfare
+import bnbemu.packet.room.PracticeSetPlayer
+import bnbemu.packet.room.PracticeSetSlotAI
+import bnbemu.packet.room.PracticeSlotReady
+import bnbemu.packet.room.SetSlotColor
+import bnbemu.packet.room.SetSlotFanfare
 import bnbemu.packet.room.DoOpenCloseSlot
 import bnbemu.server.DEFAULT_AI_LEVEL
 import bnbemu.server.FLAG_CLOSED

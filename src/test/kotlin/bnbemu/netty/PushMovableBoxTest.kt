@@ -1,7 +1,7 @@
 package bnbemu.netty
 
-import bnbemu.handler.room.PushMovableBoxReq
-import bnbemu.packet.room.MovableBoxMove
+import bnbemu.handler.battle.PushMovableBoxReq
+import bnbemu.packet.battle.MovableBoxMove
 import bnbemu.server.BattleSession
 import bnbemu.server.Room
 import bnbemu.server.User

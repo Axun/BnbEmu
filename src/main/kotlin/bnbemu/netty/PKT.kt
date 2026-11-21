@@ -6,7 +6,7 @@ import bnbemu.ACP
 import bnbemu.debugMode
 import bnbemu.isEN
 import bnbemu.showDecValue
-import bnbemu.packet.decodeName
+import bnbemu.packet.lobby.decodeName
 import java.io.ByteArrayOutputStream
 import java.util.zip.Deflater
 

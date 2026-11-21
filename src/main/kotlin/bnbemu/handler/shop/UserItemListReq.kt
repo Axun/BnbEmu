@@ -1,9 +1,9 @@
 package bnbemu.handler.shop
 
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.DEFAULT_USER_INVENTORY_ITEMS
-import bnbemu.packet.UserInventory
-import bnbemu.packet.inventoryEntries
+import bnbemu.packet.user.DEFAULT_USER_INVENTORY_ITEMS
+import bnbemu.packet.user.UserInventory
+import bnbemu.packet.user.inventoryEntries
 
 // C→S 264 背包資料查詢 (CLobbyStage 0x00513226 構造空包)
 //

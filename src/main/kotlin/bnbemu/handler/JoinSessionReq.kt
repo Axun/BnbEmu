@@ -2,27 +2,27 @@ package bnbemu.handler
 
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ChannelsGameState
-import bnbemu.packet.CoupleStateSync
+import bnbemu.packet.user.CoupleStateSync
 import bnbemu.packet.DynamicMapInfo
 import bnbemu.packet.FxConfig
 import bnbemu.packet.ItemDef
-import bnbemu.packet.JoinSessionResult
-import bnbemu.packet.MyPageSlots
-import bnbemu.packet.RoomList
-import bnbemu.packet.SessionList
+import bnbemu.packet.lobby.JoinSessionResult
+import bnbemu.packet.user.MyPageSlots
+import bnbemu.packet.lobby.RoomList
+import bnbemu.packet.lobby.SessionList
 import bnbemu.packet.shop.ShopCatalog
 import bnbemu.packet.shop.ShopPackageMap
 import bnbemu.packet.shop.ShopStringTable
 import bnbemu.packet.shop.ShopVersion
 import bnbemu.packet.WelcomeNotice
-import bnbemu.packet.UserDynamicInfo
-import bnbemu.packet.UserDynamicInfoValue
-import bnbemu.packet.UserInventory
-import bnbemu.packet.bomberCharCard
-import bnbemu.packet.defaultUserInventoryItems
-import bnbemu.packet.inventoryEntries
-import bnbemu.packet.UserInventoryInfo
-import bnbemu.packet.UserItemUpdate
+import bnbemu.packet.user.UserDynamicInfo
+import bnbemu.packet.user.UserDynamicInfoValue
+import bnbemu.packet.user.UserInventory
+import bnbemu.packet.user.bomberCharCard
+import bnbemu.packet.user.defaultUserInventoryItems
+import bnbemu.packet.user.inventoryEntries
+import bnbemu.packet.user.UserInventoryInfo
+import bnbemu.packet.user.UserItemUpdate
 
 // C→S op 81 進頻道自動空包 —— ⚠️ 不是「進房」請求
 // =================================================

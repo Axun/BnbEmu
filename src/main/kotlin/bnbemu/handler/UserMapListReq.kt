@@ -1,9 +1,9 @@
 package bnbemu.handler
 
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.SessionList
-import bnbemu.packet.UserMapEntry
-import bnbemu.packet.UserMapInfo
+import bnbemu.packet.lobby.SessionList
+import bnbemu.packet.lobby.UserMapEntry
+import bnbemu.packet.lobby.UserMapInfo
 
 /**
  * C→S 频道在线用户列表/地图同步请求 (Opcode 310)

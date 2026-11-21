@@ -5,12 +5,12 @@ import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import bnbemu.handler.JoinSessionReq
-import bnbemu.handler.UserInfoReq
-import bnbemu.handler.sendUserInfo
-import bnbemu.packet.DEFAULT_BAG_LEVEL
+import bnbemu.handler.user.UserInfoReq
+import bnbemu.handler.user.sendUserInfo
+import bnbemu.packet.user.DEFAULT_BAG_LEVEL
 import bnbemu.packet.ItemDef
-import bnbemu.packet.UserDynamicInfo
-import bnbemu.packet.UserDynamicInfoValue
+import bnbemu.packet.user.UserDynamicInfo
+import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.server.EquipSlot
 import bnbemu.server.User
 import java.io.File

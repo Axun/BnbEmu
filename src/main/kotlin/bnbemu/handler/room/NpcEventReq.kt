@@ -2,7 +2,7 @@ package bnbemu.handler.room
 
 import bnbemu.netty.Decode2
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.NpcEvent
+import bnbemu.packet.room.NpcEvent
 import bnbemu.server.Room
 import org.tinylog.kotlin.Logger
 

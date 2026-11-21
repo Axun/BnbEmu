@@ -2,8 +2,8 @@ package bnbemu.handler
 
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.UserMarketItemList
-import bnbemu.packet.UserMarketMyItemList
+import bnbemu.packet.lobby.UserMarketItemList
+import bnbemu.packet.lobby.UserMarketMyItemList
 
 /**
  * C→S 玩家舞台/特性状态同步请求 (Opcode 302)

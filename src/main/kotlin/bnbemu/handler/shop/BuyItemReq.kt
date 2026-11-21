@@ -4,7 +4,7 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.shop.ShopCatalog
-import bnbemu.packet.UserDynamicInfoValue
+import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.packet.shop.BuyItemResult
 import bnbemu.server.UserItemEntry
 import bnbemu.server.lucci

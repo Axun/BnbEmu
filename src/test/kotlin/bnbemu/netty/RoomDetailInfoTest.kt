@@ -1,7 +1,7 @@
 package bnbemu.netty
 
-import bnbemu.packet.RoomDetailSlot
-import bnbemu.packet.RoomDetailInfo
+import bnbemu.packet.lobby.RoomDetailSlot
+import bnbemu.packet.lobby.RoomDetailInfo
 import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals

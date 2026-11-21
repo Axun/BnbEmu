@@ -2,6 +2,7 @@ package bnbemu.packet
 
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
+import bnbemu.packet.lobby.encodeName
 
 /**
  * 任务配置条目 (对应 CA.exe CQuestConfigTable 0x006ABDE7 单项)

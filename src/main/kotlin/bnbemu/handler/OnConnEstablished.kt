@@ -7,8 +7,8 @@ import bnbemu.netty.DecodeTokenStr
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ChannelsGameState
 import bnbemu.packet.ChannelsState
-import bnbemu.packet.RoomList
-import bnbemu.packet.UserDynamicInfoValue
+import bnbemu.packet.lobby.RoomList
+import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.PermissionInfo
 import bnbemu.packet.ChangeStage

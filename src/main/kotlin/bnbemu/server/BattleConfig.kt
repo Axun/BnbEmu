@@ -12,7 +12,7 @@ data class BattleConfig(
     var matchTimeoutMs: Long = 180_000L,
     /** 结算结果包的下发延迟 (ms) */
     var gameOverDelayMs: Long = 1000L,
-    /** 结算包之后多久下发 S→C op 155 [bnbemu.packet.room.BackToRoom]; <0 表示不自动排程回房 */
+    /** 结算包之后多久下发 S→C op 155 [bnbemu.packet.battle.BackToRoom]; <0 表示不自动排程回房 */
     var resultReturnDelayMs: Long = 7000L,
     /** op155 之后是否补推整条房间链（重建房主位/座位/房间对象） */
     var reenterRoomAfterBack: Boolean = true,

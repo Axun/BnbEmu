@@ -5,9 +5,9 @@ import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
-import bnbemu.handler.CreateSessionReq
-import bnbemu.packet.PracticeSetPlayer
-import bnbemu.packet.room.GameStartMapInfo
+import bnbemu.handler.lobby.CreateSessionReq
+import bnbemu.packet.room.PracticeSetPlayer
+import bnbemu.packet.battle.GameStartMapInfo
 import bnbemu.server.Room
 import bnbemu.server.User
 import bnbemu.server.bomber

@@ -8,6 +8,7 @@ import bnbemu.netty.ssdEncode
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import bnbemu.packet.user.bomberCharCard
 
 /**
  * 物品定义条目 (与 CA.exe CUserItem / UserItem 0x00676CFA 一一对应)

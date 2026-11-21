@@ -3,8 +3,8 @@ package bnbemu.handler.shop
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ClientStage
-import bnbemu.packet.EnterShopResult
-import bnbemu.packet.EnterShopStage
+import bnbemu.packet.shop.EnterShopResult
+import bnbemu.packet.shop.EnterShopStage
 import bnbemu.packet.shop.CashBalance
 import bnbemu.server.cash
 import bnbemu.server.lucci

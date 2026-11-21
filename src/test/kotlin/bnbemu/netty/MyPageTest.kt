@@ -4,9 +4,9 @@ import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import bnbemu.ACP
-import bnbemu.packet.DEFAULT_USER_EQUIPS
-import bnbemu.packet.UserInfoResult
-import bnbemu.packet.decodeName
+import bnbemu.packet.user.DEFAULT_USER_EQUIPS
+import bnbemu.packet.user.UserInfoResult
+import bnbemu.packet.lobby.decodeName
 
 class MyPageTest {
 

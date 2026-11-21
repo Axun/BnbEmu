@@ -3,8 +3,8 @@ package bnbemu.netty
 import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import bnbemu.packet.room.MapEventEntry
-import bnbemu.packet.room.MapEventSync
+import bnbemu.packet.battle.MapEventEntry
+import bnbemu.packet.battle.MapEventSync
 
 // S→C op 172 = MapEventSync (地图事件/波时间轴同步), 不是 ItemThrow。
 // 基准载荷 = tst.pcap stream4 sq=343 的 body (去掉 2B opcode a5 c5):

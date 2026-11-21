@@ -1,10 +1,10 @@
 package bnbemu.netty
 
 import bnbemu.ACP
-import bnbemu.packet.RoomEntry
-import bnbemu.packet.RoomList
-import bnbemu.packet.SESSION_TYPE_NORMAL
-import bnbemu.packet.SESSION_TYPE_PRACTICE
+import bnbemu.packet.lobby.RoomEntry
+import bnbemu.packet.lobby.RoomList
+import bnbemu.packet.lobby.SESSION_TYPE_NORMAL
+import bnbemu.packet.lobby.SESSION_TYPE_PRACTICE
 import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.FLAG_CLOSED
 import bnbemu.server.Room

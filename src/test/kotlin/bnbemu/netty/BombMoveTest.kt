@@ -1,7 +1,7 @@
 package bnbemu.netty
 
-import bnbemu.handler.room.BombKickThrowReq
-import bnbemu.packet.room.BombKickThrow
+import bnbemu.handler.battle.BombKickThrowReq
+import bnbemu.packet.battle.BombKickThrow
 import bnbemu.server.BattleSession
 import bnbemu.server.Bomb
 import bnbemu.server.Room

@@ -5,10 +5,10 @@ import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ClientStage
 import bnbemu.packet.ItemDef
-import bnbemu.packet.UserDynamicInfo
-import bnbemu.packet.UserDynamicInfoValue
-import bnbemu.packet.UserItemUpdate
-import bnbemu.packet.bomberCharCard
+import bnbemu.packet.user.UserDynamicInfo
+import bnbemu.packet.user.UserDynamicInfoValue
+import bnbemu.packet.user.UserItemUpdate
+import bnbemu.packet.user.bomberCharCard
 import bnbemu.packet.isRoomStage
 import bnbemu.server.lucci
 import bnbemu.server.sendRoomEntryChain

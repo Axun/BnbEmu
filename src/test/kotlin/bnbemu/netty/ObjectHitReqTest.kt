@@ -1,6 +1,6 @@
 package bnbemu.netty
 
-import bnbemu.handler.room.ObjectHitReq
+import bnbemu.handler.battle.ObjectHitReq
 import bnbemu.server.Room
 import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.assertEquals

@@ -6,9 +6,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import bnbemu.data.map.MapCatalog
 import bnbemu.handler.room.StartGameReq
-import bnbemu.packet.room.GameStartMapInfo
-import bnbemu.packet.room.assignSpawnPositions
-import bnbemu.packet.room.spawnRandom
+import bnbemu.packet.battle.GameStartMapInfo
+import bnbemu.packet.battle.assignSpawnPositions
+import bnbemu.packet.battle.spawnRandom
 import bnbemu.server.Room
 import bnbemu.server.bomber
 import io.netty.channel.embedded.EmbeddedChannel

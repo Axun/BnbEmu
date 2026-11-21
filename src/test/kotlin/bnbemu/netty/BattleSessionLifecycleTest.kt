@@ -1,12 +1,12 @@
 package bnbemu.netty
 
-import bnbemu.handler.room.BombKickThrowReq
-import bnbemu.handler.room.BomberActionReq
-import bnbemu.handler.room.BoxItemSpawnReport
-import bnbemu.handler.room.DrillReq
-import bnbemu.handler.room.ObjectHitReq
-import bnbemu.handler.room.PushMovableBoxReq
-import bnbemu.handler.room.SetBomberEventReq
+import bnbemu.handler.battle.BombKickThrowReq
+import bnbemu.handler.battle.BomberActionReq
+import bnbemu.handler.battle.BoxItemSpawnReport
+import bnbemu.handler.battle.DrillReq
+import bnbemu.handler.battle.ObjectHitReq
+import bnbemu.handler.battle.PushMovableBoxReq
+import bnbemu.handler.battle.SetBomberEventReq
 import bnbemu.server.BattleSession
 import bnbemu.server.Bomb
 import bnbemu.server.Room

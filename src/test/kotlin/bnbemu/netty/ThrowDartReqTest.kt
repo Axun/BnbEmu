@@ -1,6 +1,6 @@
 package bnbemu.netty
 
-import bnbemu.handler.room.ThrowDartReq
+import bnbemu.handler.battle.ThrowDartReq
 import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull

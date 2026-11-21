@@ -5,18 +5,18 @@ import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import bnbemu.packet.ChangeStage
-import bnbemu.packet.EnterShopResult
-import bnbemu.packet.EnterShopStage
+import bnbemu.packet.shop.EnterShopResult
+import bnbemu.packet.shop.EnterShopStage
 import bnbemu.handler.shop.EnterShopReq
 import bnbemu.handler.StageInitReq
 import bnbemu.handler.StageStateSyncReq
-import bnbemu.handler.UserInfoReq
-import bnbemu.handler.sendUserInfo
+import bnbemu.handler.user.UserInfoReq
+import bnbemu.handler.user.sendUserInfo
 import bnbemu.handler.room.ShopToRoomReq
 import bnbemu.packet.ClientStage
-import bnbemu.packet.DEFAULT_BAG_LEVEL
-import bnbemu.packet.PracticeSetSlotAI
-import bnbemu.packet.bomberCharCard
+import bnbemu.packet.user.DEFAULT_BAG_LEVEL
+import bnbemu.packet.room.PracticeSetSlotAI
+import bnbemu.packet.user.bomberCharCard
 import bnbemu.packet.shop.ShopCatalog
 import bnbemu.packet.shop.ShopVersion
 import bnbemu.server.Room
@@ -105,14 +105,14 @@ class ShopTest {
         // 清空重建时会把「商城里刚买的东西」抹掉；槽位必须是 0xFF（BAG_ONLY_SLOT），
         // 客户端 sub_65D55F 才会只塞进背包向量、不占装备槽。
         val bag = listOf(bnbemu.server.UserItemEntry(itemId = 710418))
-        val entries = bnbemu.packet.bagInventoryEntries(bag)
+        val entries = bnbemu.packet.user.bagInventoryEntries(bag)
         assertEquals(1, entries.size)
         assertEquals(710418, entries[0].itemId)
-        assertEquals(bnbemu.packet.BAG_ONLY_SLOT, entries[0].slot)
+        assertEquals(bnbemu.packet.user.BAG_ONLY_SLOT, entries[0].slot)
         assertEquals("Item/ShopDeco", entries[0].token, "令牌应取自 op 60 定义表")
 
-        val inventory = bnbemu.packet.DEFAULT_USER_INVENTORY_ITEMS + entries
-        val pkt = bnbemu.packet.UserInventory(listOf(inventory, inventory))
+        val inventory = bnbemu.packet.user.DEFAULT_USER_INVENTORY_ITEMS + entries
+        val pkt = bnbemu.packet.user.UserInventory(listOf(inventory, inventory))
         val buf = Unpooled.buffer()
         pkt.encode(SendPacketBase(buf, 3))
 

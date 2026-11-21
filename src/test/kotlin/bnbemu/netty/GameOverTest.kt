@@ -1,11 +1,11 @@
 package bnbemu.netty
 
-import bnbemu.handler.room.BomberActionReq
-import bnbemu.packet.room.BOMBER_STATE_DEATH_LIST
-import bnbemu.packet.room.ReviveBomber
-import bnbemu.packet.room.GameResult
-import bnbemu.packet.room.InitGameResult
-import bnbemu.packet.room.WINNER_TEAM_DRAW
+import bnbemu.handler.battle.BomberActionReq
+import bnbemu.packet.battle.BOMBER_STATE_DEATH_LIST
+import bnbemu.packet.battle.ReviveBomber
+import bnbemu.packet.battle.GameResult
+import bnbemu.packet.battle.InitGameResult
+import bnbemu.packet.battle.WINNER_TEAM_DRAW
 import bnbemu.server.Room
 import bnbemu.server.SlotMatchState
 import bnbemu.server.User

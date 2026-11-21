@@ -1,11 +1,11 @@
 package bnbemu.netty
 
-import bnbemu.packet.EQUIP_SLOTS_PER_GROUP
-import bnbemu.handler.ChangeEquipReq
+import bnbemu.packet.user.EQUIP_SLOTS_PER_GROUP
+import bnbemu.handler.user.ChangeEquipReq
 import bnbemu.packet.ItemDef
 import bnbemu.packet.ItemDefEntry
-import bnbemu.packet.PracticeRoomInfo
-import bnbemu.packet.PracticeStartInfo
+import bnbemu.packet.room.PracticeRoomInfo
+import bnbemu.packet.room.PracticeStartInfo
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.room.slotAccessoriesOf
 import bnbemu.server.User

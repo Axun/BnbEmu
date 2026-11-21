@@ -3,13 +3,13 @@ package bnbemu.handler
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ClientStage
 import bnbemu.packet.ItemDef
-import bnbemu.packet.bomberCharCard
-import bnbemu.packet.MyPageInfo
+import bnbemu.packet.user.bomberCharCard
+import bnbemu.packet.user.MyPageInfo
 import bnbemu.packet.QuestConfigTable
 import bnbemu.packet.SessionInfoResult
 import bnbemu.packet.Unk293
-import bnbemu.packet.UserMarketItemList
-import bnbemu.packet.UserMarketMyItemList
+import bnbemu.packet.lobby.UserMarketItemList
+import bnbemu.packet.lobby.UserMarketMyItemList
 import bnbemu.packet.UserSimpleInfoResult
 
 /**

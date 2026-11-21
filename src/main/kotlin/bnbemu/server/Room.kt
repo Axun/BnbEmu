@@ -6,10 +6,10 @@ import bnbemu.netty.ClientSocket
 import bnbemu.netty.NettyServer.workerGroup
 import bnbemu.netty.PKT
 import bnbemu.packet.ClientStage
-import bnbemu.packet.PracticeSetSlotAI
-import bnbemu.packet.PracticeSlotReady
-import bnbemu.packet.SESSION_TYPE_BATTLE
-import bnbemu.packet.room.BackToRoom
+import bnbemu.packet.room.PracticeSetSlotAI
+import bnbemu.packet.room.PracticeSlotReady
+import bnbemu.packet.lobby.SESSION_TYPE_BATTLE
+import bnbemu.packet.battle.BackToRoom
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.room.SetSlotState
 import io.netty.channel.EventLoop
@@ -33,7 +33,7 @@ object Room {
         private set
 
     /**
-     * 房间号 / 会话 id —— S→C op 83 [bnbemu.packet.EnterSessionResult] 的第 3 栏位。
+     * 房间号 / 会话 id —— S→C op 83 [bnbemu.packet.lobby.EnterSessionResult] 的第 3 栏位。
      *
      * 客户端 (CA.exe 0x00506513) 拿这个 id 去 CLobbyStage 的房屋缓存数组 (由 op 87 房间列表填充)
      * 里找同一间房, **找不到就整段跳过**: 房间名/等级/人数不会写进 CFxContext, 只有

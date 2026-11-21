@@ -5,11 +5,11 @@ import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import bnbemu.handler.JoinSessionReq
-import bnbemu.handler.UserInfoReq
-import bnbemu.handler.sendUserInfo
+import bnbemu.handler.user.UserInfoReq
+import bnbemu.handler.user.sendUserInfo
 import bnbemu.server.EquipSlot
-import bnbemu.packet.UserInfoResult
-import bnbemu.packet.defaultUserInventoryItems
+import bnbemu.packet.user.UserInfoResult
+import bnbemu.packet.user.defaultUserInventoryItems
 import bnbemu.server.Room
 import bnbemu.server.User
 import bnbemu.server.bomber
@@ -90,7 +90,7 @@ class LobbyReturnTest {
             val strLen = outBuf.Decode2
             val tokenBytes = ByteArray(strLen)
             outBuf.readBytes(tokenBytes)
-            val token = bnbemu.packet.decodeName(tokenBytes)
+            val token = bnbemu.packet.lobby.decodeName(tokenBytes)
 
             assertEquals(EquipSlot.CHARACTER, firstSlot, "First item must be character slot (15)")
             assertEquals(5, firstItemId, "Item ID in op 198 must be 5 (Boz), NOT reverted to 1 (Dao)!")

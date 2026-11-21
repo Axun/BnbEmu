@@ -1,8 +1,8 @@
 package bnbemu.netty
 
-import bnbemu.handler.room.SetBomberEventReq
-import bnbemu.packet.room.SetBomberEvent
-import bnbemu.packet.room.SetBombState
+import bnbemu.handler.battle.SetBomberEventReq
+import bnbemu.packet.battle.SetBomberEvent
+import bnbemu.packet.battle.SetBombState
 import bnbemu.server.BattleSession
 import bnbemu.server.Bomb
 import bnbemu.server.Room
