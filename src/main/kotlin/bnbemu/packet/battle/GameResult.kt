@@ -88,7 +88,7 @@ fun GameResult(
     // 2. 8 Slots
     for (slotIndex in 0 until 8) {
         val slot = Room.slots.getOrNull(slotIndex)
-        val isHuman = slot?.user != null
+        val isHuman = slot?.player != null
         val isAI = slot?.isAI == true
         // 该槽是否属于胜利方（真人 = 蓝队/team 0，AI = 红队/team 1）；平局双方均写 RESULT_FRAME_DRAW
         val frame = when {
@@ -101,8 +101,8 @@ fun GameResult(
         val expTo = expAfter.coerceIn(0, 1000)
 
         if (isHuman) {
-            val user = slot.user
-            val playerLevel = (user?.level ?: 5).coerceAtLeast(1)
+            val player = slot.player
+            val playerLevel = (player?.level ?: 5).coerceAtLeast(1)
             Encode1(1) // slotType = 1 (Human)
             Encode4(0) // score / unk（客户端读完即丢弃）
             Encode1(frame) // +68 结果标签帧 (RESULT_FRAME_WIN / RESULT_FRAME_LOSE)
@@ -124,9 +124,9 @@ fun GameResult(
             Encode2(playerLevel) // +132 房间槽位 (edi+0x6C) / CUserMap (0x4E03C1) 玩家等级
             Encode2(playerLevel) // +136 CUserDynamicInfo (0x6E4AAD) 战后等级（>=1，防回房触发 InvalidLevelPlayGame）
             Encode1(0) // +140
-            Encode1(user?.win ?: 0) // +240 CUserDynamicInfo 胜场 (0x6E4C72)
-            Encode1(user?.lose ?: 0) // +241 CUserDynamicInfo 负场 (0x6E4C8C)
-            Encode1(user?.draw ?: 0) // +242 CUserDynamicInfo 平局/场次统计第三项 (0x6E4CA6)
+            Encode1(player?.win ?: 0) // +240 CUserDynamicInfo 胜场 (0x6E4C72)
+            Encode1(player?.lose ?: 0) // +241 CUserDynamicInfo 负场 (0x6E4C8C)
+            Encode1(player?.draw ?: 0) // +242 CUserDynamicInfo 平局/场次统计第三项 (0x6E4CA6)
             Encode4(0) // +144
             Encode2(0) // +148 带正负号的 EXP 变体（feature 36 分支才读）
             Encode4(lucciGained) // +152 LUCCI 列 (同时 0x559965 写入房间槽 edi+0xB8)
@@ -151,7 +151,7 @@ fun GameResult(
     // 3. Trailer (CA.exe 0x0053E034)
     for (slotIndex in 0 until 8) {
         val slot = Room.slots.getOrNull(slotIndex)
-        if (slot?.user != null) {
+        if (slot?.player != null) {
             Encode1(0)
             Encode1(0)
         }

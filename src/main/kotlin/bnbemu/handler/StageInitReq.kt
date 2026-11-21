@@ -11,6 +11,7 @@ import bnbemu.packet.Unk293
 import bnbemu.packet.lobby.UserMarketItemList
 import bnbemu.packet.lobby.UserMarketMyItemList
 import bnbemu.packet.UserSimpleInfoResult
+import bnbemu.service.player
 
 /**
  * C→S 阶段就绪 / 任务配置请求 (Opcode 78, C→S)
@@ -29,7 +30,7 @@ val StageInitReq = PKTHandler { c ->
     // 所以收到它就说明已经在大厅了 —— 清除房间舞台状态, 避免下次进商城误回房间。
     c.stage = ClientStage.Lobby.value
     // op 60 先按当前角色生成 (角色卡 itemId/skinId + 所有 cat=3 模型名都在里面),
-    val bomber = c.users.firstOrNull()?.bomber ?: 0
+    val bomber = c.player?.bomber ?: 0
     val (charItemId, charToken) = bomberCharCard(bomber)
     println("[StageInitReq] op 60 物品定义表: bomber=$bomber → 角色卡 item $charItemId ($charToken), cat=3 模型同步")
     c.send(

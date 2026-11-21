@@ -4,6 +4,7 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.user.DEFAULT_USER_INVENTORY_ITEMS
 import bnbemu.packet.user.UserInventory
 import bnbemu.packet.user.inventoryEntries
+import bnbemu.service.player
 
 // C→S 264 背包資料查詢 (CLobbyStage 0x00513226 構造空包)
 //
@@ -14,9 +15,9 @@ import bnbemu.packet.user.inventoryEntries
 // ⚠️ 这里同样是「全量真相」：漏掉 273 记录下来的装备（背景/旗帜/边框…）会让客户端
 //    在打开背包时把它们判成已脱下，所以必须走和进频道同一套 inventoryEntries。
 val UserItemListReq = PKTHandler { c ->
-    val user = c.users.firstOrNull()
-    val bag = user?.items.orEmpty()
-    val equips = user?.equips.orEmpty()
+    val player = c.player
+    val bag = player?.items.orEmpty()
+    val equips = player?.equips.orEmpty()
     val inventory = inventoryEntries(DEFAULT_USER_INVENTORY_ITEMS, bag, equips)
     if (bag.isNotEmpty() || equips.isNotEmpty()) {
         println(

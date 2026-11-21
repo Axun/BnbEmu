@@ -13,6 +13,7 @@ import bnbemu.packet.lobby.SESSION_TYPE_PRACTICE
 import bnbemu.packet.battle.GameStartMapInfo
 import bnbemu.packet.battle.assignSpawnPositions
 import bnbemu.server.Room
+import bnbemu.service.player
 import org.tinylog.kotlin.Logger
 import kotlin.random.Random
 
@@ -74,11 +75,11 @@ val StartGameReq = PKTHandler { c ->
     // 「服務端按 6 個 AI 判勝負、客戶端卻照 op112 的 8 槽名冊生成 7 個 AI」的錯位。
     // 異常防護: 若房間槽位尚未初始化 (例如非練習房流程), 退回舊的 8 槽名冊,
     // 避免給客戶端發 slotCount=0 導致對局載入失敗。
-    val activeSlots = Room.slots.indices.filter { i -> Room.slots[i].user != null || Room.slots[i].isAI }
+    val activeSlots = Room.slots.indices.filter { i -> Room.slots[i].player != null || Room.slots[i].isAI }
         .ifEmpty { (0..7).toList() }
     println("StartGame. activeSlots=$activeSlots (AI=${activeSlots.count { Room.slots[it].isAI }})")
 
-    val user = c.users.firstOrNull()
+    val player = c.player
     c.send(
         PracticeAiLevel(),
         GameStartMapInfo(
@@ -91,7 +92,7 @@ val StartGameReq = PKTHandler { c ->
             // 出生点数量由地图决定（4 人图只有 0..3），按参战槽顺序分配，见 assignSpawnPositions
             spawnPositions = assignSpawnPositions(mapId, activeSlots),
         ),
-        PracticeStartInfo(user = user),
+        PracticeStartInfo(player = player),
         PracticeBoard(),
     )
 

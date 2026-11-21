@@ -5,7 +5,8 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.room.SlotBomber
 import bnbemu.server.Room
 import bnbemu.server.bomber
-import bnbemu.server.setBomber
+import bnbemu.service.PlayerService
+import bnbemu.service.player
 
 // ============================================================================
 // 房间内切换角色 (C→S op 87) — 点击房间槽位里的角色头像后发出
@@ -34,9 +35,9 @@ val SelectBomberReq = PKTHandler { c ->
 
     val effectiveBomber = if (bomberIdx == 4) 10 else bomberIdx
 
-    val user = c.users.firstOrNull()
-    if (user != null && slotIdx == 0) {
-        user.setBomber(effectiveBomber)
+    val player = c.player
+    if (player != null && slotIdx == 0) {
+        PlayerService.selectBomber(player.userId, effectiveBomber)
     }
     Room.slots.getOrNull(slotIdx)?.bomber = effectiveBomber
 

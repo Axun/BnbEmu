@@ -6,8 +6,9 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.shop.ShopCatalog
 import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.packet.shop.BuyItemResult
-import bnbemu.server.UserItemEntry
-import bnbemu.server.lucci
+import bnbemu.service.PlayerService
+import bnbemu.service.lucci
+import bnbemu.service.player
 
 /**
  * C→S op 267: 商城购买请求 (BuyItemReq)
@@ -50,10 +51,9 @@ val BuyItemReq = PKTHandler { c ->
     // 服务端侧记录购买结果，保证重进频道/重连后物品还在。
     // 物品本体由客户端在 sub_5D171B -> sub_66B4ED 里自己塞进背包向量，
     // 这里只维护「服务端认账的背包清单」，下次 JoinSessionReq 用 op 320 补发。
-    val user = c.users.firstOrNull()
-    if (user != null && entry != null && user.items.none { it.itemId == entry.itemId }) {
-        user.items += UserItemEntry(itemId = entry.itemId, count = 1)
-        println("[BuyItemReq] 已记入服务端背包: itemId=${entry.itemId}, 当前背包=${user.items.map { it.itemId }}")
+    val player = c.player
+    if (player != null && entry != null && PlayerService.buyItem(player.userId, entry.itemId, count = 1)) {
+        println("[BuyItemReq] 已记入服务端背包: itemId=${entry.itemId}, 当前背包=${player.items.map { it.itemId }}")
     }
 
     // 商城界面余额走 CUserDynamicInfo (op 122)，购买后补发一次避免显示漂移

@@ -4,6 +4,7 @@ import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import bnbemu.domain.PlayerProfile
 import bnbemu.handler.JoinSessionReq
 import bnbemu.handler.user.UserInfoReq
 import bnbemu.handler.user.sendUserInfo
@@ -12,7 +13,7 @@ import bnbemu.packet.ItemDef
 import bnbemu.packet.user.UserDynamicInfo
 import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.server.EquipSlot
-import bnbemu.server.User
+import bnbemu.service.PlayerService
 import java.io.File
 
 /**
@@ -78,22 +79,22 @@ class CharSelectSyncTest {
     @Test
     fun testOp73SyncsUserBomberOutsideRoom() {
         val cs = ClientSocket()
-        val user = User(cs, USER_ID, "tester")
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(USER_ID, "char_t1", "tester"))
+        cs.playerId = user.userId
         assertEquals(0, user.bomber, "初始应为皮蛋 (0)")
 
         val buf = Unpooled.wrappedBuffer(userInfoReqPayload(listOf(7)))
         with(UserInfoReq) { buf.handle(cs) }
         assertEquals(0, buf.readableBytes())
 
-        assertEquals(7, user.bomber, "商城/大厅换角色只靠 op 73 上报, 必须同步到 User.bomber")
+        assertEquals(7, user.bomber, "商城/大厅换角色只靠 op 73 上报, 必须同步到 PlayerProfile.bomber")
     }
 
     @Test
     fun testMaridMapsToAdvancedForm() {
         val cs = ClientSocket()
-        val user = User(cs, USER_ID + 1, "tester")
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(USER_ID + 1, "char_t2", "tester"))
+        cs.playerId = user.userId
 
         val buf = Unpooled.wrappedBuffer(userInfoReqPayload(listOf(4)))
         with(UserInfoReq) { buf.handle(cs) }
@@ -104,8 +105,8 @@ class CharSelectSyncTest {
     fun testOp198CarriesSelectedCharacter() {
         val ch = EmbeddedChannel()
         val cs = ClientSocket()
-        val user = User(cs, USER_ID + 2, "tester")
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(USER_ID + 2, "char_t3", "tester"))
+        cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
         try {
@@ -137,8 +138,8 @@ class CharSelectSyncTest {
         // 写死 1 会在 op 198 之后把客户端强行拉回 Dao —— 换角色失效的真正原因。
         val ch = EmbeddedChannel()
         val cs = ClientSocket()
-        val user = User(cs, USER_ID + 4, "tester", bomber = 5)
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(USER_ID + 4, "char_t5", "tester", bomber = 5))
+        cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
         try {
@@ -200,8 +201,8 @@ class CharSelectSyncTest {
     fun testProfileUsesSelectedCharacter() {
         val ch = EmbeddedChannel()
         val cs = ClientSocket()
-        val user = User(cs, USER_ID + 3, "tester", bomber = 7)
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(USER_ID + 3, "char_t4", "tester", bomber = 7))
+        cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
         try {

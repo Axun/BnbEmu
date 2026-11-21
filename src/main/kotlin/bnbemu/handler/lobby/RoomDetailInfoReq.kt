@@ -3,12 +3,13 @@ package bnbemu.handler.lobby
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
-import bnbemu.netty.PassportServer
 import bnbemu.packet.lobby.RoomDetailSlot
 import bnbemu.packet.lobby.RoomDetailInfo
 import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.Room
 import bnbemu.server.state
+import bnbemu.service.PlayerService
+import bnbemu.service.player
 import org.tinylog.kotlin.Logger
 
 // ============================================================================
@@ -41,18 +42,17 @@ val RoomDetailInfoReq = PKTHandler { c ->
     val sessionId = Decode2
     val serial = Decode4
 
-    val self = c.users.firstOrNull()
-    // 角色名優先用 passport 登錄的名字 (op 7/onConnEstablished 填進 User.name 的可能為空),
-    // 與 handler/UserInfoReq.kt 的 sendUserInfo 同一套回退。
-    val selfName = PassportServer.lastAccount.charName.ifEmpty { self?.name.orEmpty() }
+    val self = c.player
+    val selfName = self?.charName?.ifEmpty { PlayerService.activeProfile.charName }
+        ?: PlayerService.activeProfile.charName
 
     // 房內名單以 Room.slots 為準: 只列真人, AI/空槽發 E1(0) 讓客戶端留白
     // (真端 CGameSession::m_rgPlayer 也只放真人; 練習房的 AI 屬 slotState, 不在名單裡)。
     val slots = Room.slots.map { slot ->
-        val user = slot.user ?: return@map null
+        val player = slot.player ?: return@map null
         RoomDetailSlot(
-            name = if (user.c === c) selfName.ifEmpty { user.name } else user.name,
-            level = user.level,
+            name = if (slot.client === c) selfName.ifEmpty { player.charName } else player.charName,
+            level = player.level,
             playState = 0,                 // 未開局
             chief = if ((slot.state.toInt() and FLAG_CHIEF) != 0) 1 else 0,
         )
@@ -62,7 +62,7 @@ val RoomDetailInfoReq = PKTHandler { c ->
     // 至少要有房主, 否則詳情對話框 8 個槽全白, 看不出回包有沒有生效。
     if (slots.all { it == null } && self != null) {
         slots[0] = RoomDetailSlot(
-            name = selfName.ifEmpty { self.name },
+            name = selfName.ifEmpty { self.charName },
             level = self.level,
             chief = 1,
         )

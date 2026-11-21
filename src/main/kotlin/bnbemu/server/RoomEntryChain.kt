@@ -18,6 +18,7 @@ import bnbemu.packet.UserSimpleInfoResult
 import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.room.RoomName
 import bnbemu.packet.room.SelectMap
+import bnbemu.service.player
 
 /**
  * 整条「进房间」S→C 推送链（练习房基准）。
@@ -32,12 +33,12 @@ import bnbemu.packet.room.SelectMap
  *    106×8, 每槽(114, 104, 105) + 下一槽的 103, WelcomeNotice]
  */
 fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
-    val user = c.users.firstOrNull()
+    val player = c.player
     val closedSlots = Room.slots.count { (it.state.toInt() and FLAG_CLOSED) != 0 }
-    val humanCount = Room.slots.count { it.user != null }.coerceAtLeast(1)
+    val humanCount = Room.slots.count { it.player != null }.coerceAtLeast(1)
     val roomEntry = RoomEntry(
         roomId = Room.sessionId,
-        handle = user?.id ?: CAPTURE_USER_ID,
+        handle = player?.userId ?: CAPTURE_USER_ID,
         name = Room.name,
         hasPassword = Room.password.isNotEmpty(),
         curPlusClosed = humanCount + closedSlots,
@@ -54,7 +55,7 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
         // op 113 房名同步: 客户端把字符串直接写进会话对象 +0x1C4 并刷新房间标题。
         // 必须发 Room.name 而不是空串 —— 空串会把 op 87/op 83 刚填好的房名清掉（变空白）。
         RoomName(Room.name),
-        SetPlayer(slotId = 0, slot = Room.slots[0], user = user),
+        SetPlayer(slotId = 0, slot = Room.slots[0], player = player),
     )
     if (init) {
         c.send(SelectMap(result = 0, themeId = Room.themeId, mapId = Room.mapId))
@@ -93,7 +94,7 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
                 c.send(
                     PracticeSetSlotAI(
                         slot = slot,
-                        isAI = s.isAI && s.user == null,
+                        isAI = s.isAI && s.player == null,
                         refSlot = refSlot,
                         aiLevel = s.aILevel,
                     )
@@ -125,7 +126,7 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
                 c.send(
                     PracticeSetSlotAI(
                         slot = idx,
-                        isAI = s.isAI && s.user == null,
+                        isAI = s.isAI && s.player == null,
                         refSlot = idx,
                         aiLevel = s.aILevel,
                     )

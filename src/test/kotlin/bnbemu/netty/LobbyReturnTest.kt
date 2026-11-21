@@ -4,6 +4,7 @@ import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import bnbemu.domain.PlayerProfile
 import bnbemu.handler.JoinSessionReq
 import bnbemu.handler.user.UserInfoReq
 import bnbemu.handler.user.sendUserInfo
@@ -11,8 +12,8 @@ import bnbemu.server.EquipSlot
 import bnbemu.packet.user.UserInfoResult
 import bnbemu.packet.user.defaultUserInventoryItems
 import bnbemu.server.Room
-import bnbemu.server.User
 import bnbemu.server.bomber
+import bnbemu.service.PlayerService
 
 class LobbyReturnTest {
 
@@ -46,8 +47,8 @@ class LobbyReturnTest {
     fun testJoinSessionReqWithSelectedBomberBoz() {
         val ch = EmbeddedChannel()
         val client = ClientSocket()
-        val user = User(client, id = 7215, name = "ffdf", bomber = 5) // 玩家在大厅/房间选了宝宝
-        client.users.add(user)
+        val user = PlayerService.registerProfile(PlayerProfile(9401, "lobby_t1", "ffdf", bomber = 5)) // 玩家在大厅/房间选了宝宝
+        client.playerId = user.userId
         ch.pipeline().addLast(client)
 
         try {
@@ -104,8 +105,8 @@ class LobbyReturnTest {
     fun testSendUserInfoInLobbyAfterReturnWithBoz() {
         val ch = EmbeddedChannel()
         val client = ClientSocket()
-        val user = User(client, id = 7215, name = "ffdf", bomber = 5) // 玩家当前选定角色为宝宝 (5)
-        client.users.add(user)
+        val user = PlayerService.registerProfile(PlayerProfile(9402, "lobby_t2", "ffdf", bomber = 5)) // 玩家当前选定角色为宝宝 (5)
+        client.playerId = user.userId
         ch.pipeline().addLast(client)
 
         try {

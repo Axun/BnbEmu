@@ -5,11 +5,12 @@ import bnbemu.packet.lobby.RoomEntry
 import bnbemu.packet.lobby.RoomList
 import bnbemu.packet.lobby.SESSION_TYPE_NORMAL
 import bnbemu.packet.lobby.SESSION_TYPE_PRACTICE
+import bnbemu.domain.PlayerProfile
 import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.FLAG_CLOSED
 import bnbemu.server.Room
-import bnbemu.server.User
 import bnbemu.server.sendRoomEntryChain
+import bnbemu.service.PlayerService
 import bnbemu.server.state
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
@@ -161,22 +162,22 @@ class RoomListTest {
     fun `sendRoomEntryChain 下发的 op 87 与 Room 元数据及封闭槽位一致`() {
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
-        val user = User(cs, id = 7215, name = "ffdf", bomber = 0)
-        cs.users.add(user)
+        val user = PlayerService.registerProfile(PlayerProfile(7215, "kcworms1", "ffdf", bomber = 0))
+        cs.playerId = user.userId
 
         val savedName = Room.name
         val savedPw = Room.password
         val savedType = Room.sessionType
         val savedMapId = Room.mapId
-        val savedSlots = Room.slots.map { Triple(it.user, it.isAI, it.state) }
+        val savedSlots = Room.slots.map { listOf(it.player, it.client, it.isAI, it.state) }
         try {
             Room.name = "MyTestRoom!"
             Room.password = "secret"
             Room.sessionType = SESSION_TYPE_NORMAL
             Room.mapId = 176
-            Room.slots[0].apply { this.user = user; isAI = false; state = FLAG_CHIEF }
-            for (i in 1..5) Room.slots[i].apply { this.user = null; isAI = true; state = 0 }
-            for (i in 6..7) Room.slots[i].apply { this.user = null; isAI = false; state = FLAG_CLOSED }
+            Room.slots[0].apply { assignHuman(user, cs); isAI = false; state = FLAG_CHIEF }
+            for (i in 1..5) Room.slots[i].apply { clearHuman(); isAI = true; state = 0 }
+            for (i in 6..7) Room.slots[i].apply { clearHuman(); isAI = false; state = FLAG_CLOSED }
 
             sendRoomEntryChain(cs, init = false)
             val pkts = generateSequence { ch.readOutbound<PKT>() }.toList()
@@ -198,9 +199,9 @@ class RoomListTest {
             Room.sessionType = savedType
             Room.mapId = savedMapId
             Room.slots.forEachIndexed { idx, slot ->
-                slot.user = savedSlots[idx].first
-                slot.isAI = savedSlots[idx].second
-                slot.state = savedSlots[idx].third
+                slot.assignHuman(savedSlots[idx][0] as PlayerProfile?, savedSlots[idx][1] as ClientSocket?)
+                slot.isAI = savedSlots[idx][2] as Boolean
+                slot.state = savedSlots[idx][3] as Byte
             }
             ch.finishAndReleaseAll()
         }

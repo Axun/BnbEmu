@@ -1,6 +1,8 @@
 package bnbemu.netty
 
 import bnbemu.handler.OnConnEstablished
+import bnbemu.service.PlayerService
+import bnbemu.service.player
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
@@ -46,9 +48,9 @@ class OnConnEstablishedTest {
         }
 
         assertEquals(0, buf.readableBytes(), "34B 载荷必须被全部解码消费完毕")
-        assertEquals(1, socket.users.size, "应添加 1 位玩家")
-        assertEquals(7215, socket.users[0].id, "玩家 userId 应为 7215")
-        assertEquals("ffdf", socket.users[0].name, "角色名解密后应为 ffdf")
+        assertEquals(7215, socket.playerId, "应绑定玩家 userId=7215")
+        assertEquals(7215, socket.player?.userId, "玩家 userId 应为 7215")
+        assertEquals("ffdf", socket.player?.charName, "角色名解密后应为 ffdf")
         assertEquals(7, channel.outboundMessages().size, "进频道应回连发 7 个初始化包")
     }
 
@@ -69,8 +71,8 @@ class OnConnEstablishedTest {
         }
 
         assertEquals(0, buf.readableBytes(), "短包字段应消费完毕")
-        assertEquals(1, socket.users.size)
-        assertEquals(7215, socket.users[0].id)
-        assertEquals("ffdf", socket.users[0].name)
+        assertEquals(7215, socket.playerId)
+        assertEquals(7215, PlayerService.currentPlayer(socket)?.userId)
+        assertEquals("ffdf", PlayerService.currentPlayer(socket)?.charName)
     }
 }

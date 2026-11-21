@@ -5,12 +5,13 @@ import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
+import bnbemu.domain.PlayerProfile
 import bnbemu.handler.lobby.CreateSessionReq
 import bnbemu.packet.room.PracticeSetPlayer
 import bnbemu.packet.battle.GameStartMapInfo
 import bnbemu.server.Room
-import bnbemu.server.User
 import bnbemu.server.bomber
+import bnbemu.service.PlayerService
 
 class PracticeSetPlayerTest {
 
@@ -66,8 +67,8 @@ class PracticeSetPlayerTest {
         val savedBomber = Room.slots[0].bomber
         val ch = EmbeddedChannel()
         val client = ClientSocket()
-        val user = User(client, id = 7215, name = "ffdf", bomber = 0)
-        client.users.add(user)
+        val user = PlayerService.registerProfile(PlayerProfile(9501, "practice_t1", "ffdf", bomber = 0))
+        client.playerId = user.userId
         ch.pipeline().addLast(client)
 
         try {
@@ -141,7 +142,8 @@ class PracticeSetPlayerTest {
         )
         val ch = EmbeddedChannel()
         val client = ClientSocket()
-        client.users.add(User(client, id = 7215, name = "ffdf", bomber = 0))
+        val profile = PlayerService.registerProfile(PlayerProfile(9502, "practice_t2", "ffdf", bomber = 0))
+        client.playerId = profile.userId
         ch.pipeline().addLast(client)
 
         val savedName = Room.name
@@ -150,7 +152,8 @@ class PracticeSetPlayerTest {
         val savedType = Room.sessionType
         val savedRule = Room.ruleId
         val savedBombers = Room.localBombers
-        val savedSlotUser = Room.slots[0].user
+        val savedSlotPlayer = Room.slots[0].player
+        val savedSlotClient = Room.slots[0].client
         val savedSlotBomber = Room.slots[0].bomber
         val savedThemeId = Room.themeId
         val savedMapId = Room.mapId
@@ -173,7 +176,7 @@ class PracticeSetPlayerTest {
             Room.sessionType = savedType
             Room.ruleId = savedRule
             Room.localBombers = savedBombers
-            Room.slots[0].user = savedSlotUser
+            Room.slots[0].assignHuman(savedSlotPlayer, savedSlotClient)
             Room.slots[0].bomber = savedSlotBomber
             Room.themeId = savedThemeId
             Room.mapId = savedMapId

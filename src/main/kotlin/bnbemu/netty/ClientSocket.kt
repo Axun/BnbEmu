@@ -7,7 +7,6 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.SimpleChannelInboundHandler
 import bnbemu.debugMode
 import bnbemu.packet.ClientStage
-import bnbemu.server.User
 import org.tinylog.kotlin.Logger
 import java.io.IOException
 
@@ -29,7 +28,9 @@ class ClientSocket : SimpleChannelInboundHandler<ByteBuf>() {
     lateinit var ctx: ChannelHandlerContext
     lateinit var ch: Channel
 
-    val users = mutableListOf<User>()
+    /** 当前连线绑定的玩家 ID（仅会话引用，档案本体由 PlayerService / PlayerRepository 统一管理）。 */
+    @Volatile
+    var playerId: Int? = null
 
     /**
      * 客户端当前所处的舞台 id (CMainSystem::SetStage 的参数, 见 packet/ChangeStage.kt)。

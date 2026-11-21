@@ -3,9 +3,9 @@ package bnbemu.netty
 import bnbemu.packet.battle.BackToRoom
 import bnbemu.packet.battle.GameResult
 import bnbemu.packet.battle.InitGameResult
+import bnbemu.domain.PlayerProfile
 import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.Room
-import bnbemu.server.User
 import bnbemu.server.state
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
@@ -48,11 +48,11 @@ class BackToRoomTest {
         Room.battleConfig.reenterRoomAfterBack = false // 默认只验 155，房间链单独测
 
         Room.slots.forEach { slot ->
-            slot.user = null
+            slot.clearHuman()
             slot.isAI = false
             slot.state = 0
         }
-        Room.slots[0].user = User(cs, id = 1, name = "tester")
+        Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester"), cs)
         Room.slots[0].state = FLAG_CHIEF
         for (i in 1..7) Room.slots[i].isAI = true
         Room.reset()
@@ -64,7 +64,7 @@ class BackToRoomTest {
         Room.battleConfig.resultReturnDelayMs = savedReturnDelay
         Room.battleConfig.reenterRoomAfterBack = savedChain
         Room.slots.forEach { slot ->
-            slot.user = null
+            slot.clearHuman()
             slot.isAI = false
             slot.state = 0
         }

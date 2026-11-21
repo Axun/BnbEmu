@@ -8,6 +8,7 @@ import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.FLAG_READY
 import bnbemu.server.Room
 import bnbemu.server.state
+import bnbemu.service.player
 
 // ============================================================================
 // 玩家准备 / 取消准备请求 (C→S op 84 SetPlayerReadyReq)
@@ -25,9 +26,10 @@ val SetPlayerReadyReq = PKTHandler { c ->
     if (readableBytes() >= 4) Decode4
     if (readableBytes() > 0) skipBytes(readableBytes())
 
-    val user = c.users.firstOrNull()
-    val slotIdx = if (user != null) {
-        Room.slots.indexOfFirst { it.user === user }.takeIf { it >= 0 } ?: 0
+    val player = c.player
+    val slotIdx = if (player != null) {
+        Room.slots.indexOfFirst { it.client === c || it.player?.userId == player.userId }
+            .takeIf { it >= 0 } ?: 0
     } else {
         0
     }

@@ -1,5 +1,6 @@
 package bnbemu.netty
 
+import bnbemu.domain.PlayerProfile
 import bnbemu.packet.user.EQUIP_SLOTS_PER_GROUP
 import bnbemu.handler.user.ChangeEquipReq
 import bnbemu.packet.ItemDef
@@ -8,7 +9,7 @@ import bnbemu.packet.room.PracticeRoomInfo
 import bnbemu.packet.room.PracticeStartInfo
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.room.slotAccessoriesOf
-import bnbemu.server.User
+import bnbemu.service.PlayerService
 import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -85,11 +86,10 @@ class SetPlayerTest {
 
     @Test
     fun testPracticeRoomInfoDelegation() {
-        // 验证 PracticeRoomInfo 传 user 时动态应用 level
-        val dummySocket = ClientSocket()
-        val user = User(c = dummySocket, id = 7215, name = "ffdf", level = 5)
+        // 验证 PracticeRoomInfo 传 player 时动态应用 level
+        val user = PlayerProfile(userId = 7215, username = "kcworms1", charName = "ffdf", level = 5)
 
-        val pkt = PracticeRoomInfo(user = user)
+        val pkt = PracticeRoomInfo(player = user)
         val got = body(pkt)
         assertEquals(78, got.size)
         assertEquals(0xa5.toByte(), got[30])
@@ -342,11 +342,9 @@ class SetPlayerTest {
 
     @Test
     fun testEquipBombViaOp273ReachesStartPacket() {
-        // PlayerEquips 是进程级单例, 用独立 id 避免污染其它用例
         val cs = ClientSocket()
-        val user = User(cs, 9102, "bomber")
-        cs.users += user
-        user.equips.clear()
+        val user = PlayerService.registerProfile(PlayerProfile(9102, "setplayer_bomber", "bomber"))
+        cs.playerId = user.userId
 
         // action=5 (背包穿脱) / player=0 / count=1 / (复合槽位 240, item 930000655)
         val payload = e1(5) + e1(0) + e2(1) + e1(bombSlot()) + e4(930000655) + e1(1) + e1(1)
@@ -356,12 +354,12 @@ class SetPlayerTest {
         assertEquals(930000655, user.equips[bombSlot()], "水泡必须记进真实装备槽而不是背包")
 
         // 开局那一发 op 100 是客户端最后一次重建 CFxContext 的机会
-        val got = body(SetPlayer(slotId = 0, user = user, isStart = true))
+        val got = body(SetPlayer(slotId = 0, player = user, isStart = true))
         assertEquals(655, decodeAccessories(got, isStart = true).f32)
 
         // 卸下后 f32 归零, 回落默认水泡 (真实客户端脱下上报 slot=0xFF + itemId 进入背包)
         val off = Unpooled.wrappedBuffer(e1(5) + e1(0) + e2(1) + e1(0xFF) + e4(930000655) + e1(1) + e1(1))
         with(ChangeEquipReq) { off.handle(cs) }
-        assertEquals(0, decodeAccessories(body(SetPlayer(slotId = 0, user = user, isStart = true)), true).f32)
+        assertEquals(0, decodeAccessories(body(SetPlayer(slotId = 0, player = user, isStart = true)), true).f32)
     }
 }

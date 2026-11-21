@@ -4,12 +4,13 @@ import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import bnbemu.domain.PlayerProfile
 import bnbemu.handler.user.ChangeEquipReq
 import bnbemu.handler.JoinSessionReq
 import bnbemu.packet.user.EQUIP_SLOTS_PER_GROUP
 import bnbemu.server.Room
-import bnbemu.server.User
 import bnbemu.server.state
+import bnbemu.service.PlayerService
 
 /**
  * 「商城装扮页设了背景，回大厅后被自动取消装备」的回归测试。
@@ -111,8 +112,8 @@ class BackgroundEquipTest {
     @Test
     fun testBackgroundEquipKeptInEquipsNotBag() {
         val cs = ClientSocket()
-        val user = User(cs, USER_ID, "tester")
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(USER_ID, "bg_tester_1", "tester"))
+        cs.playerId = user.userId
 
         sendChangeEquip(cs, changeEquipPayload(1, listOf(backgroundSlot to backgroundItemId)))
 
@@ -130,8 +131,8 @@ class BackgroundEquipTest {
     fun testBackgroundSurvivesOp198Rebuild() {
         val ch = EmbeddedChannel()
         val cs = ClientSocket()
-        val user = User(cs, id = USER_ID + 1, name = "ffdf")
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(USER_ID + 1, "bg_tester_2", "ffdf"))
+        cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
         try {
@@ -170,8 +171,8 @@ class BackgroundEquipTest {
     @Test
     fun testRealClientUnequipReports0xFF() {
         val cs = ClientSocket()
-        val user = User(cs, USER_ID + 10, "real_unequip_tester")
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(USER_ID + 10, "real_unequip", "real_unequip_tester"))
+        cs.playerId = user.userId
 
         // 先穿上
         sendChangeEquip(cs, changeEquipPayload(1, listOf(backgroundSlot to backgroundItemId)))
@@ -196,13 +197,14 @@ class BackgroundEquipTest {
     fun testRoomSlotBroadcastsSetPlayerOnEquipAndUnequip() {
         val ch = EmbeddedChannel()
         val cs = ClientSocket()
-        val user = User(cs, USER_ID + 20, "room_equip_tester")
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(USER_ID + 20, "room_equip", "room_equip_tester"))
+        cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
-        val previousUser = Room.slots[0].user
+        val previousPlayer = Room.slots[0].player
+        val previousClient = Room.slots[0].client
         try {
-            Room.slots[0].user = user
+            Room.slots[0].assignHuman(user, cs)
             Room.slots[0].state = 0x01 // FLAG_CHIEF
 
             // 1. 在房间内穿上背景
@@ -218,7 +220,7 @@ class BackgroundEquipTest {
             assertEquals(100, OpcodeManager.getSendOp(pkt2!!::class.java), "广播包 opcode 必须为 100")
             assertNull(user.equips[backgroundSlot], "装备槽中的背景必须已被脱下")
         } finally {
-            Room.slots[0].user = previousUser
+            Room.slots[0].assignHuman(previousPlayer, previousClient)
             ch.finishAndReleaseAll()
         }
     }

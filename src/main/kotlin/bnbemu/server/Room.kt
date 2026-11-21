@@ -2,6 +2,7 @@ package bnbemu.server
 
 import bnbemu.constants.MAX_SESSION_SLOTS
 import bnbemu.data.map.MapCatalog
+import bnbemu.domain.PlayerProfile
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.NettyServer.workerGroup
 import bnbemu.netty.PKT
@@ -12,6 +13,7 @@ import bnbemu.packet.lobby.SESSION_TYPE_BATTLE
 import bnbemu.packet.battle.BackToRoom
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.room.SetSlotState
+import bnbemu.service.PlayerService
 import io.netty.channel.EventLoop
 import org.tinylog.kotlin.Logger
 
@@ -74,7 +76,7 @@ object Room {
     fun isBattleNpcBomber(bomber: Int): Boolean = bomber in 20..25
 
     fun chiefSlotIndex(): Int =
-        slots.indexOfFirst { it.user != null && (it.state.toInt() and FLAG_CHIEF) != 0 }
+        slots.indexOfFirst { it.player != null && (it.state.toInt() and FLAG_CHIEF) != 0 }
             .takeIf { it >= 0 } ?: 0
 
     /**
@@ -84,17 +86,18 @@ object Room {
      *   - 4..7 号槽: NPC 敌方队伍 (`isAI=true`, 默认角色 `20..23`, 难度 `DEFAULT_AI_LEVEL`)
      */
     fun setupAiBattleSlots(
-        player: User?,
+        player: PlayerProfile?,
+        client: ClientSocket? = null,
         requestedBombers: List<Int> = emptyList(),
     ) {
         if (player != null) {
             val requestedBomber = requestedBombers.firstOrNull() ?: player.bomber
             val chosenBomber = if (requestedBomber in 0..15) requestedBomber else player.bomber
             val effectiveBomber = if (chosenBomber == 4) 10 else chosenBomber
-            player.setBomber(effectiveBomber)
+            PlayerService.selectBomber(player.userId, effectiveBomber)
 
             slots[0].apply {
-                this.user = player
+                assignHuman(player, client)
                 isAI = false
                 state = FLAG_CHIEF
                 bomber = effectiveBomber
@@ -104,7 +107,7 @@ object Room {
 
         for (i in 1..3) {
             slots[i].apply {
-                this.user = null
+                clearHuman()
                 isAI = false
                 state = FLAG_CLOSED
                 aILevel = 0
@@ -115,7 +118,7 @@ object Room {
 
         for (i in 4..7) {
             slots[i].apply {
-                this.user = null
+                clearHuman()
                 isAI = true
                 state = 0
                 aILevel = DEFAULT_AI_LEVEL
@@ -126,11 +129,11 @@ object Room {
     }
 
     val activeSlotCount: Int
-        get() = slots.count { it.user != null || it.isAI }
+        get() = slots.count { it.player != null || it.isAI }
 
     val uniqueClients: Sequence<ClientSocket>
         get() = slots.asSequence()
-            .mapNotNull { it.user?.c } // 取得所有slot中有玩家的 ClientSocket
+            .mapNotNull { it.client } // 取得所有slot中有玩家的 ClientSocket
             .filter { runCatching { it.ch }.isSuccess && runCatching { it.ctx }.isSuccess }  // 初始化，防止在单元测试等场景抛出异常
             .distinctBy { it.ch.id() } // 過濾掉 2P 的重複連線 對2P只會發一次
 
@@ -161,14 +164,14 @@ object Room {
         val limit = MapCatalog.maxPlayerOf(mapId).coerceIn(1, MAX_SESSION_SLOTS)
         val seated = slots.indices.filter { slots[it].hasSeat() }
         // 只踢「空的 AI 槽」; 从大槽号开始, 留下的槽号连续, 与真端房间 UI 顺序一致。
-        val aiSlots = slots.indices.filter { slots[it].isAI && slots[it].user == null }
+        val aiSlots = slots.indices.filter { slots[it].isAI && slots[it].player == null }
         val kicked = aiSlots.sortedDescending().take((seated.size - limit).coerceAtLeast(0))
 
         val packets = mutableListOf<PKT>()
         for (slotIdx in kicked) {
             val slot = slots[slotIdx]
             slot.isAI = false
-            slot.user = null
+            slot.clearHuman()
             slot.state = FLAG_CLOSED
             packets += PracticeSlotReady(slot = slotIdx, state = 1)
             packets += PracticeSetSlotAI(slot = slotIdx, isAI = false)
@@ -189,7 +192,7 @@ object Room {
             battle?.destroy()
             val initialSlots = Array(MAX_SESSION_SLOTS) { idx ->
                 val s = slots[idx]
-                BattleSlotState(slotId = idx, isHuman = s.user != null, isAI = s.isAI)
+                BattleSlotState(slotId = idx, isHuman = s.player != null, isAI = s.isAI)
             }
             BattleSession(
                 executor = executor,
@@ -283,16 +286,16 @@ object Room {
 
     fun encodeSlots(c: ClientSocket) {
         slots.forEachIndexed { index, slot ->
-            val user = slot.user
-            if (user != null) {
-                c send SetPlayer(index, slot, user)
+            val player = slot.player
+            if (player != null) {
+                c send SetPlayer(index, slot, player)
             } else {
                 c send SetSlotState(index, slot)
             }
         }
     }
 
-    private fun Slot.hasSeat(): Boolean = user != null || isAI
+    private fun Slot.hasSeat(): Boolean = player != null || isAI
 
     /** 销毁当前战斗会话（建新房或测试清理时调用）。 */
     fun reset() {

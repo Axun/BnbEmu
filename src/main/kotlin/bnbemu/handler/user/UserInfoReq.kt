@@ -1,10 +1,10 @@
 package bnbemu.handler.user
 
 import io.netty.util.AttributeKey
+import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
-import bnbemu.netty.PassportServer
 import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.packet.user.EQUIP_SLOTS_PER_GROUP
 import bnbemu.packet.user.UserEquipEntry
@@ -14,7 +14,8 @@ import bnbemu.packet.user.equipSlotKey
 import bnbemu.server.Room
 import bnbemu.server.bomber
 import bnbemu.server.EquipSlot
-import bnbemu.server.setBomber
+import bnbemu.service.PlayerService
+import bnbemu.service.player
 
 private val LAST_USER_INFO_SEND_TIME = AttributeKey.valueOf<Long>("LAST_USER_INFO_SEND_TIME")
 
@@ -55,9 +56,10 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
     }
     c.ch.attr(LAST_USER_INFO_SEND_TIME).set(now)
 
-    val user = c.users.firstOrNull()
-    val charName = PassportServer.lastAccount.charName.ifEmpty { user?.name ?: "ffdf" }
-    val lucci = user?.lucci ?: 1234567
+    val player = c.player
+    val charName = player?.charName?.ifEmpty { PlayerService.activeProfile.charName }
+        ?: PlayerService.activeProfile.charName
+    val lucci = player?.lucci ?: DEFAULT_LUCCI
 
     // 先同步客户端 Lucci 动态属性 (CUserDynamicInfo 玩家槽 0)
     c send UserDynamicInfoValue(0, lucci)
@@ -68,12 +70,14 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
 
     // 根据当前槽位选中的角色动态配置角色卡与装扮
     // 走与 op 198 同一份映射 (bomberCharCard)
-    val userSlot = Room.slots.find { it.user?.c == c }
-    val currentBomber = userSlot?.bomber?.toInt() ?: user?.bomber ?: 0
+    val userSlot = Room.slots.find {
+        it.client === c || (player != null && it.player?.userId == player.userId)
+    }
+    val currentBomber = userSlot?.bomber?.toInt() ?: player?.bomber ?: 0
     val charItemId = bomberCharCard(currentBomber).first
     // 装备槽位列表: 默认三条 + C→S op 273 记录下来的装备 (背景/旗帜/边框…)
-    val equips = buildEquipEntries(charItemId, user?.equips.orEmpty())
-    if (user != null && user.equips.isNotEmpty()) {
+    val equips = buildEquipEntries(charItemId, player?.equips.orEmpty())
+    if (player != null && player.equips.isNotEmpty()) {
         println("[UserInfoReq] op 73 装备槽: ${equips.joinToString { "${it.itemId}@${it.slot}" }}")
     }
 
@@ -82,16 +86,16 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
         slotIndex = safeSlotIndex,
         characterName = charName,
         gender = 0,
-        motto = user?.motto ?: "",
+        motto = player?.motto ?: "",
         guildName = "",
         guildRank = 0,
-        win = user?.win ?: 0,
-        draw = user?.draw ?: 0,
-        lose = user?.lose ?: 0,
-        curExp = user?.exp ?: 0,
+        win = player?.win ?: 0,
+        draw = player?.draw ?: 0,
+        lose = player?.lose ?: 0,
+        curExp = player?.exp ?: 0,
         maxExp = 1000,
-        level = user?.level ?: 5,
-        favorite = user?.favorite ?: "Bazzi",
+        level = player?.level ?: 5,
+        favorite = player?.favorite ?: "Bazzi",
         sweetieName = "",
         equips = equips
     )
@@ -101,24 +105,23 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
  * 下发其他玩家的详细资料 (展示他人名片 COtherUserPageDialog)
  */
 fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
-    // 优先从房间槽位玩家或当前服务端连接中查找
-    val targetSlot = Room.slots.find { it.user?.name.equals(targetCharName, ignoreCase = true) }
-    val targetUser = targetSlot?.user
-        ?: c.users.find { it.name.equals(targetCharName, ignoreCase = true) }
+    // 优先从房间槽位玩家或档案仓储中查找
+    val targetSlot = Room.slots.find { it.player?.charName.equals(targetCharName, ignoreCase = true) }
+    val targetPlayer = targetSlot?.player ?: PlayerService.findByCharName(targetCharName)
 
-    val bomberId = targetSlot?.bomber?.toInt() ?: 0
+    val bomberId = targetSlot?.bomber?.toInt() ?: targetPlayer?.bomber ?: 0
     // 与 op 198 / 自己名片同一份角色→角色卡映射
     val charItemId = bomberCharCard(bomberId).first
-    val equips = buildEquipEntries(charItemId, targetUser?.equips.orEmpty())
+    val equips = buildEquipEntries(charItemId, targetPlayer?.equips.orEmpty())
 
-    val win = targetUser?.win ?: 10
-    val draw = targetUser?.draw ?: 0
-    val lose = targetUser?.lose ?: 5
-    val exp = targetUser?.exp ?: 500
-    val level = targetUser?.level ?: 5
-    val motto = targetUser?.motto?.ifEmpty { "PopTag Forever!" } ?: "PopTag Forever!"
+    val win = targetPlayer?.win ?: 10
+    val draw = targetPlayer?.draw ?: 0
+    val lose = targetPlayer?.lose ?: 5
+    val exp = targetPlayer?.exp ?: 500
+    val level = targetPlayer?.level ?: 5
+    val motto = targetPlayer?.motto?.ifEmpty { "PopTag Forever!" } ?: "PopTag Forever!"
     val gender = 0
-    val favorite = targetUser?.favorite ?: "Bazzi"
+    val favorite = targetPlayer?.favorite ?: "Bazzi"
 
     c send UserInfoResult(
         isSelf = false,
@@ -172,14 +175,16 @@ val UserInfoReq = PKTHandler { c ->
     //    旧实现只写 `Room.slots.find { it.user?.c == c }` —— 大厅里玩家不在房间槽位上,
     //    于是 user.bomber 永远停在旧值, 下一次 op 198 的默认角色卡还是皮蛋,
     //    表现就是「商城换角色 → 返回大厅变回默认角色」(反过来大厅用的是 op 87, 所以正常)。
-    val user = c.users.firstOrNull()
-    val userSlot = Room.slots.find { it.user?.c == c }
+    val player = c.player
+    val userSlot = Room.slots.find {
+        it.client === c || (player != null && it.player?.userId == player.userId)
+    }
     if (bomberIds.isNotEmpty() && bomberIds[0] in 0..15) {
         // 与 op 87 SelectBomberReq 同一约定: 蓝蓝 (4) 走进阶形态 10
         val effective = if (bomberIds[0] == 4) 10 else bomberIds[0]
-        if (user != null && user.bomber != effective) {
-            println("[UserInfoReq] 角色同步: bomber ${user.bomber} → $effective (上报 ${bomberIds[0]})")
-            user.setBomber(effective)
+        if (player != null && player.bomber != effective) {
+            println("[UserInfoReq] 角色同步: bomber ${player.bomber} → $effective (上报 ${bomberIds[0]})")
+            PlayerService.selectBomber(player.userId, effective)
         }
         userSlot?.bomber = effective.toByte()
     }

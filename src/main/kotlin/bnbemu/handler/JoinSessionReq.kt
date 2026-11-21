@@ -1,5 +1,6 @@
 package bnbemu.handler
 
+import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ChannelsGameState
 import bnbemu.packet.user.CoupleStateSync
@@ -23,6 +24,7 @@ import bnbemu.packet.user.defaultUserInventoryItems
 import bnbemu.packet.user.inventoryEntries
 import bnbemu.packet.user.UserInventoryInfo
 import bnbemu.packet.user.UserItemUpdate
+import bnbemu.service.player
 
 // C→S op 81 進頻道自動空包 —— ⚠️ 不是「進房」請求
 // =================================================
@@ -49,12 +51,12 @@ import bnbemu.packet.user.UserItemUpdate
 //   尾 2B LE 讀 ^0xA569 按 BE 寫, 尾 1B ^0x5A). 結構化實作見 packet/JoinSessionResult.kt
 // server = C???::On??? (原始名稱未知, 綁定見 opcode_recv.yaml JoinSessionReq)
 val JoinSessionReq = PKTHandler { c ->
-    val user = c.users.firstOrNull()
-    val lucci = user?.lucci ?: 1234567
+    val player = c.player
+    val lucci = player?.lucci ?: DEFAULT_LUCCI
 
     // op 60 (ItemDef) 必须最先: 198 里的物品要靠它查定义表
     // 先按当前角色生成: 角色卡 itemId/skinId 与所有 cat=3 表情/动作模型名都在里面。不匹配也不会更改当前选中的角色类型
-    c send ItemDef(user?.bomber ?: 0)
+    c send ItemDef(player?.bomber ?: 0)
 
     // 服务端认账的背包（商城购买 + 273 上报）必须并入 op 198 的清单里下发：
     //   客户端 CUserInventoryMan::ReadEquippedInventory (0x67601D) 会先清空两位玩家的
@@ -63,9 +65,9 @@ val JoinSessionReq = PKTHandler { c ->
     //   背包物品用伪槽位 0xFF（BAG_ONLY_SLOT），客户端只塞进背包向量、不占装备槽。
     //   C→S op 273 记录下来的装备（背景/旗帜/边框/气泡/特效…）用**真实槽位**下发，
     //   否则回大厅时会被这次清空重建抹掉（表现为「背景自动取消装备」）。
-    val bag = user?.items.orEmpty()
-    val equips = user?.equips.orEmpty()
-    val bomber = user?.bomber ?: 0
+    val bag = player?.items.orEmpty()
+    val equips = player?.equips.orEmpty()
+    val bomber = player?.bomber ?: 0
     val defaults = defaultUserInventoryItems(bomber)
     val inventory = inventoryEntries(defaults, bag, equips)
     println(
@@ -108,7 +110,7 @@ val JoinSessionReq = PKTHandler { c ->
         RoomList(),
         ShopStringTable(), ShopPackageMap(), ChannelsGameState(tailOnes = 2),
         // ⚠️ op 20 (UserDynamicInfo) 是本機玩家動態檔案快照, 第 12 欄 = 角色 ID, 必須按當前角色生成!
-        UserDynamicInfo(bomber, c.users.firstOrNull()?.level ?: 5), ShopVersion(), CoupleStateSync(), WelcomeNotice(),
+        UserDynamicInfo(bomber, player?.level ?: 5), ShopVersion(), CoupleStateSync(), WelcomeNotice(),
         UserInventoryInfo(),
         JoinSessionResult(), SessionList(),
     )

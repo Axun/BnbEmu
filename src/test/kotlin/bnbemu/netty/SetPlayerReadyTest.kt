@@ -1,5 +1,6 @@
 package bnbemu.netty
 
+import bnbemu.domain.PlayerProfile
 import bnbemu.handler.room.SetPlayerReadyReq
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.room.SetPlayerReadyResult
@@ -7,11 +8,11 @@ import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.FLAG_READY
 import bnbemu.server.Room
 import bnbemu.server.Slot
-import bnbemu.server.User
 import bnbemu.server.bomber
 import bnbemu.server.color
 import bnbemu.server.sendRoomEntryChain
 import bnbemu.server.state
+import bnbemu.service.PlayerService
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -47,16 +48,17 @@ class SetPlayerReadyTest {
     fun testRoomEntrySetPlayerOmitsReadyFlagForChief() {
         val ch = EmbeddedChannel()
         val cs = ClientSocket()
-        val user = User(cs, 7215, "ffdf")
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(7215, "kcworms1", "ffdf"))
+        cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
-        val prevUser = Room.slots[0].user
+        val prevPlayer = Room.slots[0].player
+        val prevClient = Room.slots[0].client
         val prevState = Room.slots[0].state
         val prevBomber = Room.slots[0].bomber
         val prevColor = Room.slots[0].color
         try {
-            Room.slots[0].user = user
+            Room.slots[0].assignHuman(user, cs)
             Room.slots[0].state = FLAG_CHIEF
             Room.slots[0].bomber = 5
             Room.slots[0].color = 0
@@ -74,7 +76,7 @@ class SetPlayerReadyTest {
             assertEquals(5, meta[1].toInt() and 0xFF)
             assertEquals(0, meta[2].toInt() and 0xFF)
         } finally {
-            Room.slots[0].user = prevUser
+            Room.slots[0].assignHuman(prevPlayer, prevClient)
             Room.slots[0].state = prevState
             Room.slots[0].bomber = prevBomber
             Room.slots[0].color = prevColor
@@ -86,16 +88,17 @@ class SetPlayerReadyTest {
     fun testCaptureOp84UnreadyRepliedWithOp102UnlockingChief() {
         val ch = EmbeddedChannel()
         val cs = ClientSocket()
-        val user = User(cs, 7215, "ffdf")
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(7215, "kcworms1", "ffdf"))
+        cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
-        val prevUser = Room.slots[0].user
+        val prevPlayer = Room.slots[0].player
+        val prevClient = Room.slots[0].client
         val prevState = Room.slots[0].state
         val prevBomber = Room.slots[0].bomber
         val prevColor = Room.slots[0].color
         try {
-            Room.slots[0].user = user
+            Room.slots[0].assignHuman(user, cs)
             Room.slots[0].state = FLAG_CHIEF or FLAG_READY
             Room.slots[0].bomber = 5
             Room.slots[0].color = 0
@@ -117,7 +120,7 @@ class SetPlayerReadyTest {
             assertArrayEquals(byteArrayOf(FLAG_CHIEF.toByte(), 5, 0), decodeMeta3(replyBody.copyOfRange(1, 4)))
             assertEquals(0, (replyBody[4].toInt() and 0xFF) xor 0x5A)
         } finally {
-            Room.slots[0].user = prevUser
+            Room.slots[0].assignHuman(prevPlayer, prevClient)
             Room.slots[0].state = prevState
             Room.slots[0].bomber = prevBomber
             Room.slots[0].color = prevColor
@@ -129,18 +132,20 @@ class SetPlayerReadyTest {
     fun testNonChief1ByteReadyToggleUpdatesFlagReady() {
         val ch = EmbeddedChannel()
         val cs = ClientSocket()
-        val user = User(cs, 8888, "member")
-        cs.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(8888, "ready_member", "member"))
+        cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
-        val prevUser0 = Room.slots[0].user
-        val prevUser = Room.slots[1].user
+        val prevPlayer0 = Room.slots[0].player
+        val prevClient0 = Room.slots[0].client
+        val prevPlayer = Room.slots[1].player
+        val prevClient = Room.slots[1].client
         val prevState = Room.slots[1].state
         val prevBomber = Room.slots[1].bomber
         val prevColor = Room.slots[1].color
         try {
-            Room.slots[0].user = null
-            Room.slots[1].user = user
+            Room.slots[0].clearHuman()
+            Room.slots[1].assignHuman(user, cs)
             Room.slots[1].state = 0
             Room.slots[1].bomber = 3
             Room.slots[1].color = 2
@@ -157,8 +162,8 @@ class SetPlayerReadyTest {
             assertEquals(1, (replyBody[0].toInt() and 0xFF) xor 0x5A)
             assertArrayEquals(byteArrayOf(FLAG_READY.toByte(), 3, 2), decodeMeta3(replyBody.copyOfRange(1, 4)))
         } finally {
-            Room.slots[0].user = prevUser0
-            Room.slots[1].user = prevUser
+            Room.slots[0].assignHuman(prevPlayer0, prevClient0)
+            Room.slots[1].assignHuman(prevPlayer, prevClient)
             Room.slots[1].state = prevState
             Room.slots[1].bomber = prevBomber
             Room.slots[1].color = prevColor

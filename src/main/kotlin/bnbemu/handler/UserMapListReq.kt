@@ -4,6 +4,7 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.lobby.SessionList
 import bnbemu.packet.lobby.UserMapEntry
 import bnbemu.packet.lobby.UserMapInfo
+import bnbemu.service.player
 
 /**
  * C→S 频道在线用户列表/地图同步请求 (Opcode 310)
@@ -13,9 +14,9 @@ import bnbemu.packet.lobby.UserMapInfo
  * 2. 由 CLobbyStage 发起。空载荷包。
  */
 val UserMapListReq = PKTHandler { c ->
-    val user = c.users.firstOrNull()
+    val player = c.player
     c.send(
-        UserMapInfo(UserMapEntry(level = user?.level ?: 5)),
+        UserMapInfo(UserMapEntry(level = player?.level ?: 5)),
         SessionList(),
     )
 }

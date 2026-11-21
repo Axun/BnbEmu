@@ -15,6 +15,7 @@ import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.ByteToMessageDecoder
 import bnbemu.debugMode
+import bnbemu.service.PlayerService
 import org.tinylog.kotlin.Logger
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -100,15 +101,6 @@ object PassportServer {
     )
 
     data class PassportAccount(val username: String, val charName: String, val userId: Int)
-
-    /** 預設/已註冊帳號列表 (保留抓包帳號以 100% 通過抓包斷言) */
-    val ACCOUNTS = ConcurrentHashMap<String, PassportAccount>().apply {
-        put("kcworms1", PassportAccount("kcworms1", "ffdf", 7215))
-        put("kcworm1", PassportAccount("kcworm1", "kcworm1", 7307))
-    }
-
-    @Volatile
-    internal var lastAccount: PassportAccount = PassportAccount("kcworms1", "ffdf", 7215)
 
     /** 一次成功的 passport 登入會話 (0x000B 登記 / 0x000D 登出時移除) */
     data class PassportSession(
@@ -415,15 +407,13 @@ internal object PassportHandler : SimpleChannelInboundHandler<PassportFrame>() {
                 val password = req?.password ?: ""
                 println("[Passport] 登入驗證: 帳號=$username, 密碼=$password")
 
-                // 註冊/查詢帳號
-                val account = PassportServer.ACCOUNTS.computeIfAbsent(username.lowercase()) {
-                    PassportServer.PassportAccount(
-                        username = username,
-                        charName = username,
-                        userId = (username.hashCode() and 0x7FFF).coerceAtLeast(1000)
-                    )
-                }
-                PassportServer.lastAccount = account
+                // 註冊/查詢帳號 (收編進 PlayerRepository / PlayerService)
+                val profile = PlayerService.loginOrRegister(username)
+                val account = PassportServer.PassportAccount(
+                    username = profile.username,
+                    charName = profile.charName,
+                    userId = profile.userId,
+                )
                 PassportServer.openSession(account)
 
                 PassportServer.buildReply0C(
@@ -437,13 +427,13 @@ internal object PassportHandler : SimpleChannelInboundHandler<PassportFrame>() {
                 val username = target.removePrefix("NGP")
                 println("[Passport] 會話查詢: 目標=$target (帳號=$username)")
 
-                val account = PassportServer.ACCOUNTS[username.lowercase()] ?: PassportServer.lastAccount
-                println("[Passport] 會話返回: 角色名=${account.charName}, 帳號數值=${account.userId}")
+                val profile = PlayerService.findByUsername(username) ?: PlayerService.activeProfile
+                println("[Passport] 會話返回: 角色名=${profile.charName}, 帳號數值=${profile.userId}")
 
                 PassportServer.buildReply2E(
                     returnCode = 0,
-                    userId = account.userId,
-                    charName = account.charName
+                    userId = profile.userId,
+                    charName = profile.charName
                 )
             }
             0x000D -> {

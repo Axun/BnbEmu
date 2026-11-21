@@ -1,5 +1,6 @@
 package bnbemu.handler.user
 
+import bnbemu.domain.EquipChangeEntry
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
@@ -8,9 +9,10 @@ import bnbemu.packet.user.EQUIP_SLOTS_PER_GROUP
 import bnbemu.packet.ItemDef
 import bnbemu.packet.user.equipGroupOfCategory
 import bnbemu.packet.room.SetPlayer
-import bnbemu.server.UserItemEntry
 import bnbemu.server.EquipSlot
 import bnbemu.server.Room
+import bnbemu.service.PlayerService
+import bnbemu.service.player
 
 /**
  * C->S op 273: 玩家换装/装备穿戴变更同步请求 (ChangeEquipReq)
@@ -128,51 +130,42 @@ val ChangeEquipReq = PKTHandler { c ->
             items.joinToString { "slot=0x${it.equipSlot.toString(16)} item=${it.itemId}" }
     )
 
-    val user = c.users.firstOrNull() ?: return@PKTHandler
-    var bagChanged = false
-    var equipChanged = false
+    val player = c.player ?: return@PKTHandler
 
     for (it in items) {
         if (it.itemId == 0) {
             println("[ChangeEquipReq]   slot=0x${it.equipSlot.toString(16)} item=0 → 忽略 (客户端跳过空记录)")
             continue
         }
-        if (it.equipSlot == NON_EQUIP_SLOT) {
-            // 背包内容变化: 新入包 或 装备卸下退回背包
-            if (ItemDef.find(it.itemId)?.category == 14) {
-                // 水泡皮肤只有在真实装备槽 (大类 10 → 0xF0~0xF8) 里才会被 op 100 的
-                // f32 字段下发; 0xFF 只代表"买到了 / 在背包里", 对局内仍是默认水泡。
-                println(
-                    "[ChangeEquipReq]   ⚠️ 水泡皮肤 item=${it.itemId} 只进背包 (0xFF), " +
-                        "未占装备槽 → op 100 的 f32 保持 0, 对局内仍是默认水泡"
-                )
-            }
-            // 真实客户端卸下装备 (CA.exe sub_65CF4E 卸入背包向量, sub_659004 0x659045 跳过 item=0 的装备槽,
-            // 仅在背包向量遍历中上报 slot=0xFF + itemId):
-            // 若该物品此前正穿在装备槽中, 说明本次操作为「卸下」, 须从 user.equips 中移除!
-            val equippedSlot = user.equips.entries.find { e -> e.value == it.itemId }?.key
-            if (equippedSlot != null) {
-                user.equips.remove(equippedSlot)
-                equipChanged = true
-                println(
-                    "[ChangeEquipReq]   slot=${describeSlot(equippedSlot)} → 卸下 item=${it.itemId} (上报为 0xFF 退回背包)"
-                )
-            }
+        if (it.equipSlot == NON_EQUIP_SLOT && ItemDef.find(it.itemId)?.category == 14) {
+            // 水泡皮肤只有在真实装备槽 (大类 10 → 0xF0~0xF8) 里才会被 op 100 的
+            // f32 字段下发; 0xFF 只代表"买到了 / 在背包里", 对局内仍是默认水泡。
+            println(
+                "[ChangeEquipReq]   ⚠️ 水泡皮肤 item=${it.itemId} 只进背包 (0xFF), " +
+                    "未占装备槽 → op 100 的 f32 保持 0, 对局内仍是默认水泡"
+            )
+        }
+    }
 
-            if (user.items.any { e -> e.itemId == it.itemId }) {
-                println("[ChangeEquipReq]   slot=0xFF item=${it.itemId} → 背包 (已存在, 跳过)")
-            } else {
-                user.items += UserItemEntry(itemId = it.itemId)
-                bagChanged = true
+    val result = PlayerService.applyEquipChange(
+        player.userId,
+        items.map { EquipChangeEntry(it.equipSlot, it.itemId) },
+    )
+
+    for ((unequippedSlot, unequippedItem) in result.unequippedSlots) {
+        println(
+            "[ChangeEquipReq]   slot=${describeSlot(unequippedSlot)} → 卸下 item=$unequippedItem (上报为 0xFF 退回背包)"
+        )
+    }
+    for (it in items) {
+        if (it.itemId == 0) continue
+        if (it.equipSlot == NON_EQUIP_SLOT) {
+            if (it.itemId in result.addedToBag) {
                 println("[ChangeEquipReq]   slot=0xFF item=${it.itemId} → 背包 (新入包)")
+            } else {
+                println("[ChangeEquipReq]   slot=0xFF item=${it.itemId} → 背包 (已存在, 跳过)")
             }
         } else {
-            // 装备槽变化: 记进 user.equips, 下一次 op 198 会按真实槽位重新下发
-            user.equips[it.equipSlot] = it.itemId
-            // 穿上后从背包列表里摘掉, op 198 的「背包条目」与「装备条目」不能同时有它
-            val wasInBag = user.items.removeIf { e -> e.itemId == it.itemId }
-            if (wasInBag) bagChanged = true
-            equipChanged = true
             val wantGroup = it.equipSlot / EQUIP_SLOTS_PER_GROUP
             val gotGroup = groupOfItem(it.itemId)
             val mismatch = when {
@@ -185,27 +178,29 @@ val ChangeEquipReq = PKTHandler { c ->
             println(
                 "[ChangeEquipReq]   slot=${describeSlot(it.equipSlot)} → 装备 item=${it.itemId}" +
                     " (${ItemDef.find(it.itemId)?.name ?: "无定义"})" +
-                    (if (wasInBag) " [从背包移到装备]" else "") + mismatch
+                    (if (it.itemId in result.removedFromBag) " [从背包移到装备]" else "") + mismatch
             )
         }
     }
 
-    if (bagChanged) {
-        println("[ChangeEquipReq] 服务端背包: ${user.items.map { it.itemId }}")
+    if (result.bagChanged) {
+        println("[ChangeEquipReq] 服务端背包: ${player.items.map { it.itemId }}")
     }
-    if (equipChanged) {
+    if (result.equipChanged) {
         println(
             "[ChangeEquipReq] 服务端装备槽: " +
-                (user.equips.entries.joinToString { (s, id) -> "0x${s.toString(16)}=$id" }
+                (player.equips.entries.joinToString { (s, id) -> "0x${s.toString(16)}=$id" }
                     .ifEmpty { "(空)" })
         )
         // 房间阶段槽位外观刷新:
         // 客户端在房间内 (CSlotStage / CPrepareStage) 关闭背包或换装时, 本地 CSlotView 不会自动重绘,
         // 必须由服务端下发 S→C op 100 SetPlayer (CSetPlayerOnPreparePacket) 触发 sub_4F7022 -> sub_4F6E89,
         // 重新按 CSlotAccessoryPacket 三段清单 (背景/边框/特效/纸娃娃) 刷新槽位 UI 并清理脱下的装扮。
-        val roomSlotIdx = Room.slots.indexOfFirst { it.user == user }
+        val roomSlotIdx = Room.slots.indexOfFirst {
+            it.client === c || it.player?.userId == player.userId
+        }
         if (roomSlotIdx != -1) {
-            Room.BC(SetPlayer(roomSlotIdx, Room.slots[roomSlotIdx], user))
+            Room.BC(SetPlayer(roomSlotIdx, Room.slots[roomSlotIdx], player))
             println("[ChangeEquipReq] 房间槽位 $roomSlotIdx 外观已通过 SetPlayer (op 100) 广播刷新")
         }
     }

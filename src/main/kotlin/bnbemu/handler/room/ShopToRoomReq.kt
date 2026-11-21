@@ -10,8 +10,9 @@ import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.packet.user.UserItemUpdate
 import bnbemu.packet.user.bomberCharCard
 import bnbemu.packet.isRoomStage
-import bnbemu.server.lucci
 import bnbemu.server.sendRoomEntryChain
+import bnbemu.service.lucci
+import bnbemu.service.player
 
 /**
  * C→S op 80: 客户端「切回房间舞台」时的会话回报 (ShopToRoomReq)
@@ -59,8 +60,8 @@ val ShopToRoomReq = PKTHandler { c ->
     val sessionShort = if (readableBytes() >= 2) Decode2 else 0
     val sessionId = if (readableBytes() >= 4) Decode4 else 0
 
-    val user = c.users.firstOrNull()
-    val bomber = user?.bomber ?: 0
+    val player = c.player
+    val bomber = player?.bomber ?: 0
 
     c.stage = if (isRoomStage(c.shopReturnStage)) c.shopReturnStage else ClientStage.Room.value
     println("[ShopToRoomReq] op80 客户端已切回房间舞台 stage=${c.stage} | sessionShort=$sessionShort sessionId=$sessionId")
@@ -69,7 +70,7 @@ val ShopToRoomReq = PKTHandler { c ->
     // 按服务端权威角色回灌客户端 CUserDynamicInfo 的角色字段 (op 20 第 12 项)，
     // 它直接决定下一次 C→S op 73 的上报值；op 122 补回被 op 20 刷成 0 的 Lucci。
     c.send(
-        UserDynamicInfo(bomber, user?.level ?: 5),
+        UserDynamicInfo(bomber, player?.level ?: 5),
         UserDynamicInfoValue(0, c.lucci),
     )
 }

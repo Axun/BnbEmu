@@ -6,9 +6,9 @@ import bnbemu.packet.battle.ReviveBomber
 import bnbemu.packet.battle.GameResult
 import bnbemu.packet.battle.InitGameResult
 import bnbemu.packet.battle.WINNER_TEAM_DRAW
+import bnbemu.domain.PlayerProfile
 import bnbemu.server.Room
 import bnbemu.server.SlotMatchState
-import bnbemu.server.User
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
@@ -53,11 +53,11 @@ class GameOverTest {
 
         // 练习房布局: slot 0 = 玩家, slot 1..7 = AI (见 CreateSessionReq)
         Room.slots.forEach { slot ->
-            slot.user = null
+            slot.clearHuman()
             slot.isAI = false
             slot.aILevel = 1 // 难度档回到抓包默认，避免单例 Room 被前序用例污染
         }
-        Room.slots[0].user = User(cs, id = 1, name = "tester")
+        Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester"), cs)
         for (i in 1..7) Room.slots[i].isAI = true
         Room.reset()
     }
@@ -69,7 +69,7 @@ class GameOverTest {
         Room.battleConfig.matchTimeoutMs = savedMatchTimeout
         Room.battleConfig.tickIntervalMs = savedTickInterval
         Room.slots.forEach { slot ->
-            slot.user = null
+            slot.clearHuman()
             slot.isAI = false
             slot.aILevel = 1
         }
@@ -275,7 +275,7 @@ class GameOverTest {
     fun testPureHumanRoomDoesNotEndOnFirstDeath() {
         // 将来若开纯人类 PvP 房 (无 AI), 死一个人不能被误判成"AI 全灭"而立刻结算
         for (i in 1..7) Room.slots[i].isAI = false
-        Room.slots[1].user = User(cs, id = 2, name = "tester2")
+        Room.slots[1].assignHuman(PlayerProfile(userId = 2, username = "tester2", charName = "tester2"), cs)
         val battle = Room.startGame()
         ch.outboundMessages().clear()
 
@@ -475,13 +475,13 @@ class GameOverTest {
     @Test
     fun testGameResultPreservesCustomPlayerLevelAndClampsZero() {
         val human = 11
-        Room.slots[0].user = User(cs, id = 1, name = "tester", level = 12)
+        Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester", level = 12), cs)
         val body12 = bodyOf(GameResult(winnerTeam = 1))
-        assertEquals(12, dec2(body12, human + 35), "+132 必须写入 User.level")
-        assertEquals(12, dec2(body12, human + 37), "+136 必须写入 User.level")
+        assertEquals(12, dec2(body12, human + 35), "+132 必须写入 PlayerProfile.level")
+        assertEquals(12, dec2(body12, human + 37), "+136 必须写入 PlayerProfile.level")
 
-        // 即使 User.level 异常为 0，也必须钳制到 >= 1，防止 CUserDynamicInfo 等级被写成 0 触发 sub_67CAC3(1) 踢回大厅
-        Room.slots[0].user = User(cs, id = 1, name = "tester", level = 0)
+        // 即使 PlayerProfile.level 异常为 0，也必须钳制到 >= 1，防止 CUserDynamicInfo 等级被写成 0 触发 sub_67CAC3(1) 踢回大厅
+        Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester", level = 0), cs)
         val bodyClamped = bodyOf(GameResult(winnerTeam = 1))
         assertTrue(dec2(bodyClamped, human + 35) >= 1, "+132 绝不可为 0")
         assertTrue(dec2(bodyClamped, human + 37) >= 1, "+136 绝不可为 0")

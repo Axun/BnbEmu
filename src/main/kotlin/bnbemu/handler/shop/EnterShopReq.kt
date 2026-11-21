@@ -6,8 +6,8 @@ import bnbemu.packet.ClientStage
 import bnbemu.packet.shop.EnterShopResult
 import bnbemu.packet.shop.EnterShopStage
 import bnbemu.packet.shop.CashBalance
-import bnbemu.server.cash
-import bnbemu.server.lucci
+import bnbemu.service.cash
+import bnbemu.service.lucci
 
 /**
  * C->S op 315: 请求进入商城 (EnterShopReq)

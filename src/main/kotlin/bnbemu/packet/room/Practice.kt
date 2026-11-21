@@ -1,8 +1,8 @@
 package bnbemu.packet.room
 
+import bnbemu.domain.PlayerProfile
 import bnbemu.netty.PKT
 import bnbemu.packet.room.SetPlayer
-import bnbemu.server.User
 
 // ============================================================================
 // 进练习房 (C→S op 75) 回应链 — 按 tst.pcap stream 4 真实线序 (TCP seq) 原样重放
@@ -17,11 +17,11 @@ import bnbemu.server.User
 
 
 // ---- op 100 房间设置版 (78B) / 游戏开始版 (77B) — 官方命名 MakeSetPlayerPacket / SetPlayer ----
-fun PracticeRoomInfo(user: User? = null, level: Int = user?.level ?: 5) =
-    SetPlayer(slotId = 0, user = user, level = level, isStart = false)
+fun PracticeRoomInfo(player: PlayerProfile? = null, level: Int = player?.level ?: 5) =
+    SetPlayer(slotId = 0, player = player, level = level, isStart = false)
 
-fun PracticeStartInfo(user: User? = null, level: Int = user?.level ?: 5) =
-    SetPlayer(slotId = 0, user = user, level = level, isStart = true)
+fun PracticeStartInfo(player: PlayerProfile? = null, level: Int = player?.level ?: 5) =
+    SetPlayer(slotId = 0, player = player, level = level, isStart = true)
 
 // ---- op 111 空体 (1B): E1(0) —— 开局时的房间 UI 开关通知 ----
 // ⚠️ 历史误标：函数名 PracticeAiLevel / yaml 的 AILevelChange: 111 都沿袭 TW_5 的猜测，

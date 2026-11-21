@@ -17,12 +17,13 @@ import bnbemu.packet.ClientStage
 import bnbemu.packet.user.DEFAULT_BAG_LEVEL
 import bnbemu.packet.room.PracticeSetSlotAI
 import bnbemu.packet.user.bomberCharCard
+import bnbemu.domain.PlayerProfile
+import bnbemu.domain.UserItemEntry
 import bnbemu.packet.shop.ShopCatalog
 import bnbemu.packet.shop.ShopVersion
 import bnbemu.server.Room
-import bnbemu.server.User
 import bnbemu.server.bomber
-import bnbemu.server.setBomber
+import bnbemu.service.PlayerService
 
 class ShopTest {
 
@@ -88,8 +89,8 @@ class ShopTest {
         assertNotNull(handler, "Handler 273 must be registered")
 
         val socket = ClientSocket()
-        val user = bnbemu.server.User(socket, 0, "tester")
-        socket.users += user
+        val user = PlayerService.registerProfile(PlayerProfile(9001, "shop_tester", "tester"))
+        socket.playerId = user.userId
 
         val buf = Unpooled.wrappedBuffer(raw)
         with(handler!!) { buf.handle(socket) }
@@ -104,7 +105,7 @@ class ShopTest {
         // 背包物品必须并进 S→C op 198 下发，否则客户端 ReadEquippedInventory (0x67601D)
         // 清空重建时会把「商城里刚买的东西」抹掉；槽位必须是 0xFF（BAG_ONLY_SLOT），
         // 客户端 sub_65D55F 才会只塞进背包向量、不占装备槽。
-        val bag = listOf(bnbemu.server.UserItemEntry(itemId = 710418))
+        val bag = listOf(UserItemEntry(itemId = 710418))
         val entries = bnbemu.packet.user.bagInventoryEntries(bag)
         assertEquals(1, entries.size)
         assertEquals(710418, entries[0].itemId)
@@ -499,7 +500,8 @@ class ShopTest {
         val ch = EmbeddedChannel(cs)
         val userId = 9310
         val chosen = 7 // Plunk, 既不是默认皮蛋(0) 也不是抓包基准的宝宝(5)
-        val prevUser = Room.slots[0].user
+        val prevPlayer = Room.slots[0].player
+        val prevClient = Room.slots[0].client
         val prevBomber = Room.slots[0].bomber.toInt()
 
         fun bodyOf(pkt: PKT): ByteArray {
@@ -509,10 +511,10 @@ class ShopTest {
         }
         fun e1(v: Int) = byteArrayOf((v xor 0x5A).toByte())
 
-        val user = User(cs, userId, "tester")
-        cs.users += user
-        user.setBomber(chosen)
-        Room.slots[0].user = user
+        val user = PlayerService.registerProfile(PlayerProfile(userId, "shop_ret_tester", "tester"))
+        cs.playerId = user.userId
+        PlayerService.selectBomber(user.userId, chosen)
+        Room.slots[0].assignHuman(user, cs)
         Room.slots[0].bomber = chosen
 
         try {
@@ -553,7 +555,7 @@ class ShopTest {
                 "名片不能再显示宝宝 (item 5)"
             )
         } finally {
-            Room.slots[0].user = prevUser
+            Room.slots[0].assignHuman(prevPlayer, prevClient)
             Room.slots[0].bomber = prevBomber
             ch.finishAndReleaseAll()
         }

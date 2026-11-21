@@ -22,13 +22,15 @@ import bnbemu.packet.room.SetSlotFanfare
 import bnbemu.packet.battle.AI_LEVEL_TO_LEVEL
 import bnbemu.packet.battle.GameStartMapInfo
 import bnbemu.packet.room.SlotBomber
+import bnbemu.domain.PlayerProfile
 import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.FLAG_CLOSED
 import bnbemu.server.Room
-import bnbemu.server.User
 import bnbemu.server.bomber
 import bnbemu.server.color
 import bnbemu.server.state
+import bnbemu.service.PlayerService
+import bnbemu.service.player
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
@@ -73,7 +75,7 @@ class AiBattleModeTest {
         Room.mapId = savedMapId
         Room.themeId = savedThemeId
         Room.slots.forEach {
-            it.user = null
+            it.clearHuman()
             it.isAI = false
             it.state = 0
             it.aILevel = 2
@@ -86,8 +88,8 @@ class AiBattleModeTest {
         val ch = EmbeddedChannel()
         val client = ClientSocket()
         ch.pipeline().addLast(client)
-        val user = User(c = client, id = 7215, name = "tester", bomber = bomber)
-        client.users.add(user)
+        val user = PlayerService.registerProfile(PlayerProfile(userId = 9601, username = "ai_tester", charName = "tester", bomber = bomber))
+        client.playerId = user.userId
         return ch to client
     }
 
@@ -205,7 +207,7 @@ class AiBattleModeTest {
     fun `test AILevelChangeReq and OpenCloseSlotReq in AI battle`() {
         val (ch, client) = newClient(bomber = 0)
         Room.sessionType = SESSION_TYPE_BATTLE
-        Room.setupAiBattleSlots(client.users.first())
+        Room.setupAiBattleSlots(client.player, client)
 
         // Change slot 5 to NPC 23 and difficulty 4
         val changeReq = encodePacket {
@@ -266,7 +268,7 @@ class AiBattleModeTest {
     fun `test NpcEventReq echoes NpcEvent and ignores malformed payloads`() {
         val (ch, client) = newClient(bomber = 0)
         Room.sessionType = SESSION_TYPE_BATTLE
-        Room.setupAiBattleSlots(client.users.first())
+        Room.setupAiBattleSlots(client.player, client)
 
         val firstEvt = encodePacket {
             Encode2(4)
@@ -304,7 +306,7 @@ class AiBattleModeTest {
     fun `test StartGameReq and backToRoom ShopToRoomReq round trip for AI battle`() {
         val (ch, client) = newClient(bomber = 0)
         Room.sessionType = SESSION_TYPE_BATTLE
-        Room.setupAiBattleSlots(client.users.first())
+        Room.setupAiBattleSlots(client.player, client)
         Room.slots[4].bomber = 21
         Room.slots[4].aILevel = 3
 

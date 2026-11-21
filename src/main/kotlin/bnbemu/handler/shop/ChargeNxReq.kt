@@ -2,7 +2,7 @@ package bnbemu.handler.shop
 
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.shop.CashBalance
-import bnbemu.server.PlayerWallet
+import bnbemu.service.PlayerService
 
 /**
  * C->S op 277 (0x115): 商城 "Charge NX" 充值点券请求
@@ -23,5 +23,6 @@ import bnbemu.server.PlayerWallet
 const val CHARGE_NX_AMOUNT = 10_000
 
 val ChargeNxReq = PKTHandler { c ->
-    c send CashBalance(PlayerWallet.charge(CHARGE_NX_AMOUNT))
+    val userId = c.playerId ?: PlayerService.activeProfile.userId
+    c send CashBalance(PlayerService.chargeCash(userId, CHARGE_NX_AMOUNT))
 }

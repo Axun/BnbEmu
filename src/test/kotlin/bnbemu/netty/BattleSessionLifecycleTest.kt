@@ -7,10 +7,10 @@ import bnbemu.handler.battle.DrillReq
 import bnbemu.handler.battle.ObjectHitReq
 import bnbemu.handler.battle.PushMovableBoxReq
 import bnbemu.handler.battle.SetBomberEventReq
+import bnbemu.domain.PlayerProfile
 import bnbemu.server.BattleSession
 import bnbemu.server.Bomb
 import bnbemu.server.Room
-import bnbemu.server.User
 import bnbemu.server.state
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
@@ -44,11 +44,11 @@ class BattleSessionLifecycleTest {
         savedReenter = Room.battleConfig.reenterRoomAfterBack
         Room.battleConfig.reenterRoomAfterBack = false
         Room.slots.forEach {
-            it.user = null
+            it.clearHuman()
             it.isAI = false
             it.state = 0
         }
-        Room.slots[0].user = User(cs, id = 1, name = "tester")
+        Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester"), cs)
         Room.slots[1].isAI = true
         Room.reset()
     }
@@ -57,7 +57,7 @@ class BattleSessionLifecycleTest {
     fun tearDown() {
         Room.battleConfig.reenterRoomAfterBack = savedReenter
         Room.slots.forEach {
-            it.user = null
+            it.clearHuman()
             it.isAI = false
             it.state = 0
         }

@@ -3,10 +3,10 @@ package bnbemu.netty
 import bnbemu.handler.battle.SetBomberEventReq
 import bnbemu.packet.battle.SetBomberEvent
 import bnbemu.packet.battle.SetBombState
+import bnbemu.domain.PlayerProfile
 import bnbemu.server.BattleSession
 import bnbemu.server.Bomb
 import bnbemu.server.Room
-import bnbemu.server.User
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -82,10 +82,11 @@ class SetBomberEventTest {
     ) {
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
-        val previousUser = Room.slots[0].user
+        val previousPlayer = Room.slots[0].player
+        val previousClient = Room.slots[0].client
         val previousDelay = Room.battleConfig.launchedBombActivationDelayMs
         try {
-            Room.slots[0].user = User(cs, id = 1, name = "tester")
+            Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester"), cs)
             Room.battleConfig.launchedBombActivationDelayMs = 60_000L
             val battle = Room.startGame()
             ch.outboundMessages().clear()
@@ -100,7 +101,7 @@ class SetBomberEventTest {
             val sent = ch.outboundMessages().toList()
             assertions(battle, sent.map { encode(it as PKT) })
         } finally {
-            Room.slots[0].user = previousUser
+            Room.slots[0].assignHuman(previousPlayer, previousClient)
             Room.battleConfig.launchedBombActivationDelayMs = previousDelay
             Room.reset()
             ch.finish()
@@ -206,9 +207,10 @@ class SetBomberEventTest {
     fun testTruncatedBodyIsSkippedWithoutBroadcast() {
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
-        val previousUser = Room.slots[0].user
+        val previousPlayer = Room.slots[0].player
+        val previousClient = Room.slots[0].client
         try {
-            Room.slots[0].user = User(cs, id = 1, name = "tester")
+            Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester"), cs)
             Room.reset()
             ch.outboundMessages().clear()
 
@@ -218,7 +220,7 @@ class SetBomberEventTest {
             assertEquals(0, buf.readableBytes(), "残包必须被跳过, 不能抛异常断线")
             assertEquals(0, ch.outboundMessages().size, "残包不得回包")
         } finally {
-            Room.slots[0].user = previousUser
+            Room.slots[0].assignHuman(previousPlayer, previousClient)
             Room.reset()
             ch.finish()
         }

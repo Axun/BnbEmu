@@ -123,8 +123,8 @@ fun GameStartMapInfo(
         } else {
             slot?.bomber?.toInt() ?: CharacterType.Boz.value
         }
-        // 激战模式下，0..3 号槽位属于真人方，所以判断user
-        val team = if (i == 0 || slot?.user != null) 0 else 8
+        // 激战模式下，0..3 号槽位属于真人方，所以判断player
+        val team = if (i == 0 || slot?.player != null) 0 else 8
         val spawn = if (i < spawnPositions.size) spawnPositions[i] else i
 
         Encode1(i)

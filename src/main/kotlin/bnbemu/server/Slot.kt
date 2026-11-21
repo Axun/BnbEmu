@@ -1,5 +1,7 @@
 package bnbemu.server
 
+import bnbemu.domain.PlayerProfile
+import bnbemu.netty.ClientSocket
 import bnbemu.netty.SendPacketBase
 import bnbemu.netty.ssdEncode
 
@@ -15,11 +17,22 @@ const val SLOT_COLOR_MASK = 0x1F
 const val DEFAULT_AI_LEVEL = 2
 
 class Slot(
-    var user: User? = null,
+    var player: PlayerProfile? = null,
+    var client: ClientSocket? = null,
     val meta: ByteArray = ByteArray(3), // [0]:狀態, [1]:角色, [2]:顏色
     var isAI: Boolean = false,
     var aILevel: Int = DEFAULT_AI_LEVEL,
-)
+) {
+    fun assignHuman(profile: PlayerProfile?, socket: ClientSocket? = null) {
+        player = profile
+        client = socket
+    }
+
+    fun clearHuman() {
+        player = null
+        client = null
+    }
+}
 
 var Slot.state: Number
     get() = meta[0]

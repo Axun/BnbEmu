@@ -13,8 +13,7 @@ import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.PermissionInfo
 import bnbemu.packet.ChangeStage
 import bnbemu.packet.ClientStage
-import bnbemu.server.PlayerCharacter
-import bnbemu.server.User
+import bnbemu.service.PlayerService
 import org.tinylog.kotlin.Logger
 
 // 進頻道後第一個包
@@ -22,16 +21,18 @@ import org.tinylog.kotlin.Logger
 val OnConnEstablished = PKTHandler { c ->
     val userCount = if (readableBytes() >= 1) Decode1 else 0
     if (userCount in 1..2) {
-        repeat(userCount) {
+        val boundUsers = mutableListOf<String>()
+        repeat(userCount) { idx ->
             val name = DecodeTokenStr
             val userId = Decode4
             val userReserved = if (readableBytes() >= 4) Decode4 else 0
 
-            // 读取初始角色状态。首次登录第一次读取就在这里
-            val user = User(c, userId, name)
-            PlayerCharacter.of(userId)?.let { user.bomber = it }
-            PlayerCharacter.set(userId, user.bomber)
-            c.users.add(user)
+            // 读取/创建唯一玩家档案并绑定连线会话引用
+            val profile = PlayerService.bindConnection(userId, name)
+            if (idx == 0 || c.playerId == null) {
+                c.playerId = profile.userId
+            }
+            boundUsers += "${profile.userId}:${profile.charName}"
         }
 
         // 8B 校验码 (00 00 00 00 71 B1 85 89)
@@ -50,7 +51,7 @@ val OnConnEstablished = PKTHandler { c ->
         val tailFlag = if (readableBytes() >= 1) Decode1 else 0
 
         if (debugMode) {
-            Logger.info("[OnConnEstablished] userCount=$userCount, users=${c.users.map { "${it.id}:${it.name}" }}, auth=(0x${Integer.toHexString(authChecksumHigh)}, 0x${Integer.toHexString(authChecksumLow)}), flags=($flag0, $flag1), channelHash=(0x${Integer.toHexString(channelHash1)}, 0x${Integer.toHexString(channelHash2)}), tail=$tailFlag")
+            Logger.info("[OnConnEstablished] userCount=$userCount, users=$boundUsers, auth=(0x${Integer.toHexString(authChecksumHigh)}, 0x${Integer.toHexString(authChecksumLow)}), flags=($flag0, $flag1), channelHash=(0x${Integer.toHexString(channelHash1)}, 0x${Integer.toHexString(channelHash2)}), tail=$tailFlag")
         }
 
         // EN 單埠拓撲: op 6 ReqConnectToSvr 回 3838 後, 客戶端新開連線並以 op 7 為首包

@@ -8,6 +8,8 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.ClientStage
 import bnbemu.packet.lobby.SESSION_TYPE_BATTLE
 import bnbemu.server.*
+import bnbemu.service.PlayerService
+import bnbemu.service.player
 import org.tinylog.kotlin.Logger
 
 // ============================================================================
@@ -76,20 +78,20 @@ val CreateSessionReq = PKTHandler { c ->
         Logger.info("[CreateSession] normal room still uses the practice reply chain; split here after S->C capture")
     }
 
-    // 玩家 (op 7 已把 c.users[0] 填好) 放 slot 0, 其余 7 槽为 AI。
+    // 玩家 (op 7 已把 c.playerId 填好) 放 slot 0, 其余 7 槽为 AI。
     // ⚠️ 普通房真实应为「其余槽留空等真人加入」, 但回应链里 103/105/114 仍是 AI 槽推送,
     //    两者必须一起改; 等普通房 S→C 抓包钉死线序后再在 isPractice 处分叉。
-    val player = c.users.firstOrNull()
+    val player = c.player
     if (sessionType == SESSION_TYPE_BATTLE) {
-        Room.setupAiBattleSlots(player, bombers)
+        Room.setupAiBattleSlots(player, c, bombers)
     } else if (player != null) {
         val requestedBomber = bombers.firstOrNull() ?: player.bomber
         val chosenBomber = if (requestedBomber in 0..15) requestedBomber else player.bomber
         val effectiveBomber = if (chosenBomber == 4) 10 else chosenBomber
-        player.setBomber(effectiveBomber)
+        PlayerService.selectBomber(player.userId, effectiveBomber)
 
         Room.slots[0].apply {
-            this.user = player
+            assignHuman(player, c)
             this.isAI = false
             state = FLAG_CHIEF
             bomber = effectiveBomber
@@ -97,7 +99,7 @@ val CreateSessionReq = PKTHandler { c ->
         }
         for (i in 1..7) {
             Room.slots[i].apply {
-                this.user = null
+                clearHuman()
                 isAI = true
                 // 新房一律从「开放」起算。Room 是单例，不重置就会继承上一间房被踢槽位的
                 // FLAG_CLOSED，导致进房链自相矛盾：106 发 state=1 封闭、103 又发 isAI=true。

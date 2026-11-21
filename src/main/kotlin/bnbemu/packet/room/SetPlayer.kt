@@ -1,6 +1,7 @@
 package bnbemu.packet.room
 
 import bnbemu.constants.CharacterType
+import bnbemu.domain.PlayerProfile
 import bnbemu.netty.PKT
 import bnbemu.packet.CAPTURE_USER_ID
 import bnbemu.packet.ItemDef
@@ -11,7 +12,6 @@ import bnbemu.server.EquipSlot
 import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.FLAG_READY
 import bnbemu.server.Slot
-import bnbemu.server.User
 import bnbemu.server.bomber
 import bnbemu.server.color
 import bnbemu.server.state
@@ -183,9 +183,9 @@ fun slotAccessoriesOf(
 fun SetPlayer(
     slotId: Int = 0,
     slot: Slot? = null,
-    user: User? = null,
-    level: Int = user?.level ?: 5,
-    userId: Int = user?.id ?: CAPTURE_USER_ID,
+    player: PlayerProfile? = null,
+    level: Int = player?.level ?: 5,
+    userId: Int = player?.userId ?: CAPTURE_USER_ID,
     session: ByteArray = SESSION_STRING,
     isStart: Boolean = false,
     slotState: Int = when {
@@ -195,7 +195,7 @@ fun SetPlayer(
     },
     slotBomber: Int = slot?.bomber?.toInt() ?: CharacterType.Boz.value,
     slotColor: Int = slot?.color?.toInt() ?: 0,
-    equips: Map<Int, Int> = user?.equips.orEmpty(),
+    equips: Map<Int, Int> = player?.equips.orEmpty(),
 ) = PKT {
     val acc = slotAccessoriesOf(equips)
     if (!acc.isEmpty) {
