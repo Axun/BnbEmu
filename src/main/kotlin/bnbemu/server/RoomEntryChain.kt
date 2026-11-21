@@ -54,7 +54,7 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
         // op 113 房名同步: 客户端把字符串直接写进会话对象 +0x1C4 并刷新房间标题。
         // 必须发 Room.name 而不是空串 —— 空串会把 op 87/op 83 刚填好的房名清掉（变空白）。
         RoomName(Room.name),
-        SetPlayer(slotId = 0, user = user),
+        SetPlayer(slotId = 0, slot = Room.slots[0], user = user),
     )
     if (init) {
         c.send(SelectMap(result = 0, themeId = Room.themeId, mapId = Room.mapId))

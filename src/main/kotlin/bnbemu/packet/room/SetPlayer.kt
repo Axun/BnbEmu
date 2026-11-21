@@ -1,13 +1,20 @@
 package bnbemu.packet.room
 
+import bnbemu.constants.CharacterType
 import bnbemu.netty.PKT
 import bnbemu.packet.CAPTURE_USER_ID
 import bnbemu.packet.ItemDef
 import bnbemu.packet.ItemDefEntry
 import bnbemu.packet.SESSION_STRING
+import bnbemu.server.EncodeSlotMeta
 import bnbemu.server.EquipSlot
+import bnbemu.server.FLAG_CHIEF
+import bnbemu.server.FLAG_READY
 import bnbemu.server.Slot
 import bnbemu.server.User
+import bnbemu.server.bomber
+import bnbemu.server.color
+import bnbemu.server.state
 
 // ============================================================================
 // S→C op 100: SetPlayer (CSetPlayerOnPreparePacket)
@@ -19,7 +26,7 @@ import bnbemu.server.User
 //   1. CSetPlayerPacket (13B / 12B):
 //      Encode1(slot) + Encode4(userId) + Encode1(flag16) + Encode1(flag20=0) +
 //      Encode1(flag36=0) + Encode1(dummy=0) + [if (flag16 != 0) Encode1(enterEffectId=255)] +
-//      EncodeBuffer(raw3[3])
+//      EncodeSlotMeta(slotState, slotBomber, slotColor)  // 3B ssdEncode 槽位元数据
 //   2. CUser::Decode (48B):
 //      Encode2(nameLen) + nameBuffer (session 串) +
 //      Encode1(v1=0) + Encode1(v2=0) + Encode4(v3=0) + Encode1(v4=0) + Encode4(v5=0) +
@@ -95,10 +102,19 @@ import bnbemu.server.User
 // ⚠️ category 14 不要塞进 count2: 客户端 sub_687B3D 会把每条 count2 写入
 //   CFxContext 特效槽, 局内建 bomber 时又按 category 12 特效去应用, 反而会给
 //   角色挂一个查不到定义的无效特效。水泡只认 f32 这一个字段。
+//
+// ---------------------------------------------------------------------------
+// 3 字节槽位元数据 (CSetPlayerPacket 尾部 3B, 客户端 sub_78F1C0(..., 3u) 解码)
+// ---------------------------------------------------------------------------
+// 经 ssdEncode 加密的 [stateFlags, bomberId, colorId]：
+//   - meta[0] 状态位: 0x01=封闭(FLAG_CLOSED), 0x02=房主(FLAG_CHIEF), 0x04=已准备/对局中(FLAG_READY), 0x1C=观察者
+//   - meta[1] 角色ID: 低6位 (0..63), 抓包玩家 ffdf 默认选 5 (宝宝 CharacterType.Boz)
+//   - meta[2] 颜色ID: 低5位 (0..31), 0=红队/0号色
+// 三种默认构造策略：
+//   1) isStart == true : 对局开局态 — 不标房主位、置 FLAG_READY(0x04)，对应抓包 [0x04, 0x05, 0x00] (a0 6d 5a)
+//   2) slot != null    : 真实房间槽位 — 使用 slot.state/bomber/color（房主仅 0x02 不带 0x04，防 AutoReady=1 误发 op 84）
+//   3) slot == null    : 无槽位兼容基准 — 房主+准备位 [0x06, 0x05, 0x00] (a0 6f 5a)，对齐 tst.pcap 抓包基准
 // ============================================================================
-
-val RAW3_ROOM = byteArrayOf(0xa0.toByte(), 0x6f.toByte(), 0x5a.toByte())
-val RAW3_START = byteArrayOf(0xa0.toByte(), 0x6d.toByte(), 0x5a.toByte())
 
 /** CSlotAccessoryPacket 的三段装扮清单 (按客户端解码顺序) */
 data class SlotAccessories(
@@ -172,7 +188,13 @@ fun SetPlayer(
     userId: Int = user?.id ?: CAPTURE_USER_ID,
     session: ByteArray = SESSION_STRING,
     isStart: Boolean = false,
-    raw3: ByteArray = if (isStart) RAW3_START else RAW3_ROOM,
+    slotState: Int = when {
+        isStart -> ((slot?.state?.toInt() ?: 0) and FLAG_CHIEF.inv()) or FLAG_READY
+        slot != null -> slot.state.toInt()
+        else -> FLAG_CHIEF or FLAG_READY
+    },
+    slotBomber: Int = slot?.bomber?.toInt() ?: CharacterType.Boz.value,
+    slotColor: Int = slot?.color?.toInt() ?: 0,
     equips: Map<Int, Int> = user?.equips.orEmpty(),
 ) = PKT {
     val acc = slotAccessoriesOf(equips)
@@ -197,7 +219,7 @@ fun SetPlayer(
     if (!isStart) {
         Encode1(255) // enterEffectId
     }
-    EncodeBuffer(raw3)
+    EncodeSlotMeta(state = slotState, bomber = slotBomber, color = slotColor)
 
     // 2. CUser::Decode
     Encode2(session.size)

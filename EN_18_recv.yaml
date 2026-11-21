@@ -26,7 +26,7 @@ JoinSessionReq: 81
 AJoinSessionReq: 82
 EnterLobbyStageReq: 83
 #GuildMemberInfoReq: 85
-SetPlayerReadyReq: 96
+SetPlayerReadyReq: 84
 SelectMapReq: 85
 SelectColorReq: 86
 OpenCloseSlotReq: 89
