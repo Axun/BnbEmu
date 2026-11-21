@@ -1,12 +1,10 @@
 package bnbemu.data
 
 import bnbemu.ACP
+import bnbemu.codec.*
 import bnbemu.domain.CharacterRules
 import bnbemu.netty.buildSsdBlock
 import bnbemu.netty.ssdEncode
-import bnbemu.packet.u16le
-import bnbemu.packet.u32le
-import bnbemu.packet.u8
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

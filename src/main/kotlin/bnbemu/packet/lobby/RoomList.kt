@@ -1,13 +1,10 @@
 package bnbemu.packet.lobby
 
+import bnbemu.codec.*
 import bnbemu.netty.PKT
 import bnbemu.netty.buildSsdBlock
 import bnbemu.netty.ssdEncode
 import java.io.ByteArrayOutputStream
-import bnbemu.packet.ss
-import bnbemu.packet.u16le
-import bnbemu.packet.u32le
-import bnbemu.packet.u8
 
 // ============================================================================
 // S→C op 87：RoomList — 房间列表（CLobbyStage::OnPacket case 0x57 → sub_50FF27）

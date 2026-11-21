@@ -1,5 +1,6 @@
 package bnbemu.packet
 
+import bnbemu.codec.*
 import bnbemu.netty.PKT
 import bnbemu.netty.buildSsdBlock
 import bnbemu.netty.ssdEncode
