@@ -1,12 +1,11 @@
 package bnbemu.packet
 
 import bnbemu.Ver
-import bnbemu.isCN
 import bnbemu.isEN
 import bnbemu.netty.PKT
 
 val availableChannelSize = 1
-val channelVer = if (isCN && Ver == 12) 24 else Ver // 2003 ~ 2004裡 客戶端被分成兩個(Cx/Fx) 各自有各自的版本
+val channelVer = Ver
 
 // server = CCenterProcess::MakeChannelsGameStatePacket
 // tailOnes: EN 大廳推送變體 (C→S 81 後的握手推送 seq=136) 少一個尾部 E1(1), 傳 2 (9B 載荷);

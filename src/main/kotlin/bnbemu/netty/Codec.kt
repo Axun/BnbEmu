@@ -16,11 +16,7 @@ import org.tinylog.kotlin.Logger
 //   C→S 加密: [hc][uid:2][len^0x69:1][payload][CRC8]    seq 從 40 起, hc = 231^(192+seq)
 //   payload = [Encode2(opcode)][欄位...], opcode = BE16 ^ 0xA569
 // 加密 (simpleStream3)、CRC8、headerCode 與 3 度實作完全一致, 故 EN 直接採用 degree 3
-val m_nCipherDegreeInit = when {
-    isCN -> 2
-    isEN -> 3
-    else -> 1
-}
+const val m_nCipherDegreeInit = 3
 
 val headerLen = when (m_nCipherDegreeInit) {
     3 -> 4
@@ -73,12 +69,8 @@ class Decoder : ByteToMessageDecoder() {
 
             // 真實伺服器 C→S 標頭: [hc][uid:2][len^0x69:1]
             // uid 為每連線固定值, 由客戶端帶入 (抓包 13/198/230, LE16 ^ 0xA569), 這裡只跳過
-            val payloadLen = if (isEN) {
-                buf.skipBytes(2)
-                (buf.readByte().toInt() and 0xFF) xor 0x69
-            } else {
-                buf.Decode2
-            }
+            buf.skipBytes(2)
+            val payloadLen = (buf.readByte().toInt() and 0xFF) xor 0x69
 
             if (buf.readableBytes() < (payloadLen + crcLen)) {
                 buf.resetReaderIndex()

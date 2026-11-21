@@ -114,10 +114,7 @@ fun ChannelGroup.BC(packet: PKT, exclude: Channel? = null) {
 
 @ChannelHandler.Sharable
 object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
-    val crcLenUDP = when {
-        isJP -> 4
-        else -> 1
-    }
+    const val crcLenUDP = 1
 
     override fun channelRead0(ctx: ChannelHandlerContext, packet: DatagramPacket) {
         val sender = packet.sender()
@@ -127,11 +124,6 @@ object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
         val Len = buf.readUnsignedByte().toInt()
 
         if (buf.readableBytes() < Len) return
-
-        if (isJP) {
-            if (buf.readableBytes() < 4) return
-            buf.readInt()
-        }
 
         if (buf.readableBytes() < 1) return
         val opcode = buf.readUnsignedByte().toInt()
@@ -169,10 +161,7 @@ object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
 
         // CRC
         if (buf.readableBytes() >= crcLenUDP) {
-            when {
-                isJP -> buf.readInt()
-                else -> buf.readByte()
-            }
+            buf.readByte()
         }
     }
 
@@ -187,9 +176,6 @@ object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
             // 佔位
             buf.writeByte(0) // size
 
-            if (isJP)
-                buf.writeInt(0)
-
             buf.writeByte(opcode) // 寫入 Opcode
             buf.block() // 執行業務寫入邏輯
 
@@ -198,7 +184,7 @@ object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
 
             if (debugMode) {
                 val hexOp = "0x${opcode.toString(16).uppercase()}"
-                val payloadStart = if (isJP) 6 else 2
+                val payloadStart = 2
                 val payloadLen = packetSize - payloadStart
                 val payloadHex = if (payloadLen > 0) {
                     val dumpLen = minOf(payloadLen, MAX_DUMP_LEN)
@@ -208,10 +194,7 @@ object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
                 println("$opcode | $hexOp | UDP Send to $target: $payloadHex")
             }
 
-            when {
-                isJP -> buf.writeInt(CRC32.UpdateCRC(dwCrcKey = 0, buf, Size = buf.readableBytes()))
-                else -> buf.writeByte(CRC8.UpdateCRC(dwCrcKey = 0, buf, Size = buf.readableBytes()))
-            }
+            buf.writeByte(CRC8.UpdateCRC(dwCrcKey = 0, buf, Size = buf.readableBytes()))
 
             writeAndFlush(DatagramPacket(buf, target))
         } catch (e: Exception) {

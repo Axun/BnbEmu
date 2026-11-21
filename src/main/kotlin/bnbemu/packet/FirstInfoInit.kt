@@ -6,19 +6,18 @@ import bnbemu.netty.toBA
 
 // server = CLoginPool::OnAskFirstInfo
 fun FirstInfoInit() = PKT {
-    if (isEN) {
-        // EN 真實伺服器在首連 (會話連線) 上主動推送, 不等客戶端請求 (start.pcap sq=46)
-        // 結構: Encode1Bool(true) + Encode4(1854) + 1854B 資料塊
-        // 資料塊解碼 (每 dword BE 讀取 ^ 0x96CA5395 後以 LE 寫回) 為字串表
-        // (頻道/房間系統訊息: "wins"/"the"/"Channel"/"Normal"/"Room" 等片段), 原樣重放
-        Encode1Bool(true)
-        Encode4(1854)
-        EncodeBuffer(EN_FIRST_INFO_BLOB)
-    } else {
-//    if (Decode4 == 0)
-        EncodeStr("http://mail.nexonclub.com/clubadmin/confirmuser")
-        EncodeStr("http://id.nexonclub.com/nxidquery.idsocno")
-    }
+    // EN 真實伺服器在首連 (會話連線) 上主動推送, 不等客戶端請求 (start.pcap sq=46)
+    // 結構: Encode1Bool(true) + Encode4(1854) + 1854B 資料塊
+    // 資料塊解碼 (每 dword BE 讀取 ^ 0x96CA5395 後以 LE 寫回) 為字串表
+    // (頻道/房間系統訊息: "wins"/"the"/"Channel"/"Normal"/"Room" 等片段), 原樣重放
+    Encode1Bool(true)
+    Encode4(1854)
+    EncodeBuffer(EN_FIRST_INFO_BLOB)
+//    } else {
+////    if (Decode4 == 0)
+//        EncodeStr("http://mail.nexonclub.com/clubadmin/confirmuser")
+//        EncodeStr("http://id.nexonclub.com/nxidquery.idsocno")
+//    }
 }
 
 // 生成工具: tools/extract_first_push.py (cap/firstconn_s2c_op2.bin)

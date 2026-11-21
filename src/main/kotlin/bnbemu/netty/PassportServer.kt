@@ -15,7 +15,6 @@ import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
 import io.netty.handler.codec.ByteToMessageDecoder
 import bnbemu.debugMode
-import bnbemu.isEN
 import org.tinylog.kotlin.Logger
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -361,8 +360,6 @@ object PassportServer {
     fun parseLogoutReq(buf: ByteBuf): String? = parseSingleStringReq(buf)
 
     fun start() {
-        if (!isEN) return
-
         ServerBootstrap().apply {
             group(NettyServer.workerGroup, NettyServer.workerGroup)
             channelFactory(ChannelFactory<ServerChannel> { NioServerSocketChannel() })

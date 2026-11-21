@@ -1,7 +1,5 @@
 package bnbemu.packet.battle
 
-import bnbemu.isEN
-import bnbemu.isJP
 import bnbemu.netty.PKT
 
 // S→C MovableBoxMove (EN op 142 / 0x8E) —— 局内「可移动箱子位移」广播。

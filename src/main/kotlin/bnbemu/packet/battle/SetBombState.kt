@@ -1,6 +1,5 @@
 package bnbemu.packet.battle
 
-import bnbemu.isEN
 import bnbemu.netty.PKT
 import bnbemu.server.Bomb
 
@@ -8,16 +7,11 @@ import bnbemu.server.Bomb
 // EN 结构 (CA.exe 0x5481BD):
 //   Encode1(count) + N * [Encode2(bombId) + Encode1(state) + if (state == 0) Encode4(param)]
 fun SetBombState(bombId: Int, state: Int = 0, param: Int = 0) = PKT {
-    if (isEN) {
-        Encode1(1)
-        Encode2(bombId)
-        Encode1(state)
-        if (state == 0) {
-            Encode4(param)
-        }
-    } else {
-        Encode2(bombId)
-        Encode1(state)
+    Encode1(1)
+    Encode2(bombId)
+    Encode1(state)
+    if (state == 0) {
+        Encode4(param)
     }
 }
 
