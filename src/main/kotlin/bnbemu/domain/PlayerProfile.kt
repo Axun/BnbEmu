@@ -20,10 +20,14 @@ const val DEFAULT_LEVEL = 5
 
 data class UserItemEntry(
     val itemId: Int,
-    val arg1: Int = 0,
     val count: Int = 1,
-    val expireTime: Int = 0,
-)
+    val equipSlot: Int? = null,
+    val expireAt: Long? = null,
+    val arg1: Int = 0,
+) {
+    val isEquipped: Boolean
+        get() = equipSlot != null && equipSlot != EquipSlot.BAG
+}
 
 data class EquipChangeEntry(
     val equipSlot: Int,
@@ -59,21 +63,38 @@ class PlayerProfile(
     var favorite: String = "Bazzi",
     /** 玩家当前选中的角色 */
     var bomber: Int = CharacterType.Dao.value,
-    items: List<UserItemEntry> = emptyList(),
-    equips: Map<Int, Int> = emptyMap(),
+    inventory: List<UserItemEntry> = StarterKit.defaultInventory(bomber),
 ) {
-    internal val mutableItems: MutableList<UserItemEntry> = items.toMutableList()
-    internal val mutableEquips: MutableMap<Int, Int> = equips.toMutableMap()
+    internal val mutableInventory: MutableList<UserItemEntry> = inventory.toMutableList()
 
     /**
-     * 玩家背包（S→C op 198 / 320 的数据源）。
+     * 玩家统一库存（背包 + 已穿戴装备的单一事实源）。
+     * `equipSlot == null` 表示在背包中；非空表示已穿戴在对应复合槽位。
      * 只读视图，所有变更须经 [bnbemu.service.PlayerService]。
      */
-    val items: List<UserItemEntry> get() = mutableItems
+    val inventory: List<UserItemEntry> get() = mutableInventory
 
     /**
-     * 装备槽 → itemId 映射（C→S op 273 上报的穿脱结果）。
-     * 只读视图，所有变更须经 [bnbemu.service.PlayerService]。
+     * 背包未穿戴物品视图（兼容旧调用点；底层与 [inventory] 共享单一事实源）。
      */
-    val equips: Map<Int, Int> get() = mutableEquips
+    val items: List<UserItemEntry>
+        get() = mutableInventory.filter { !it.isEquipped }
+
+    /**
+     * 已穿戴的复合槽位 → itemId 映射视图（兼容旧调用点；底层与 [inventory] 共享单一事实源）。
+     */
+    val equips: Map<Int, Int>
+        get() = buildMap {
+            mutableInventory.forEach { entry ->
+                val slot = entry.equipSlot
+                if (slot != null && slot != EquipSlot.BAG && entry.itemId != 0) {
+                    put(slot, entry.itemId)
+                }
+            }
+        }
+
+    fun hasItem(itemId: Int): Boolean = mutableInventory.any { it.itemId == itemId }
+
+    fun hasEquippedItem(itemId: Int): Boolean =
+        mutableInventory.any { it.itemId == itemId && it.isEquipped }
 }

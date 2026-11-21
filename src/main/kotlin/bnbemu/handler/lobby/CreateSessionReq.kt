@@ -88,7 +88,7 @@ val CreateSessionReq = PKTHandler { c ->
     } else if (player != null) {
         val requestedBomber = bombers.firstOrNull() ?: player.bomber
         val chosenBomber = if (requestedBomber in 0..15) requestedBomber else player.bomber
-        val effectiveBomber = CharacterRules.resolveEffectiveBomber(chosenBomber)
+        val effectiveBomber = CharacterRules.resolveEffectiveBomber(chosenBomber, player)
         PlayerService.selectBomber(player.userId, effectiveBomber)
 
         Room.slots[0].apply {

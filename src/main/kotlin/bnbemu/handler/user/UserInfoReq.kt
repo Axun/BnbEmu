@@ -5,7 +5,8 @@ import bnbemu.domain.CharacterRules
 import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
 import bnbemu.domain.EquipSlot
-import bnbemu.domain.InventoryRules
+import bnbemu.domain.StarterKit
+import bnbemu.domain.UserItemEntry
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
@@ -20,30 +21,20 @@ import bnbemu.service.player
 private val LAST_USER_INFO_SEND_TIME = AttributeKey.valueOf<Long>("LAST_USER_INFO_SEND_TIME")
 
 /**
- * S→C op 73 名片里的装备槽位列表。
+ * S→C op 73 名片里的装备槽位列表（直接读取玩家统一库存的已穿戴条目）。
  *
  * slot 只放**子槽位**（与抓包一致: 2082 进阶卡→4, 角色卡→15, 道具栏→13），
  * 客户端 `COtherUserPageDialog::InitData` (`0x005E2F9B` → `0x005F488E`) 会用 itemId 查
- * op 60 定义表的 category 自行还原装备大类，所以 C→S op 273 上报的复合槽位这里取 `% 24`。
- *
- * 默认三条 (角色卡 / 道具栏 / 进阶卡) 之后追加 op 273 记录下来的装备 (背景/旗帜/边框…),
- * 同「大类+子槽位」以服务端记录为准 —— 否则换了角色卡/背景后名片里会同时出现两条同槽条目。
+ * op 60 定义表的 category 自行还原装备大类，所以复合槽位这里取 `% 24`。
  */
-private fun buildEquipEntries(charItemId: Int, equips: Map<Int, Int>): List<UserEquipEntry> {
-    val merged = LinkedHashMap<Pair<Int, Int>, UserEquipEntry>()
-    fun put(e: UserEquipEntry) {
-        merged[InventoryRules.equipSlotKey(e.itemId, e.slot)] = e
-    }
-    put(UserEquipEntry(itemId = charItemId, slot = EquipSlot.CHARACTER, param1 = 20, param2 = 0))
-    put(UserEquipEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param1 = 1, param2 = 0))
-    put(UserEquipEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param1 = 1, param2 = 0))
-    equips.forEach { (compositeSlot, itemId) ->
-        if (itemId != 0) {
-            put(UserEquipEntry(itemId, compositeSlot % EQUIP_SLOTS_PER_GROUP, 1, 0))
+private fun buildEquipEntries(inventory: List<UserItemEntry>): List<UserEquipEntry> =
+    inventory
+        .filter { it.isEquipped && it.itemId != 0 }
+        .map { entry ->
+            val slot = entry.equipSlot!! % EQUIP_SLOTS_PER_GROUP
+            val param1 = if (entry.equipSlot == EquipSlot.CHARACTER) 20 else 1
+            UserEquipEntry(itemId = entry.itemId, slot = slot, param1 = param1, param2 = 0)
         }
-    }
-    return merged.values.toList()
-}
 
 /**
  * 下发用户详细资料与动态属性 (支持时间防抖 500ms)
@@ -68,16 +59,13 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
     // 超过 1 会在 0x67973E ([0x009E06C0 + slotIndex * 0x438]) 发生堆越界导致 0xC0000005 崩溃闪退
     val safeSlotIndex = slotIndex.coerceIn(0, 1)
 
-    // 根据当前槽位选中的角色动态配置角色卡与装扮
-    // 走与 op 198 同一份映射 (CharacterRules.bomberCharCard)
     val userSlot = Room.slots.find {
         it.client === c || (player != null && it.player?.userId == player.userId)
     }
     val currentBomber = userSlot?.bomber?.toInt() ?: player?.bomber ?: 0
-    val charItemId = CharacterRules.bomberCharCard(currentBomber).first
-    // 装备槽位列表: 默认三条 + C→S op 273 记录下来的装备 (背景/旗帜/边框…)
-    val equips = buildEquipEntries(charItemId, player?.equips.orEmpty())
-    if (player != null && player.equips.isNotEmpty()) {
+    val inventory = player?.inventory ?: StarterKit.defaultInventory(currentBomber)
+    val equips = buildEquipEntries(inventory)
+    if (equips.isNotEmpty()) {
         println("[UserInfoReq] op 73 装备槽: ${equips.joinToString { "${it.itemId}@${it.slot}" }}")
     }
 
@@ -110,9 +98,7 @@ fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
     val targetPlayer = targetSlot?.player ?: PlayerService.findByCharName(targetCharName)
 
     val bomberId = targetSlot?.bomber?.toInt() ?: targetPlayer?.bomber ?: 0
-    // 与 op 198 / 自己名片同一份角色→角色卡映射
-    val charItemId = CharacterRules.bomberCharCard(bomberId).first
-    val equips = buildEquipEntries(charItemId, targetPlayer?.equips.orEmpty())
+    val equips = buildEquipEntries(targetPlayer?.inventory ?: StarterKit.defaultInventory(bomberId))
 
     val win = targetPlayer?.win ?: 10
     val draw = targetPlayer?.draw ?: 0
@@ -180,8 +166,8 @@ val UserInfoReq = PKTHandler { c ->
         it.client === c || (player != null && it.player?.userId == player.userId)
     }
     if (bomberIds.isNotEmpty() && bomberIds[0] in 0..15) {
-        // 与 op 87 SelectBomberReq 同一约定: 蓝蓝 (4) 走进阶形态 10
-        val effective = CharacterRules.resolveEffectiveBomber(bomberIds[0])
+        // 与 op 87 SelectBomberReq 同一约定: 持有 2082 进阶卡时蓝蓝 (4) 走进阶形态 10
+        val effective = CharacterRules.resolveEffectiveBomber(bomberIds[0], player)
         if (player != null && player.bomber != effective) {
             println("[UserInfoReq] 角色同步: bomber ${player.bomber} → $effective (上报 ${bomberIds[0]})")
             PlayerService.selectBomber(player.userId, effective)

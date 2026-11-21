@@ -2,6 +2,7 @@ package bnbemu.handler
 
 import bnbemu.domain.CharacterRules
 import bnbemu.domain.DEFAULT_LUCCI
+import bnbemu.domain.StarterKit
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ChannelsGameState
 import bnbemu.packet.user.CoupleStateSync
@@ -20,7 +21,6 @@ import bnbemu.packet.WelcomeNotice
 import bnbemu.packet.user.UserDynamicInfo
 import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.packet.user.UserInventory
-import bnbemu.packet.user.defaultUserInventoryItems
 import bnbemu.packet.user.inventoryEntries
 import bnbemu.packet.user.UserInventoryInfo
 import bnbemu.packet.user.UserItemUpdate
@@ -66,14 +66,14 @@ val JoinSessionReq = PKTHandler { c ->
     //   背包物品用伪槽位 0xFF（BAG_ONLY_SLOT），客户端只塞进背包向量、不占装备槽。
     //   C→S op 273 记录下来的装备（背景/旗帜/边框/气泡/特效…）用**真实槽位**下发，
     //   否则回大厅时会被这次清空重建抹掉（表现为「背景自动取消装备」）。
+    val bomber = player?.bomber ?: 0
+    val rawInventory = player?.inventory ?: StarterKit.defaultInventory(bomber)
+    val inventory = inventoryEntries(rawInventory, bomber)
     val bag = player?.items.orEmpty()
     val equips = player?.equips.orEmpty()
-    val bomber = player?.bomber ?: 0
-    val defaults = defaultUserInventoryItems(bomber)
-    val inventory = inventoryEntries(defaults, bag, equips)
     println(
-        "[JoinSessionReq] op 198 清单: 默认 ${defaults.size} 条 + 背包 ${bag.size} 件" +
-            " + 装备 ${equips.size} 件 → 共 ${inventory.size} 条"
+        "[JoinSessionReq] op 198 清单: 库存 ${rawInventory.size} 条 (背包 ${bag.size} 件" +
+            " + 装备 ${equips.size} 件) → 下发 ${inventory.size} 条"
     )
     val (charItemId, charToken) = CharacterRules.bomberCharCard(bomber)
     println(

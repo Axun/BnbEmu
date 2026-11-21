@@ -2,6 +2,7 @@ package bnbemu.service
 
 import bnbemu.data.shop.ShopCurrency
 import bnbemu.data.shop.ShopItemEntry
+import bnbemu.domain.CharacterRules
 import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.domain.EquipChangeEntry
 import bnbemu.domain.EquipChangeResult
@@ -134,12 +135,12 @@ object PlayerService {
         val grantedCount = count.coerceAtLeast(1)
         val unitPrice = price.coerceAtLeast(0)
         synchronized(profile) {
-            val existingIdx = profile.mutableItems.indexOfFirst { it.itemId == itemId }
-            val isEquipped = profile.mutableEquips.values.any { it == itemId }
-            if (!stackable && (existingIdx != -1 || isEquipped)) {
+            val inv = profile.mutableInventory
+            val existingIdx = inv.indexOfFirst { it.itemId == itemId }
+            if (!stackable && existingIdx != -1) {
                 return PurchaseResult(PurchaseStatus.ALREADY_OWNED, lucci = profile.lucci, cash = profile.cash)
             }
-            val existingCount = if (existingIdx != -1) profile.mutableItems[existingIdx].count else 0
+            val existingCount = if (existingIdx != -1) inv[existingIdx].count else 0
             if (stackable && existingCount + grantedCount > MAX_STACK_COUNT) {
                 return PurchaseResult(PurchaseStatus.AMOUNT_LIMIT_EXCEEDED, lucci = profile.lucci, cash = profile.cash)
             }
@@ -161,11 +162,11 @@ object PlayerService {
                 }
             }
             val newCount = if (stackable && existingIdx != -1) {
-                val updated = profile.mutableItems[existingIdx].copy(count = existingCount + grantedCount)
-                profile.mutableItems[existingIdx] = updated
+                val updated = inv[existingIdx].copy(count = existingCount + grantedCount)
+                inv[existingIdx] = updated
                 updated.count
             } else {
-                profile.mutableItems += UserItemEntry(itemId = itemId, count = grantedCount)
+                inv += UserItemEntry(itemId = itemId, count = grantedCount)
                 grantedCount
             }
             repository.save(profile)
@@ -196,28 +197,47 @@ object PlayerService {
             val unequippedSlots = mutableListOf<Pair<Int, Int>>()
             val addedToBag = linkedSetOf<Int>()
             val removedFromBag = linkedSetOf<Int>()
+            val inv = profile.mutableInventory
 
             for (change in changes) {
                 if (change.itemId == 0) continue
                 if (change.equipSlot == EquipSlot.BAG) {
-                    val equippedSlot = profile.mutableEquips.entries
-                        .find { it.value == change.itemId }
-                        ?.key
-                    if (equippedSlot != null) {
-                        profile.mutableEquips.remove(equippedSlot)
-                        unequippedSlots += equippedSlot to change.itemId
-                        equipChanged = true
+                    val equippedIdx = inv.indexOfFirst {
+                        it.itemId == change.itemId && it.isEquipped && it.equipSlot != EquipSlot.CHARACTER
                     }
-                    if (profile.mutableItems.none { it.itemId == change.itemId }) {
-                        profile.mutableItems += UserItemEntry(itemId = change.itemId)
+                    if (equippedIdx != -1) {
+                        val oldSlot = inv[equippedIdx].equipSlot!!
+                        inv[equippedIdx] = inv[equippedIdx].copy(equipSlot = null)
+                        unequippedSlots += oldSlot to change.itemId
+                        addedToBag += change.itemId
+                        equipChanged = true
+                        bagChanged = true
+                    } else if (inv.none { it.itemId == change.itemId && !it.isEquipped }) {
+                        inv += UserItemEntry(itemId = change.itemId, equipSlot = null)
                         addedToBag += change.itemId
                         bagChanged = true
                     }
                 } else {
-                    profile.mutableEquips[change.equipSlot] = change.itemId
-                    if (profile.mutableItems.removeIf { it.itemId == change.itemId }) {
-                        removedFromBag += change.itemId
-                        bagChanged = true
+                    // 若目标槽位已有其他物品，先退回背包
+                    for (i in inv.indices) {
+                        if (inv[i].equipSlot == change.equipSlot && inv[i].itemId != change.itemId) {
+                            inv[i] = inv[i].copy(equipSlot = null)
+                            bagChanged = true
+                        }
+                    }
+                    val targetIdx = inv.indexOfFirst {
+                        it.equipSlot == change.equipSlot ||
+                            (it.itemId == change.itemId && it.equipSlot != EquipSlot.CHARACTER)
+                    }
+                    if (targetIdx != -1) {
+                        val existing = inv[targetIdx]
+                        if (!existing.isEquipped) {
+                            removedFromBag += change.itemId
+                            bagChanged = true
+                        }
+                        inv[targetIdx] = existing.copy(itemId = change.itemId, equipSlot = change.equipSlot)
+                    } else {
+                        inv += UserItemEntry(itemId = change.itemId, equipSlot = change.equipSlot)
                     }
                     equipChanged = true
                 }
@@ -236,11 +256,18 @@ object PlayerService {
         }
     }
 
-    /** 统一写入当前选中角色 */
+    /** 统一写入当前选中角色，并同步更新角色卡槽位 ([EquipSlot.CHARACTER])。 */
     fun selectBomber(userId: Int, bomber: Int): PlayerProfile? {
         val profile = repository.findByUserId(userId) ?: return null
         synchronized(profile) {
             profile.bomber = bomber
+            val (charItemId, _) = CharacterRules.bomberCharCard(bomber)
+            val charIdx = profile.mutableInventory.indexOfFirst { it.equipSlot == EquipSlot.CHARACTER }
+            if (charIdx >= 0) {
+                profile.mutableInventory[charIdx] = profile.mutableInventory[charIdx].copy(itemId = charItemId)
+            } else {
+                profile.mutableInventory.add(0, UserItemEntry(itemId = charItemId, equipSlot = EquipSlot.CHARACTER))
+            }
             repository.save(profile)
             return profile
         }

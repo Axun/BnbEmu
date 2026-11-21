@@ -4,7 +4,7 @@ import bnbemu.data.item.ItemDefCatalog
 import bnbemu.domain.CharacterRules
 import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
 import bnbemu.domain.EquipSlot
-import bnbemu.domain.InventoryRules
+import bnbemu.domain.StarterKit
 import bnbemu.domain.UserItemEntry
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
@@ -79,23 +79,14 @@ class UserInventoryEntry(
     }
 }
 
-// 进频道大厅默认生效/穿戴道具列表 (包含蓝妹妹进阶卡 itemId 2082)
-val DEFAULT_USER_INVENTORY_ITEMS = defaultUserInventoryItems(0)
+// 进频道大厅默认生效/穿戴道具列表 (由 StarterKit 统一定义)
+val DEFAULT_USER_INVENTORY_ITEMS: List<UserInventoryEntry> = defaultUserInventoryItems(0)
 
 /**
- * 进频道时下发的默认穿戴三件套: 角色卡 + 道具栏 + 进阶卡。
- *
- * 角色卡跟随玩家当前选中的角色 ([bomber]): 否则大厅换角色后一进频道就被 op 198
- * 重建回皮蛋, `SendUserInfo` 的名片也跟着错。
+ * 默认初始穿戴条目清单（基于 [StarterKit.defaultInventory]）。
  */
-fun defaultUserInventoryItems(bomber: Int = 0): List<UserInventoryEntry> {
-    val (charItemId, charToken) = CharacterRules.bomberCharCard(bomber)
-    return listOf(
-        UserInventoryEntry(itemId = charItemId, slot = EquipSlot.CHARACTER, param = 20, token = charToken, status = 192),
-        UserInventoryEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param = 1, token = "Item/ItemBag", status = 255),
-        UserInventoryEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param = 1, token = "Item/CharDeco", status = 255), // 蓝妹妹 (LuxuryMarid / Posh Evie) 进阶卡
-    )
-}
+fun defaultUserInventoryItems(bomber: Int = 0): List<UserInventoryEntry> =
+    inventoryEntries(StarterKit.defaultInventory(bomber), bomber)
 
 fun UserInventory(
     inventories: List<List<UserInventoryEntry>> = listOf(DEFAULT_USER_INVENTORY_ITEMS, DEFAULT_USER_INVENTORY_ITEMS)
@@ -118,70 +109,53 @@ fun UserInventory(
  */
 const val BAG_ONLY_SLOT = EquipSlot.BAG
 
-/**
- * 把服务端背包（[bnbemu.packet.UserItemEntry]）拼成 S→C op 198 的条目。
- *
- * ⚠️ op 198 是客户端**唯一**会整体重建背包的入口：
- *   `CUserInventoryMan::ReadEquippedInventory` (`0x67601D`) 先把两位玩家的背包/装备清空，
- *   再由 `ApplyEquippedInventory` (`0x6757A6`) 逐条 `sub_65D55F` 重建。
- *   所以服务端认账的背包必须放进这份清单，否则：
- *   商城里买完客户端自己塞进背包 → 一进频道被 op 198 清空 → 物品丢失。
- *   （S→C op 320 是商城专用的「单件商品入包」，且定义查的是商城商品管理器，
- *     在频道/大厅里查不到，不能用来持久化背包。）
- *
- * @param excludeIds 已经穿在身上的 itemId：这些条目由 [equippedInventoryEntries] 以真实
- *   装备槽下发，不能再以 0xFF 重复入包（否则客户端背包里会多出一条重复物品，
- *   而 op 198 是「全量真相」，重复条目会被当成两件不同物品分别落地）。
- */
+private fun toInventoryPacketEntry(item: UserItemEntry, bomber: Int): UserInventoryEntry {
+    val def = ItemDefCatalog.find(item.itemId)
+    return when {
+        item.equipSlot == EquipSlot.CHARACTER -> {
+            val (charItemId, charToken) = CharacterRules.bomberCharCard(bomber)
+            UserInventoryEntry(
+                itemId = item.itemId.takeIf { it != 0 } ?: charItemId,
+                slot = EquipSlot.CHARACTER,
+                param = 20,
+                token = charToken,
+                status = 192,
+            )
+        }
+        item.isEquipped -> UserInventoryEntry(
+            itemId = item.itemId,
+            slot = item.equipSlot!! % EQUIP_SLOTS_PER_GROUP,
+            param = item.count.coerceAtLeast(1),
+            token = def?.name ?: "",
+            status = 255,
+        )
+        else -> UserInventoryEntry(
+            itemId = item.itemId,
+            slot = BAG_ONLY_SLOT,
+            param = item.count.coerceAtLeast(1),
+            token = def?.name ?: "",
+            status = 255,
+        )
+    }
+}
+
 fun bagInventoryEntries(
     items: List<UserItemEntry>,
     excludeIds: Set<Int> = emptySet(),
 ): List<UserInventoryEntry> = items
-    .filter { it.itemId != 0 && it.itemId !in excludeIds }
-    .map { item ->
-        val def = ItemDefCatalog.find(item.itemId)
-        UserInventoryEntry(
-            itemId = item.itemId,
-            slot = BAG_ONLY_SLOT,
-            param = 1,
-            token = def?.name ?: "",
-            duration = 240000,
-            status = 255,
-        )
-    }
-
-fun equippedInventoryEntries(equips: Map<Int, Int>): List<UserInventoryEntry> = equips
-    .filterValues { it != 0 }
-    .map { (compositeSlot, itemId) ->
-        val def = ItemDefCatalog.find(itemId)
-        UserInventoryEntry(
-            itemId = itemId,
-            slot = compositeSlot % EQUIP_SLOTS_PER_GROUP,
-            param = 1,
-            token = def?.name ?: "",
-            duration = 240000,
-            status = 255,
-        )
-    }
+    .filter { it.itemId != 0 && !it.isEquipped && it.itemId !in excludeIds }
+    .map { toInventoryPacketEntry(it, bomber = 0) }
 
 /**
- * 组装 S→C op 198 的完整清单 (进频道 / 商城退出重进大厅 / 背包查询都走这里)。
- *
- * 顺序与真实抓包一致: 先默认穿戴条目 (角色卡 / 道具栏 / 进阶卡), 再背包条目 (0xFF)。
- * 服务端 op 273 记录下来的装备 (背景 / 旗帜 / 边框 / 气泡 / 特效 …) 会以真实槽位**覆盖**
- * 同「大类+子槽位」的默认条目 —— 否则换角色卡或换背景时客户端会同时收到两条同槽条目。
+ * 把统一库存列表（[UserItemEntry]）编码为 S→C op 198 清单：
+ * 先已穿戴条目，再背包条目 (0xFF)。所有发包直接读取玩家真实库存，不再临时拼接默认装备。
  */
 fun inventoryEntries(
-    defaults: List<UserInventoryEntry>,
-    bag: List<UserItemEntry>,
-    equips: Map<Int, Int>,
+    inventory: List<UserItemEntry>,
+    bomber: Int = 0,
 ): List<UserInventoryEntry> {
-    val equipped = equippedInventoryEntries(equips)
-    val equippedIds = equipped.map { it.itemId }.toSet()
-
-    val merged = LinkedHashMap<Pair<Int, Int>, UserInventoryEntry>()
-    defaults.forEach { merged[InventoryRules.equipSlotKey(it.itemId, it.slot)] = it }
-    equipped.forEach { merged[InventoryRules.equipSlotKey(it.itemId, it.slot)] = it }
-
-    return merged.values + bagInventoryEntries(bag, equippedIds)
+    val valid = inventory.filter { it.itemId != 0 }
+    val equipped = valid.filter { it.isEquipped }.map { toInventoryPacketEntry(it, bomber) }
+    val bag = valid.filter { !it.isEquipped }.map { toInventoryPacketEntry(it, bomber) }
+    return equipped + bag
 }

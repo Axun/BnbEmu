@@ -1,7 +1,7 @@
 package bnbemu.handler.shop
 
+import bnbemu.domain.StarterKit
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.user.DEFAULT_USER_INVENTORY_ITEMS
 import bnbemu.packet.user.UserInventory
 import bnbemu.packet.user.inventoryEntries
 import bnbemu.service.player
@@ -12,16 +12,15 @@ import bnbemu.service.player
 // 不能用 op 320：320 是商城专用的「按商品定义塞一件商品」，定义查的是商城商品管理器
 // (dword_993D58)，在大厅/频道里取不到，包会被静默丢弃（见 packet/UserItemList.kt）。
 //
-// ⚠️ 这里同样是「全量真相」：漏掉 273 记录下来的装备（背景/旗帜/边框…）会让客户端
-//    在打开背包时把它们判成已脱下，所以必须走和进频道同一套 inventoryEntries。
+// ⚠️ 这里同样是「全量真相」：直接从玩家统一库存读取，保证与进频道完全一致。
 val UserItemListReq = PKTHandler { c ->
     val player = c.player
-    val bag = player?.items.orEmpty()
-    val equips = player?.equips.orEmpty()
-    val inventory = inventoryEntries(DEFAULT_USER_INVENTORY_ITEMS, bag, equips)
-    if (bag.isNotEmpty() || equips.isNotEmpty()) {
+    val bomber = player?.bomber ?: 0
+    val rawInventory = player?.inventory ?: StarterKit.defaultInventory(bomber)
+    val inventory = inventoryEntries(rawInventory, bomber)
+    if (player != null) {
         println(
-            "[UserItemListReq] op 198 清单: 背包 ${bag.size} 件 + 装备 ${equips.size} 件" +
+            "[UserItemListReq] op 198 清单: 背包 ${player.items.size} 件 + 装备 ${player.equips.size} 件" +
                 " → 共 ${inventory.size} 条"
         )
     }

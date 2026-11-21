@@ -97,7 +97,7 @@ object Room {
         if (player != null) {
             val requestedBomber = requestedBombers.firstOrNull() ?: player.bomber
             val chosenBomber = if (requestedBomber in 0..15) requestedBomber else player.bomber
-            val effectiveBomber = CharacterRules.resolveEffectiveBomber(chosenBomber)
+            val effectiveBomber = CharacterRules.resolveEffectiveBomber(chosenBomber, player)
             PlayerService.selectBomber(player.userId, effectiveBomber)
 
             slots[0].apply {

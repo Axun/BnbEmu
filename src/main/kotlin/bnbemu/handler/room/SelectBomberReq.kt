@@ -34,9 +34,8 @@ val SelectBomberReq = PKTHandler { c ->
     val slotIdx = Decode1
     val bomberIdx = Decode1
 
-    val effectiveBomber = CharacterRules.resolveEffectiveBomber(bomberIdx)
-
     val player = c.player
+    val effectiveBomber = CharacterRules.resolveEffectiveBomber(bomberIdx, player)
     if (player != null && slotIdx == 0) {
         PlayerService.selectBomber(player.userId, effectiveBomber)
     }

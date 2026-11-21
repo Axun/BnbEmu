@@ -9,6 +9,7 @@ import bnbemu.domain.EquipSlot
 import bnbemu.domain.MAX_CASH
 import bnbemu.domain.MAX_LUCCI
 import bnbemu.domain.MAX_STACK_COUNT
+import bnbemu.domain.StarterKit
 import bnbemu.handler.AskFirstInfo
 import bnbemu.handler.OnConnEstablished
 import bnbemu.handler.shop.BuyItemReq
@@ -354,5 +355,29 @@ class PlayerServiceTest {
         } finally {
             ch.finishAndReleaseAll()
         }
+    }
+
+    @Test
+    fun `new profile initializes StarterKit into unified inventory and gates Marid evolution`() {
+        val profile = PlayerService.loginOrRegister("starter_user")
+        assertTrue(profile.items.isEmpty(), "初始三件套均为穿戴状态，背包应为空")
+        assertEquals(3, profile.inventory.size)
+        assertEquals(1, profile.equips[EquipSlot.CHARACTER])
+        assertEquals(StarterKit.ITEM_BAG_ID, profile.equips[EquipSlot.ITEM_BAG])
+        assertEquals(CharacterRules.MARID_EVO_CARD_ITEM_ID, profile.equips[StarterKit.CHAR_DECO_COMPOSITE_SLOT])
+
+        // 持有并装备 2082 进阶卡时 4 → 10；脱掉 2082 后回落 4
+        assertEquals(10, CharacterRules.resolveEffectiveBomber(4, profile))
+        PlayerService.applyEquipChange(
+            profile.userId,
+            listOf(EquipChangeEntry(EquipSlot.BAG, CharacterRules.MARID_EVO_CARD_ITEM_ID)),
+        )
+        assertNull(profile.equips[StarterKit.CHAR_DECO_COMPOSITE_SLOT])
+        assertTrue(profile.items.any { it.itemId == CharacterRules.MARID_EVO_CARD_ITEM_ID })
+        assertEquals(4, CharacterRules.resolveEffectiveBomber(4, profile))
+
+        // 切换角色同步更新统一库存里的角色卡槽位
+        PlayerService.selectBomber(profile.userId, 5)
+        assertEquals(5, profile.equips[EquipSlot.CHARACTER])
     }
 }
