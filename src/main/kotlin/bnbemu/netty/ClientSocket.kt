@@ -51,8 +51,8 @@ class ClientSocket : SimpleChannelInboundHandler<ByteBuf>() {
     override fun channelRead0(ctx: ChannelHandlerContext, buf: ByteBuf) {
         val opcode = buf.Decode2
 
-        val handler = handlerArray[opcode]
-        val opName = OpcodeManager.recvOps[opcode]
+        val handler = handlerArray.getOrNull(opcode)
+        val opName = OpcodeManager.getRecvOpName(opcode)
         if (debugMode || opName == null || handler == null) {
             logPacket(opcode, opName, handler, buf)
         }
@@ -71,7 +71,7 @@ class ClientSocket : SimpleChannelInboundHandler<ByteBuf>() {
             // 完全定位不到出錯的呼叫點; 帶上 cause 後 exceptionCaught 的 printStackTrace
             // 會印出完整 Caused by 鏈
             throw IllegalStateException(
-                "業務邏輯錯誤 [${OpcodeManager.recvOps[opcode]}] | ${e::class.simpleName}: ${e.message}",
+                "業務邏輯錯誤 [$opName] | ${e::class.simpleName}: ${e.message}",
                 e
             )
         }

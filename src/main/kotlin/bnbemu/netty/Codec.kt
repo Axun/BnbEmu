@@ -79,6 +79,7 @@ class Encoder : MessageToByteEncoder<PKT>() {
 
     override fun encode(ctx: ChannelHandlerContext, pkt: PKT, out: ByteBuf) {
         val opcode = OpcodeManager.getSendOp(pkt.javaClass)
+        require(opcode >= 0) { "未註冊的發送包類型: ${pkt.javaClass.name}" }
         val encrypted = handshakeSent
         val headerLen = if (encrypted) 6 else 3
 

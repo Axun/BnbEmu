@@ -6,10 +6,13 @@ import bnbemu.packet.ConnEstablished
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
+import io.netty.handler.codec.EncoderException
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -118,5 +121,43 @@ class CodecTest {
         ch.writeInbound(frame)
         assertFalse(ch.isOpen)
         ch.finishAndReleaseAll()
+    }
+
+    @Test
+    fun `Encoder rejects unregistered PKT instead of emitting -1 opcode`() {
+        OpcodeManager.init()
+        val ch = EmbeddedChannel(Encoder())
+        try {
+            val unregistered = PKT { out -> out.Encode1(1) }
+            val ex = assertThrows(EncoderException::class.java) {
+                ch.writeOutbound(unregistered)
+            }
+            assertTrue(ex.cause is IllegalArgumentException)
+        } finally {
+            ch.finishAndReleaseAll()
+        }
+    }
+
+    @Test
+    fun `ClientSocket ignores out-of-range opcode safely`() {
+        OpcodeManager.init()
+        val ch = EmbeddedChannel(ClientSocket())
+        try {
+            val buf = Unpooled.buffer()
+            SendPacketBase(buf).apply { Encode2(65535) }
+            assertFalse(ch.writeInbound(buf))
+            assertTrue(ch.isOpen)
+        } finally {
+            ch.finishAndReleaseAll()
+        }
+    }
+
+    @Test
+    fun `OpcodeManager getRecvOpName handles valid and out-of-range opcodes`() {
+        OpcodeManager.init()
+        assertEquals("ChannelsStateReq", OpcodeManager.getRecvOpName(15))
+        assertNull(OpcodeManager.getRecvOpName(-1))
+        assertNull(OpcodeManager.getRecvOpName(handlerArray.size))
+        assertNull(OpcodeManager.getRecvOpName(65535))
     }
 }
