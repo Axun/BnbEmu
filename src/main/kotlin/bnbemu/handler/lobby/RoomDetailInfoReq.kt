@@ -32,7 +32,7 @@ import org.tinylog.kotlin.Logger
 //     96 CA 53 E2 = Encode4(119) → 序號 119 = 同一筆條目的 f4
 //
 // ---- 回應 (2026-11-15 實測更正) ----
-//   S→C **op 85** RoomDetailInfo (EN_18_send.yaml), 見 packet/RoomDetailInfo.kt。
+//   S→C **op 85** RoomDetailInfo (opcode_send.yaml), 見 packet/RoomDetailInfo.kt。
 //   客戶端 case 'U' → sub_50702E 清掉上面的等待鎖, E1(1) 後轉大廳策略 +0x1C
 //   讀 8 槽名單並彈 CRoomDetailInfoDialog (E1(0) 則彈 "NotValidRoomInfo")。
 //   請求帶來的房號/序號只用於校驗與紀錄, op 85 的 body 不含這兩個欄位。

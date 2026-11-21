@@ -1,22 +1,20 @@
 package bnbemu.netty
 
 import io.github.classgraph.ClassGraph
-import bnbemu.Ver
-import bnbemu.loadYaml
-import bnbemu.locale
+import bnbemu.loadYamlResource
 import org.tinylog.kotlin.Logger
 import java.util.IdentityHashMap
 
 object OpcodeManager {
     val recvOps: Map<Int, String>
     private val sendOps: Map<String, Int>
-    val sendOpCache = IdentityHashMap<Class<*>, Int>(1000)
-//    private val sendOpCache = ConcurrentHashMap<Class<*>, Int>()
+    // 只读访问
+    private val sendOpCache = IdentityHashMap<Class<*>, Int>(1000)
 
     init {
         //  載入 YAML
-        val recvYaml: Map<String, Int> = loadYaml("${locale}_${Ver}_recv")
-        val sendYaml: Map<String, Int> = loadYaml("${locale}_${Ver}_send")
+        val recvYaml: Map<String, Int> = loadYamlResource("opcode_recv")
+        val sendYaml: Map<String, Int> = loadYamlResource("opcode_send")
 
         val pktInterface = PKT::class.java.name
         val handlerType = PKTHandler::class.java.name
@@ -25,7 +23,6 @@ object OpcodeManager {
         ClassGraph()
             .enableAllInfo()
             .ignoreFieldVisibility()
-//            .acceptPackages("bnbemu.handler")
             .acceptPackages("bnbemu.handler", "bnbemu.packet")
             .scan().use { scanResult -> // use 區塊自動關閉資源
 
@@ -67,10 +64,4 @@ object OpcodeManager {
 
     // 獲取 Opcode (含快取)
     fun getSendOp(clazz: Class<*>): Int = sendOpCache[clazz] ?: -1
-/*    fun getSendOp(clazz: Class<*>): Int {
-        return sendOpCache.getOrPut(clazz) {
-            val filteredName = clazz.name.substringAfter('$').substringBefore('$').substringBefore('_')
-            sendOps[filteredName] ?: error("Opcode for '$filteredName' not found in YAML")
-        }
-    }*/
 }

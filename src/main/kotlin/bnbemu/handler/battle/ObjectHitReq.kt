@@ -38,7 +38,7 @@ import bnbemu.server.Room
 //     ⇒ 真正闭环 (已实现): 按 gridX/gridY 在 BattleSession.bombs 定位水泡, 延时 delayMs 后广播
 //       SetBombState(bomb.id, 0); objId 是客户端混淆 ID, 不能当 bombId 用。
 //   * ⚠️ 真端 TS 的 OnPlayEmotion: 108 → 118 (转发给除发送者之外的人) 是另一版本语义;
-//     EN v18 客户端没有表情走 108 的发包点, 故 EN_18_recv.yaml 的 PlayEmotionReq 已注释。
+//     EN v18 客户端没有表情走 108 的发包点, 故 opcode_recv.yaml 的 PlayEmotionReq 已注释。
 //   * 引爆判定与广播全在 BattleSession.onObjectHit: 命中格无水泡 / 重复上报会被跳过,
 //     本 handler 只负责解析并转发参数, 不直接发包。
 val ObjectHitReq = PKTHandler { c ->

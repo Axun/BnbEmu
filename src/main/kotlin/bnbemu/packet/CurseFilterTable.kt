@@ -10,7 +10,7 @@ import java.io.ByteArrayOutputStream
 // ============================================================================
 // 旧名 MultiServerTail 是按推送顺序猜的（排在 op 1 MultiServerInit 之后），与 multiserver 无关；
 // 2026-11-18 按客户端 CCurseFilter 正名（同 DynamicMapInfo 从 EnableShop 正名的先例）。
-// opcode 绑定靠编译产物类名 `CurseFilterTableKt$CurseFilterTable...` 推导，EN_18_send.yaml 的 key 必须同名。
+// opcode 绑定靠编译产物类名 `CurseFilterTableKt$CurseFilterTable...` 推导，opcode_send.yaml 的 key 必须同名。
 //
 // 载荷（39 B = 2 B opcode + 37 B，基准 cap/firstconn_s2c_op51.bin）：
 //   Encode1Bool(true)        // 1 = 后面跟资料块（客户端写 filterstr.ssd）
@@ -84,7 +84,7 @@ internal val EN_CURSE_FILTER = listOf(
     CurseFilterEntry(word = "Channel 1", group = FILTER_GROUP_DEFAULT, extra = "Normal"),
 )
 
-// server = CCurseFilter::OnPacket 的下发端（客户端处理函数 sub_6B976E，opcode 对应见 EN_18_send.yaml）
+// server = CCurseFilter::OnPacket 的下发端（客户端处理函数 sub_6B976E，opcode 对应见 opcode_send.yaml）
 fun CurseFilterTable(entries: List<CurseFilterEntry> = EN_CURSE_FILTER) = PKT {
     // 块 = SSD 容器（[0x18][u32 块长-5][compress] + 词条流）→ ssdEncode 上线上字节
     val block = ssdEncode(buildSsdBlock(curseFilterStream(entries)))

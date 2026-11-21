@@ -28,7 +28,7 @@ import org.tinylog.kotlin.Logger
 // 末兩欄由 sub_50D4DC 的 a2 / a3 傳入 (呼叫點 229835 / 233888 / 429697 / 598962),
 // 與等級/地圖/模式篩選有關, 模擬器不使用, 但**必須消費**否則解析指標錯位。
 //
-// 回應: S→C op 84 JoinFreeSessionResult (EN_18_send.yaml), 見 packet/JoinFreeSessionResult.kt。
+// 回應: S→C op 84 JoinFreeSessionResult (opcode_send.yaml), 見 packet/JoinFreeSessionResult.kt。
 // 模擬器目前不實作自動匹配房間, 依需求固定回 case 2 "CantFindEmptyRoom" (1 位元組),
 // 客戶端會清等待鎖並彈錯誤框, 不會切進房間場景 —— 這正是與 op 85 房間詳情的差別。
 // ============================================================================

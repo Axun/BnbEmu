@@ -486,7 +486,7 @@ class ShopTest {
 
     @Test
     fun testOp103PacketNameIsRegistered() {
-        // 改名后 EN_18_send.yaml 的 key 必须与函数名一致, 否则 OpcodeManager 扫不到 op 103
+        // 改名后 opcode_send.yaml 的 key 必须与函数名一致, 否则 OpcodeManager 扫不到 op 103
         assertEquals(103, OpcodeManager.getSendOp(PracticeSetSlotAI(1)::class.java))
     }
 
