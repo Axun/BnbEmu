@@ -1,5 +1,6 @@
 package bnbemu.packet.lobby
 
+import bnbemu.codec.encodeName
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
 import bnbemu.packet.CAPTURE_USER_ID

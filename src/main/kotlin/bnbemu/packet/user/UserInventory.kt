@@ -8,7 +8,7 @@ import bnbemu.domain.StarterKit
 import bnbemu.domain.UserItemEntry
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
-import bnbemu.packet.lobby.encodeName
+import bnbemu.codec.encodeName
 
 // ============================================================================
 // 用户穿戴装备与选角判定机制 (S→C op 198) — CA.exe 0x00502F37 分发至 0x004F9416

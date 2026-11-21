@@ -1,8 +1,8 @@
 package bnbemu.data
 
 import bnbemu.codec.Adler32
-import bnbemu.netty.buildSsdBlock
-import bnbemu.netty.ssdEncode
+import bnbemu.codec.buildSsdBlock
+import bnbemu.codec.ssdEncode
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlMap
 import com.charleskorn.kaml.YamlScalar

@@ -3,7 +3,7 @@ package bnbemu.packet.user
 import bnbemu.domain.EquipSlot
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
-import bnbemu.packet.lobby.encodeName
+import bnbemu.codec.encodeName
 
 /**
  * 字符串 Token 编码 (与 SessionList.kt 令牌算法同款):

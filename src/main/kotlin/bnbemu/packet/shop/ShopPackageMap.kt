@@ -2,8 +2,8 @@ package bnbemu.packet.shop
 
 import bnbemu.codec.*
 import bnbemu.netty.PKT
-import bnbemu.netty.buildSsdBlock
-import bnbemu.netty.ssdEncode
+import bnbemu.codec.buildSsdBlock
+import bnbemu.codec.ssdEncode
 import java.io.ByteArrayOutputStream
 
 /**

@@ -1,8 +1,8 @@
 package bnbemu.packet.shop
 
 import bnbemu.netty.PKT
-import bnbemu.netty.buildSsdBlock
-import bnbemu.netty.ssdEncode
+import bnbemu.codec.buildSsdBlock
+import bnbemu.codec.ssdEncode
 
 /**
  * S→C op 204: 商城字串表 (ShopStringTable / stringtable.ini 快取)

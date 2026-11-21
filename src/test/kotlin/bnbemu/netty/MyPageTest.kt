@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 import bnbemu.ACP
 import bnbemu.packet.user.DEFAULT_USER_EQUIPS
 import bnbemu.packet.user.UserInfoResult
-import bnbemu.packet.lobby.decodeName
+import bnbemu.codec.decodeName
 
 class MyPageTest {
 

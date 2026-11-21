@@ -4,7 +4,7 @@ import bnbemu.debugMode
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.netty.readTokenBytes
-import bnbemu.packet.lobby.decodeName
+import bnbemu.codec.decodeName
 
 /**
  * C→S op 297：登记本端会话密钥（RegisterSessionKey）

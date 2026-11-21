@@ -3,7 +3,7 @@ package bnbemu.server
 import bnbemu.domain.PlayerProfile
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.SendPacketBase
-import bnbemu.netty.ssdEncode
+import bnbemu.codec.ssdEncode
 
 const val FLAG_CLOSED = 0x1
 const val FLAG_CHIEF = 0x2

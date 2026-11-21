@@ -2,8 +2,8 @@ package bnbemu.data
 
 import bnbemu.ACP
 import bnbemu.codec.Adler32
-import bnbemu.netty.buildSsdBlock
-import bnbemu.netty.ssdEncode
+import bnbemu.codec.buildSsdBlock
+import bnbemu.codec.ssdEncode
 import bnbemu.codec.*
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
