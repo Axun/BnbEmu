@@ -101,7 +101,7 @@ class PushMovableBoxTest {
             val sent = ch.outboundMessages().toList()
             assertEquals(1, sent.size, "一次推箱动作必须恰好下发一包 S→C op 142")
             val buf = Unpooled.buffer()
-            (sent[0] as PKT).encode(SendPacketBase(buf, 3))
+            (sent[0] as PKT).encode(SendPacketBase(buf))
             val actual = ByteArray(buf.readableBytes())
             buf.readBytes(actual)
             assertEquals(
@@ -128,7 +128,7 @@ class PushMovableBoxTest {
         // 广播载荷必须与 C→S op 109 的实测 body 逐字节同构 (同一 7B 原样回放)
         val buf = Unpooled.buffer()
         MovableBoxMove(boxSeq = 1, gridX = 1, gridY = 3, targetX = 1, targetY = 4, slotId = 0)
-            .encode(SendPacketBase(buf, 3))
+            .encode(SendPacketBase(buf))
 
         val actual = ByteArray(buf.readableBytes())
         buf.readBytes(actual)

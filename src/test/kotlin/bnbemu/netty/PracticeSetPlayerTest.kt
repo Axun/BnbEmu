@@ -22,7 +22,7 @@ class PracticeSetPlayerTest {
             Room.slots[0].bomber = 0
             val pkt0 = PracticeSetPlayer(slot = 0)
             val buf0 = Unpooled.buffer()
-            pkt0.encode(SendPacketBase(buf0, 3))
+            pkt0.encode(SendPacketBase(buf0))
             assertEquals(0, buf0.Decode1, "Slot index must be 0")
             assertEquals(0, buf0.Decode1, "PracticeSetPlayer must return 0 (Dao)")
 
@@ -30,7 +30,7 @@ class PracticeSetPlayerTest {
             Room.slots[0].bomber = 5
             val pkt5 = PracticeSetPlayer(slot = 0)
             val buf5 = Unpooled.buffer()
-            pkt5.encode(SendPacketBase(buf5, 3))
+            pkt5.encode(SendPacketBase(buf5))
             assertEquals(0, buf5.Decode1)
             assertEquals(5, buf5.Decode1, "PracticeSetPlayer must return 5 (Bazzi)")
 
@@ -38,14 +38,14 @@ class PracticeSetPlayerTest {
             Room.slots[0].bomber = 10
             val pkt10 = PracticeSetPlayer(slot = 0)
             val buf10 = Unpooled.buffer()
-            pkt10.encode(SendPacketBase(buf10, 3))
+            pkt10.encode(SendPacketBase(buf10))
             assertEquals(0, buf10.Decode1)
             assertEquals(10, buf10.Decode1, "PracticeSetPlayer must return 10 (LuxuryMarid)")
 
             // 4. 显式传参 override
             val pktOverride = PracticeSetPlayer(slot = 0, bomber = 6)
             val bufOverride = Unpooled.buffer()
-            pktOverride.encode(SendPacketBase(bufOverride, 3))
+            pktOverride.encode(SendPacketBase(bufOverride))
             assertEquals(0, bufOverride.Decode1)
             assertEquals(6, bufOverride.Decode1, "Explicit bomber parameter must be respected")
 
@@ -53,7 +53,7 @@ class PracticeSetPlayerTest {
             Room.slots[1].bomber = 5
             val pktAi = PracticeSetPlayer(slot = 1)
             val bufAi = Unpooled.buffer()
-            pktAi.encode(SendPacketBase(bufAi, 3))
+            pktAi.encode(SendPacketBase(bufAi))
             assertEquals(1, bufAi.Decode1)
             assertEquals(5, bufAi.Decode1, "AI slot must default to 5")
         } finally {
@@ -74,7 +74,7 @@ class PracticeSetPlayerTest {
             // 构造客户端发送的 op 75，角色指定为 0 (皮蛋)
             // 载荷: E2(0) E2(0) E1(0) E1(1) E1(0) E1(15) E4(66)
             val buf = Unpooled.buffer()
-            val sendPkt = SendPacketBase(buf, 3)
+            val sendPkt = SendPacketBase(buf)
             sendPkt.Encode2(0) // roomId
             sendPkt.Encode2(0) // mode
             sendPkt.Encode1(0)
@@ -103,13 +103,13 @@ class PracticeSetPlayerTest {
 
             // 槽位 0 的 op 105
             val slot0Buf = Unpooled.buffer()
-            op105List[0].encode(SendPacketBase(slot0Buf, 3))
+            op105List[0].encode(SendPacketBase(slot0Buf))
             assertEquals(0, slot0Buf.Decode1, "Slot 0 index")
             assertEquals(0, slot0Buf.Decode1, "Slot 0 bomber must be 0 (Dao) matching MyPage selection!")
 
             // 槽位 1 的 op 105 (AI)
             val slot1Buf = Unpooled.buffer()
-            op105List[1].encode(SendPacketBase(slot1Buf, 3))
+            op105List[1].encode(SendPacketBase(slot1Buf))
             assertEquals(1, slot1Buf.Decode1, "Slot 1 index")
             assertEquals(5, slot1Buf.Decode1, "AI bomber must remain 5")
         } finally {
@@ -122,7 +122,7 @@ class PracticeSetPlayerTest {
     fun testCipherStrRoundTripForRoomName() {
         // CSendPacket::EncodeStr 的 3 度混淆: 4B BE^0x96CA5395 → LE, 余 2B ^0xA569, 余 1B ^0x5A
         val buf = Unpooled.buffer()
-        SendPacketBase(buf, 3).EncodeCipherStr("Come quick~")
+        SendPacketBase(buf).EncodeCipherStr("Come quick~")
         assertEquals("Come quick~", buf.DecodeCipherStr)
         assertEquals(0, buf.readableBytes(), "长度前缀与 11B 内容都必须被消费")
     }
@@ -189,7 +189,7 @@ class PracticeSetPlayerTest {
 
             val pkt = GameStartMapInfo()
             val buf = Unpooled.buffer()
-            pkt.encode(SendPacketBase(buf, 3))
+            pkt.encode(SendPacketBase(buf))
 
             buf.Decode4 // seed
             buf.Decode2 // theme

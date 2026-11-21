@@ -55,7 +55,7 @@ class SetBomberEventTest {
 
     private fun encode(pkt: PKT): ByteArray {
         val buf = Unpooled.buffer()
-        pkt.encode(SendPacketBase(buf, 3))
+        pkt.encode(SendPacketBase(buf))
         return ByteArray(buf.readableBytes()).also { buf.readBytes(it) }
     }
 

@@ -26,7 +26,7 @@ class SelectMapTest {
     fun testSelectMapPacketEncoding() {
         val pkt = SelectMap(result = 0, themeId = 28, mapId = 175)
         val buf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(buf, 3)
+        val sendPkt = SendPacketBase(buf)
         pkt.encode(sendPkt)
 
         val inBuf = Unpooled.wrappedBuffer(buf.array(), 0, buf.writerIndex())
@@ -49,7 +49,7 @@ class SelectMapTest {
 
             val pkt = SelectMap(result = 0, themeId = 0, mapId = 172)
             val buf = Unpooled.buffer()
-            val sendPkt = SendPacketBase(buf, 3)
+            val sendPkt = SendPacketBase(buf)
             pkt.encode(sendPkt)
 
             val actualBody = ByteArray(buf.readableBytes())

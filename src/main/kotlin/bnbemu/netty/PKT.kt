@@ -4,7 +4,6 @@ import io.netty.buffer.ByteBuf
 import io.netty.util.ReferenceCounted
 import bnbemu.ACP
 import bnbemu.debugMode
-import bnbemu.isEN
 import bnbemu.showDecValue
 import bnbemu.packet.lobby.decodeName
 import java.io.ByteArrayOutputStream
@@ -58,89 +57,71 @@ fun ReceivedPacketBase.DecodeEncryptedStr(key: Int) =
     DecodeEncryptedStrAt(key)
 
 private fun ReceivedPacketBase.Decode1At(): Int {
-    if (m_nCipherDegreeInit in 1..3) {
-        val value = BufferManipulator.Decrypt1(this)
-        if (debugMode && showDecValue)
-            println("decrypt value = $value")
-        return value
-    } else {
-        return BufferManipulator.Decode1(this)
-    }
+    val value = BufferManipulator.Decrypt1(this)
+    if (debugMode && showDecValue)
+        println("decrypt value = $value")
+    return value
 }
 
 private fun ReceivedPacketBase.Decode2At(): Int {
-    if (m_nCipherDegreeInit in 1..3) {
-        val value = BufferManipulator.Decrypt2(this)
-        if (debugMode && showDecValue)
-            println("decrypt value = $value")
-        return value
-    } else {
-        return BufferManipulator.Decode2(this)
-    }
+    val value = BufferManipulator.Decrypt2(this)
+    if (debugMode && showDecValue)
+        println("decrypt value = $value")
+    return value
 }
 
 private fun ReceivedPacketBase.Decode4At(): Int {
-    if (m_nCipherDegreeInit in 1..3) {
-        val value = BufferManipulator.Decrypt4(this)
-        if (debugMode && showDecValue)
-            println("decrypt value = $value")
-        return value
-    } else {
-        return BufferManipulator.Decode4(this)
-    }
+    val value = BufferManipulator.Decrypt4(this)
+    if (debugMode && showDecValue)
+        println("decrypt value = $value")
+    return value
 }
 
 private fun ReceivedPacketBase.DecodeStrAt(): String {
-    // 3 度地區字串長度為 Encode4, 但真實 EN 伺服器雖為 3 度幀、字串長度仍是 Encode2
-    // (抓包 op 7 角色名前綴 a5 6d = Encode2(4))
-    val length = if (m_nCipherDegreeInit == 3 && !isEN) Decode4At() else Decode2At()
+    val length = Decode2At()
     return readString(length, ACP)
 }
 
 /**
- * 0x75daf0 字串加解密 (CA.exe CInPacket::DecodeStr 當 cipherDegree in 1..3 時調用):
+ * 0x75daf0 字串加解密 (CA.exe CInPacket::DecodeStr):
  *   每 4B 以 BE 讀取, XOR 0x96CA5395, 按 LE 寫入
  *   剩餘 2B 以 BE 讀取, XOR 0xA569, 按 LE 寫入
  *   剩餘 1B XOR 0x5A 寫入
  */
 private fun ReceivedPacketBase.DecodeCipherStrAt(): String {
-    val declared = if (m_nCipherDegreeInit == 3 && !isEN) Decode4At() else Decode2At()
+    val declared = Decode2At()
     // 畸形包 / 上游字段错位时声明长度可能远超剩余字节 (例如把房名内容当成 E2 长度读出 22222),
     // 直接按 declared 去 readInt 会越界抛异常 → ClientSocket.exceptionCaught 直接断开连接。
     // clamp 到实际可读长度: 正常包不受影响, 错位包最多读到一个乱码串而不会掉线。
     val length = declared.coerceIn(0, readableBytes())
     if (length <= 0) return ""
     val raw = ByteArray(length)
-    if (m_nCipherDegreeInit in 1..3) {
-        var idx = 0
-        while (idx + 4 <= length) {
-            val beVal = readInt()
-            val leVal = beVal xor 0x96CA5395.toInt()
-            raw[idx] = (leVal and 0xFF).toByte()
-            raw[idx + 1] = ((leVal shr 8) and 0xFF).toByte()
-            raw[idx + 2] = ((leVal shr 16) and 0xFF).toByte()
-            raw[idx + 3] = ((leVal shr 24) and 0xFF).toByte()
-            idx += 4
-        }
-        if (idx + 2 <= length) {
-            val beVal = readUnsignedShort()
-            val leVal = beVal xor 0xA569
-            raw[idx] = (leVal and 0xFF).toByte()
-            raw[idx + 1] = ((leVal shr 8) and 0xFF).toByte()
-            idx += 2
-        }
-        if (idx < length) {
-            raw[idx] = (readUnsignedByte().toInt() xor 0x5A).toByte()
-            idx += 1
-        }
-    } else {
-        readBytes(raw)
+    var idx = 0
+    while (idx + 4 <= length) {
+        val beVal = readInt()
+        val leVal = beVal xor 0x96CA5395.toInt()
+        raw[idx] = (leVal and 0xFF).toByte()
+        raw[idx + 1] = ((leVal shr 8) and 0xFF).toByte()
+        raw[idx + 2] = ((leVal shr 16) and 0xFF).toByte()
+        raw[idx + 3] = ((leVal shr 24) and 0xFF).toByte()
+        idx += 4
+    }
+    if (idx + 2 <= length) {
+        val beVal = readUnsignedShort()
+        val leVal = beVal xor 0xA569
+        raw[idx] = (leVal and 0xFF).toByte()
+        raw[idx + 1] = ((leVal shr 8) and 0xFF).toByte()
+        idx += 2
+    }
+    if (idx < length) {
+        raw[idx] = (readUnsignedByte().toInt() xor 0x5A).toByte()
+        idx += 1
     }
     return String(raw, ACP)
 }
 
 private fun ReceivedPacketBase.DecodeEncryptedStrAt(key: Int): String {
-    val length = if (m_nCipherDegreeInit == 3 && !isEN) Decode4At() else Decode2At()
+    val length = Decode2At()
 
     simpleStreamDecrypt3(key, readerIndex(), length)
 
@@ -153,7 +134,7 @@ private fun ReceivedPacketBase.DecodeEncryptedStrAt(key: Int): String {
 
 class SendPacketBase(
     val buf: ByteBuf,
-    private val m_nCipherDegree: Int
+    private val encrypted: Boolean = true
 ) : ReferenceCounted by buf {
 
     fun Encode1(n: Number = 0) =
@@ -175,7 +156,7 @@ class SendPacketBase(
     }
 
     /**
-     * 0x75daf0 字串加解密 (CA.exe CSendPacket::EncodeStr 當 cipherDegree in 1..3 時調用):
+     * 0x75daf0 字串加解密 (CA.exe CSendPacket::EncodeStr):
      *   以 LE 讀取字串 4B, XOR 0x96CA5395, 按 BE 寫入封包
      *   以 LE 讀取字串 2B, XOR 0xA569, 按 BE 寫入封包
      *   剩餘 1B XOR 0x5A 寫入封包
@@ -183,7 +164,7 @@ class SendPacketBase(
     fun EncodeCipherStr(s: String = "") {
         val raw = s.toByteArray(ACP)
         Encode2(raw.size)
-        if (this.m_nCipherDegree in 1..3) {
+        if (encrypted) {
             var idx = 0
             while (idx + 4 <= raw.size) {
                 val leVal = (raw[idx].toInt() and 0xFF) or
@@ -223,7 +204,7 @@ class SendPacketBase(
     }
 
     private fun Encode1At(n: Number) {
-        if (this.m_nCipherDegree in 1..3) {
+        if (encrypted) {
             BufferManipulator.Encrypt1(buf, n)
         } else {
             BufferManipulator.Encode1(buf, n)
@@ -231,7 +212,7 @@ class SendPacketBase(
     }
 
     private fun Encode2At(n: Int) {
-        if (this.m_nCipherDegree in 1..3) {
+        if (encrypted) {
             BufferManipulator.Encrypt2(buf, n)
         } else {
             BufferManipulator.Encode2(buf, n)
@@ -239,7 +220,7 @@ class SendPacketBase(
     }
 
     private fun Encode4At(n: Int) {
-        if (this.m_nCipherDegree in 1..3) {
+        if (encrypted) {
             BufferManipulator.Encrypt4(buf, n)
         } else {
             BufferManipulator.Encode4(buf, n)
@@ -248,10 +229,6 @@ class SendPacketBase(
 }
 
 private object BufferManipulator {
-    fun Decode1(buf: ByteBuf): Int = buf.readUnsignedByte().toInt()
-    fun Decode2(buf: ByteBuf): Int = buf.readUnsignedShort()
-    fun Decode4(buf: ByteBuf): Int = buf.readInt()
-
     fun Decrypt1(buf: ByteBuf): Int = buf.readUnsignedByte().toInt() xor 0x5A
     fun Decrypt2(buf: ByteBuf): Int = buf.readUnsignedShort() xor 0xA569
     fun Decrypt4(buf: ByteBuf): Int = buf.readInt() xor 0x96CA5395.toInt()

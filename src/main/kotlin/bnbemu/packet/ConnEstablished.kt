@@ -1,7 +1,6 @@
 package bnbemu.packet
 
 import bnbemu.Ver
-import bnbemu.isEN
 import bnbemu.netty.PKT
 
 // 握手

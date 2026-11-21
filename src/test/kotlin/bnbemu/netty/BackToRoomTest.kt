@@ -76,7 +76,7 @@ class BackToRoomTest {
 
     private fun bodyOf(pkt: PKT): ByteArray {
         val buf = Unpooled.buffer()
-        pkt.encode(SendPacketBase(buf, 3))
+        pkt.encode(SendPacketBase(buf))
         val body = ByteArray(buf.readableBytes())
         buf.readBytes(body)
         return body

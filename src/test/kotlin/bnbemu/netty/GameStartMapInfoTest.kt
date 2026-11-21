@@ -50,7 +50,7 @@ class GameStartMapInfoTest {
     fun testCipherStrRoundTripAndMatchesExpected() {
         val str = "Cemetery04"
         val buf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(buf, 3)
+        val sendPkt = SendPacketBase(buf)
         sendPkt.EncodeCipherStr(str)
 
         // Encode2(10) -> 0x000A ^ 0xA569 = 0xA563
@@ -68,7 +68,7 @@ class GameStartMapInfoTest {
 
         // 重新包装解码并断言还原明文
         val fullBuf = Unpooled.buffer()
-        SendPacketBase(fullBuf, 3).EncodeCipherStr(str)
+        SendPacketBase(fullBuf).EncodeCipherStr(str)
         val decoded = fullBuf.DecodeCipherStr
         assertEquals(str, decoded, "DecodeCipherStr must recover the original string")
     }
@@ -85,7 +85,7 @@ class GameStartMapInfoTest {
 
             val pkt = GameStartMapInfo()
             val buf = Unpooled.buffer()
-            val sendPkt = SendPacketBase(buf, 3)
+            val sendPkt = SendPacketBase(buf)
             pkt.encode(sendPkt)
 
             val actualBody = ByteArray(buf.readableBytes())
@@ -108,7 +108,7 @@ class GameStartMapInfoTest {
             flag = 0
         )
         val buf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(buf, 3)
+        val sendPkt = SendPacketBase(buf)
         pkt.encode(sendPkt)
 
         val seed = buf.Decode4
@@ -167,7 +167,7 @@ class GameStartMapInfoTest {
 
         val pkt = GameStartMapInfo()
         val buf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(buf, 3)
+        val sendPkt = SendPacketBase(buf)
         pkt.encode(sendPkt)
 
         buf.Decode4 // seed
@@ -225,7 +225,7 @@ class GameStartMapInfoTest {
 
         // 构造 StartGameReq 载荷 (subType=0, isCustomMap=0, fileCheckType=1, eventParam=0)
         val buf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(buf, 3)
+        val sendPkt = SendPacketBase(buf)
         sendPkt.Encode4(selectedMapId)
         sendPkt.Encode2(selectedThemeId)
         sendPkt.Encode1(0)
@@ -246,7 +246,7 @@ class GameStartMapInfoTest {
 
         assertNotNull(pkt2)
         val encBuf = Unpooled.buffer()
-        val sPkt = SendPacketBase(encBuf, 3)
+        val sPkt = SendPacketBase(encBuf)
         pkt2.encode(sPkt)
 
         encBuf.Decode4 // seed
@@ -265,7 +265,7 @@ class GameStartMapInfoTest {
 
         // 构造 StartGameReq 载荷，未知 mapId=9999
         val buf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(buf, 3)
+        val sendPkt = SendPacketBase(buf)
         sendPkt.Encode4(9999)
         sendPkt.Encode2(10)
         sendPkt.Encode1(0)
@@ -283,7 +283,7 @@ class GameStartMapInfoTest {
         assertNotNull(pkt2)
 
         val encBuf = Unpooled.buffer()
-        val sPkt = SendPacketBase(encBuf, 3)
+        val sPkt = SendPacketBase(encBuf)
         pkt2.encode(sPkt)
 
         encBuf.Decode4 // seed
@@ -299,7 +299,7 @@ class GameStartMapInfoTest {
         // 踢掉 3 號 AI 後, op112 名冊只能有 7 筆, 且槽號/出生點不得壓縮重排。
         val pkt = GameStartMapInfo(activeSlots = listOf(0, 1, 2, 4, 5, 6, 7))
         val buf = Unpooled.buffer()
-        pkt.encode(SendPacketBase(buf, 3))
+        pkt.encode(SendPacketBase(buf))
 
         buf.Decode4 // seed
         buf.Decode2 // theme
@@ -334,7 +334,7 @@ class GameStartMapInfoTest {
             ch.pipeline().addLast(client)
 
             val buf = Unpooled.buffer()
-            val sendPkt = SendPacketBase(buf, 3)
+            val sendPkt = SendPacketBase(buf)
             sendPkt.Encode4(176)
             sendPkt.Encode2(29)
             sendPkt.Encode1(0)
@@ -347,7 +347,7 @@ class GameStartMapInfoTest {
             ch.readOutbound<PKT>() // PracticeAiLevel
             val pkt112 = ch.readOutbound<PKT>() ?: error("缺少 op112 GameStartMapInfo")
             val encBuf = Unpooled.buffer()
-            pkt112.encode(SendPacketBase(encBuf, 3))
+            pkt112.encode(SendPacketBase(encBuf))
             encBuf.Decode4; encBuf.Decode2; encBuf.DecodeCipherStr; encBuf.Decode4
             encBuf.Decode1; encBuf.Decode1
             assertEquals(6, encBuf.Decode1, "只有 6 個參戰槽位時 slotCount 必須是 6")
@@ -432,7 +432,7 @@ class GameStartMapInfoTest {
         ch.pipeline().addLast(client)
 
         val req = Unpooled.buffer()
-        val reqPkt = SendPacketBase(req, 3)
+        val reqPkt = SendPacketBase(req)
         reqPkt.Encode4(176)   // mapId
         reqPkt.Encode2(29)    // themeId
         reqPkt.Encode1(0)     // subType
@@ -445,7 +445,7 @@ class GameStartMapInfoTest {
         ch.readOutbound<PKT>() // 111 PracticeAiLevel
         val pkt112 = ch.readOutbound<PKT>() ?: error("缺少 op112 GameStartMapInfo")
         val buf = Unpooled.buffer()
-        pkt112.encode(SendPacketBase(buf, 3))
+        pkt112.encode(SendPacketBase(buf))
 
         buf.Decode4           // randomSeed
         buf.Decode2           // themeId

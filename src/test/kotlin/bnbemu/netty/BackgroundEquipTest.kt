@@ -86,7 +86,7 @@ class BackgroundEquipTest {
     /** 抽 op 198 里的 (itemId, slot) 列表 */
     private fun decodeOp198(pkt: PKT): List<Pair<Int, Int>> {
         val out = Unpooled.buffer()
-        pkt.encode(SendPacketBase(out, 3))
+        pkt.encode(SendPacketBase(out))
         val invCount = out.Decode1
         assertEquals(2, invCount, "op 198 两位玩家各一份清单")
         val result = ArrayList<Pair<Int, Int>>()

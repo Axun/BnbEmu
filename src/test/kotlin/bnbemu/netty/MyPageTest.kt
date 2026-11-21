@@ -45,7 +45,7 @@ class MyPageTest {
         assertEquals(73, op, "UserInfoResult send opcode must be 73")
 
         val buf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(buf, 3)
+        val sendPkt = SendPacketBase(buf)
         pkt.encode(sendPkt)
 
         // 默认参数下的载荷大小为 202 字节 (包含 favorite="Bazzi", sweetieName="")
@@ -91,7 +91,7 @@ class MyPageTest {
         assertEquals(73, op)
 
         val buf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(buf, 3)
+        val sendPkt = SendPacketBase(buf)
         pkt.encode(sendPkt)
 
         // 他人资料无 slotIndex (少 1 字节)，但角色名 "Jacko" 5 字节 (比 "ffdf" 4 字节多 1 字节)，总长度仍为 202 字节
@@ -201,7 +201,7 @@ class MyPageTest {
             equips = DEFAULT_USER_EQUIPS
         )
         val buf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(buf, 3)
+        val sendPkt = SendPacketBase(buf)
         pkt.encode(sendPkt)
 
         // 空装备时为 202 字节，3 件装备每件 13 字节 (4+1+4+4)，总共增加 39 字节 = 241 字节

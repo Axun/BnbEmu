@@ -57,7 +57,7 @@ class ShopTest {
     fun testEnterShopResultPacket() {
         val pktSuccess = EnterShopResult(true)
         val buf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(buf, 3)
+        val sendPkt = SendPacketBase(buf)
         pktSuccess.encode(sendPkt)
 
         val inBuf = Unpooled.wrappedBuffer(buf.array(), 0, buf.writerIndex())
@@ -66,7 +66,7 @@ class ShopTest {
 
         val pktFail = EnterShopResult(false)
         val bufFail = Unpooled.buffer()
-        val sendPktFail = SendPacketBase(bufFail, 3)
+        val sendPktFail = SendPacketBase(bufFail)
         pktFail.encode(sendPktFail)
 
         val inBufFail = Unpooled.wrappedBuffer(bufFail.array(), 0, bufFail.writerIndex())
@@ -114,7 +114,7 @@ class ShopTest {
         val inventory = bnbemu.packet.user.DEFAULT_USER_INVENTORY_ITEMS + entries
         val pkt = bnbemu.packet.user.UserInventory(listOf(inventory, inventory))
         val buf = Unpooled.buffer()
-        pkt.encode(SendPacketBase(buf, 3))
+        pkt.encode(SendPacketBase(buf))
 
         val inBuf = Unpooled.wrappedBuffer(buf.array(), 0, buf.writerIndex())
         assertEquals(2, inBuf.Decode1, "两位玩家各一份清单")
@@ -139,7 +139,7 @@ class ShopTest {
     fun testEnterShopStagePacket() {
         val pkt = EnterShopStage()
         val buf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(buf, 3)
+        val sendPkt = SendPacketBase(buf)
         pkt.encode(sendPkt)
 
         val inBuf = Unpooled.wrappedBuffer(buf.array(), 0, buf.writerIndex())
@@ -213,7 +213,7 @@ class ShopTest {
 
         // op 261 实际下发的也必须是与缓存一致的戳
         val out = Unpooled.buffer()
-        ShopVersion().encode(SendPacketBase(out, 3))
+        ShopVersion().encode(SendPacketBase(out))
         val inBuf = Unpooled.wrappedBuffer(out.array(), 0, out.writerIndex())
         assertEquals(1, inBuf.Decode1, "enableShop=1")
         assertEquals(ShopCatalog.CATALOG_HASH, inBuf.Decode4)
@@ -296,7 +296,7 @@ class ShopTest {
         assertEquals(97, OpcodeManager.getSendOp(ChangeStage(11)::class.java))
 
         val out = Unpooled.buffer()
-        pkt.encode(SendPacketBase(out, 3))
+        pkt.encode(SendPacketBase(out))
         // Encode2(11) with cipherDegree 3: 0x000B ^ 0xA569 = 0xA562 (BE)
         assertEquals(0xA5, out.readUnsignedByte().toInt())
         assertEquals(0x62, out.readUnsignedByte().toInt())
@@ -332,7 +332,7 @@ class ShopTest {
         assertEquals(97, op, "ChangeStage send opcode must be 97")
 
         val outBuf = Unpooled.buffer()
-        val sendPkt = SendPacketBase(outBuf, 3)
+        val sendPkt = SendPacketBase(outBuf)
         pkt.encode(sendPkt)
 
         val inBuf = Unpooled.wrappedBuffer(outBuf.array(), 0, outBuf.writerIndex())
@@ -344,7 +344,7 @@ class ShopTest {
     /** 把 S→C op 97 的 PKT 编码再解出 stageId */
     private fun readStageId(pkt: PKT): Int {
         val out = Unpooled.buffer()
-        pkt.encode(SendPacketBase(out, 3))
+        pkt.encode(SendPacketBase(out))
         val inBuf = Unpooled.wrappedBuffer(out.array(), 0, out.writerIndex())
         val stageId = inBuf.Decode2
         assertEquals(0, inBuf.readableBytes(), "ChangeStage 包体只应有 2 字节")
@@ -504,7 +504,7 @@ class ShopTest {
 
         fun bodyOf(pkt: PKT): ByteArray {
             val out = Unpooled.buffer()
-            pkt.encode(SendPacketBase(out, 3))
+            pkt.encode(SendPacketBase(out))
             return ByteArray(out.readableBytes()).also { out.readBytes(it) }
         }
         fun e1(v: Int) = byteArrayOf((v xor 0x5A).toByte())
@@ -581,7 +581,7 @@ class ShopTest {
             assertNotNull(op20, "商城返回房间必须下发 op 20 回灌角色")
 
             val out = Unpooled.buffer()
-            op20!!.encode(SendPacketBase(out, 3))
+            op20!!.encode(SendPacketBase(out))
             val body = ByteArray(out.readableBytes()).also { out.readBytes(it) }
             val raw = Unpooled.wrappedBuffer(body)
             raw.skipBytes(29)

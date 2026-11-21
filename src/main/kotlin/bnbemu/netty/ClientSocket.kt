@@ -49,10 +49,7 @@ class ClientSocket : SimpleChannelInboundHandler<ByteBuf>() {
     }
 
     override fun channelRead0(ctx: ChannelHandlerContext, buf: ByteBuf) {
-        val opcode = when (m_nCipherDegreeInit) {
-            3 -> buf.Decode2
-            else -> buf.Decode1
-        }
+        val opcode = buf.Decode2
 
         val handler = handlerArray[opcode]
         val opName = OpcodeManager.recvOps[opcode]

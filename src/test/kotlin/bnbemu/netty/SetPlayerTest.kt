@@ -19,7 +19,7 @@ class SetPlayerTest {
 
     private fun body(pkt: PKT): ByteArray {
         val buf = Unpooled.buffer()
-        pkt.encode(SendPacketBase(buf, 3))
+        pkt.encode(SendPacketBase(buf))
         val arr = ByteArray(buf.readableBytes())
         buf.readBytes(arr)
         return arr

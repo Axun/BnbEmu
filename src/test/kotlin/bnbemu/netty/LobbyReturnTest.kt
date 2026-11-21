@@ -68,7 +68,7 @@ class LobbyReturnTest {
             assertNotNull(op198, "JoinSessionReq must send op 198 (UserInventory)")
 
             val outBuf = Unpooled.buffer()
-            op198?.encode(SendPacketBase(outBuf, 3))
+            op198?.encode(SendPacketBase(outBuf))
 
             // 解码 op 198 头部:
             // Encode1(inventoryCount)
@@ -123,7 +123,7 @@ class LobbyReturnTest {
             assertNotNull(op73, "Must send op 73 (UserInfoResult)")
 
             val outBuf = Unpooled.buffer()
-            op73?.encode(SendPacketBase(outBuf, 3))
+            op73?.encode(SendPacketBase(outBuf))
 
             // 验证 UserInfoResult 包含 Boz 角色装备条目: itemId 5 (96CA5390) + slot 15 (0x55), 且不含 Dao (96CA5394)
             val hex = ByteArray(outBuf.readableBytes()).also { outBuf.readBytes(it) }

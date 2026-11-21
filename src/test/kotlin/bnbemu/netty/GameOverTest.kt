@@ -99,7 +99,7 @@ class GameOverTest {
 
     private fun encode(pkt: PKT): ByteBuf {
         val buf = Unpooled.buffer()
-        pkt.encode(SendPacketBase(buf, 3))
+        pkt.encode(SendPacketBase(buf))
         return buf
     }
 

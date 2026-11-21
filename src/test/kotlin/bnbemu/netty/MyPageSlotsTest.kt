@@ -24,7 +24,7 @@ class MyPageSlotsTest {
 
     private fun encode(pkt: PKT): ByteArray {
         val buf = Unpooled.buffer()
-        pkt.encode(SendPacketBase(buf, 3))
+        pkt.encode(SendPacketBase(buf))
         val out = ByteArray(buf.readableBytes())
         buf.readBytes(out)
         return out

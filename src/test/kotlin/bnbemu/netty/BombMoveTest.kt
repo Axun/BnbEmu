@@ -119,7 +119,7 @@ class BombMoveTest {
         // 回显载荷必须与 C→S op 107 实测 body 去掉末尾 E2(ms) 的前 7 字节逐字节一致
         val buf = Unpooled.buffer()
         BombKickThrow(slotId = 0, bombId = 20, x = 2, y = 4, oldX = 2, oldY = 3, action = 6)
-            .encode(SendPacketBase(buf, 3))
+            .encode(SendPacketBase(buf))
 
         val actual = ByteArray(buf.readableBytes())
         buf.readBytes(actual)
@@ -154,7 +154,7 @@ class BombMoveTest {
             val sent = ch.outboundMessages().toList()
             assertEquals(1, sent.size, "一次踢泡动作必须恰好下发一包 S→C op 141")
             val buf = Unpooled.buffer()
-            (sent[0] as PKT).encode(SendPacketBase(buf, 3))
+            (sent[0] as PKT).encode(SendPacketBase(buf))
             val actual = ByteArray(buf.readableBytes())
             buf.readBytes(actual)
             assertEquals(

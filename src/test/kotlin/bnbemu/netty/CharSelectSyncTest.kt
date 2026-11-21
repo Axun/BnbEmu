@@ -43,7 +43,7 @@ class CharSelectSyncTest {
 
     private fun decodeOp198Entry(entry: PKT): Pair<Int, Int>? {
         val out = Unpooled.buffer()
-        entry.encode(SendPacketBase(out, 3))
+        entry.encode(SendPacketBase(out))
         val invCount = out.Decode1
         val result = ArrayList<Pair<Int, Int>>()
         repeat(invCount) {
@@ -152,7 +152,7 @@ class CharSelectSyncTest {
 
             op274.forEachIndexed { idx, pkt ->
                 val out = Unpooled.buffer()
-                pkt.encode(SendPacketBase(out, 3))
+                pkt.encode(SendPacketBase(out))
                 val slotType = out.Decode1
                 val itemId = out.Decode4
                 assertEquals(idx, slotType, "第 ${idx + 1} 发 op 274 的 slotType 应为 $idx")
@@ -213,7 +213,7 @@ class CharSelectSyncTest {
             assertNotNull(op73, "必须下发 op 73")
 
             val out = Unpooled.buffer()
-            op73!!.encode(SendPacketBase(out, 3))
+            op73!!.encode(SendPacketBase(out))
             val hex = ByteArray(out.readableBytes()).also { out.readBytes(it) }
                 .joinToString("") { "%02x".format(it) }
 
@@ -237,7 +237,7 @@ class CharSelectSyncTest {
     fun testOp20CarriesCharacter() {
         fun body(pkt: PKT): ByteArray {
             val out = Unpooled.buffer()
-            pkt.encode(SendPacketBase(out, 3))
+            pkt.encode(SendPacketBase(out))
             return ByteArray(out.readableBytes()).also { out.readBytes(it) }
         }
 

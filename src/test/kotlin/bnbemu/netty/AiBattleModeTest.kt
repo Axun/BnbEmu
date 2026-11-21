@@ -96,7 +96,7 @@ class AiBattleModeTest {
         while (true) {
             val pkt = ch.readOutbound<PKT>() ?: break
             val buf = Unpooled.buffer()
-            pkt.encode(SendPacketBase(buf, 3))
+            pkt.encode(SendPacketBase(buf))
             val op = OpcodeManager.getSendOp(pkt::class.java)
             result += op to buf
         }
@@ -105,7 +105,7 @@ class AiBattleModeTest {
 
     private fun encodePacket(block: SendPacketBase.() -> Unit): ByteBuf {
         val buf = Unpooled.buffer()
-        SendPacketBase(buf, 3).block()
+        SendPacketBase(buf).block()
         return buf
     }
 
@@ -155,7 +155,7 @@ class AiBattleModeTest {
             seq = 123,
             sessionType = SESSION_TYPE_BATTLE,
             state = 1,
-        ).encode(SendPacketBase(buf, 3))
+        ).encode(SendPacketBase(buf))
         assertEquals(0, buf.Decode1)
         assertEquals(75, buf.Decode2)
         assertEquals(123, buf.Decode4)

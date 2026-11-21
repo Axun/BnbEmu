@@ -1,6 +1,5 @@
 package bnbemu.packet
 
-import bnbemu.isEN
 import bnbemu.netty.PKT
 import bnbemu.netty.toBA
 
@@ -13,11 +12,6 @@ fun FirstInfoInit() = PKT {
     Encode1Bool(true)
     Encode4(1854)
     EncodeBuffer(EN_FIRST_INFO_BLOB)
-//    } else {
-////    if (Decode4 == 0)
-//        EncodeStr("http://mail.nexonclub.com/clubadmin/confirmuser")
-//        EncodeStr("http://id.nexonclub.com/nxidquery.idsocno")
-//    }
 }
 
 // 生成工具: tools/extract_first_push.py (cap/firstconn_s2c_op2.bin)

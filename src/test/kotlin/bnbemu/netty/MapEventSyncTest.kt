@@ -31,7 +31,7 @@ class MapEventSyncTest {
             entries = listOf(MapEventEntry())
         )
         val buf = Unpooled.buffer()
-        pkt.encode(SendPacketBase(buf, 3))
+        pkt.encode(SendPacketBase(buf))
 
         val actual = ByteArray(buf.readableBytes())
         buf.readBytes(actual)
@@ -59,7 +59,7 @@ class MapEventSyncTest {
         MapEventSync(
             sessionA = 176, sessionB = 29, eventId = 1, timeMs = 5203,
             entries = listOf(MapEventEntry(d = 5), MapEventEntry(d = 6), MapEventEntry(d = 7))
-        ).encode(SendPacketBase(buf, 3))
+        ).encode(SendPacketBase(buf))
 
         // 头部 10B + 3 × 5B 条目
         assertEquals(25, buf.readableBytes(), "count 字段必须等于条目数并决定包长")

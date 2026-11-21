@@ -93,7 +93,7 @@ class FxdynMapInfoPacketTest {
     @Test
     fun `DynamicMapInfo 编码结果等于动态构造的 payload`() {
         val buf = Unpooled.buffer()
-        DynamicMapInfo().encode(SendPacketBase(buf, 3))
+        DynamicMapInfo().encode(SendPacketBase(buf))
         val actual = ByteArray(buf.readableBytes())
         buf.readBytes(actual)
         assertEquals(FxdynMapInfo.buildFullPacket().size - 2, actual.size)
@@ -157,7 +157,7 @@ class FxdynMapInfoPacketTest {
     @Test
     fun `FxConfig 只有首 4 字节随校验和改变`() {
         val buf = Unpooled.buffer()
-        FxConfig().encode(SendPacketBase(buf, 3))
+        FxConfig().encode(SendPacketBase(buf))
         val bytes = ByteArray(buf.readableBytes())
         buf.readBytes(bytes)
         assertEquals(20, bytes.size)

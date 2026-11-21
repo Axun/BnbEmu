@@ -4,17 +4,12 @@ import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.decodeFromStream
 import java.io.File
 import java.nio.charset.Charset
-import java.nio.charset.StandardCharsets
 
-private val confMap: Map<String, String> = loadYaml("Config")
-
-val locale = "EN"
+const val locale = "EN"
 
 const val Ver = 18
 
 val ACP: Charset = Charset.forName("windows-1252")
-
-val isEN = true
 
 val debugMode = true
 val showDecValue = false
