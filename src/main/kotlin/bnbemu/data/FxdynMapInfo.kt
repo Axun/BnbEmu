@@ -1,6 +1,6 @@
 package bnbemu.data
 
-import bnbemu.crypto.Adler32
+import bnbemu.codec.Adler32
 import bnbemu.netty.buildSsdBlock
 import bnbemu.netty.ssdEncode
 import com.charleskorn.kaml.Yaml

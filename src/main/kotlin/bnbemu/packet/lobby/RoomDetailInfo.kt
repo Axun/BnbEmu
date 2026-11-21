@@ -1,6 +1,6 @@
 package bnbemu.packet.lobby
 
-import bnbemu.constants.MAX_SESSION_SLOTS
+import bnbemu.domain.MAX_SESSION_SLOTS
 import bnbemu.netty.PKT
 
 // ============================================================================

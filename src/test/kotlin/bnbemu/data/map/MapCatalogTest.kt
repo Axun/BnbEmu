@@ -1,6 +1,7 @@
 package bnbemu.data.map
 
 import bnbemu.data.FxdynMapInfo
+import bnbemu.data.MapCatalog
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse

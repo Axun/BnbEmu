@@ -1,4 +1,4 @@
-package bnbemu.crypto
+package bnbemu.codec
 
 /**
  * Adler-32 校验和工具类。

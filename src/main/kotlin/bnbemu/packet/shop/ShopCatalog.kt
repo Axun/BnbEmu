@@ -1,7 +1,7 @@
 package bnbemu.packet.shop
 
-import bnbemu.data.shop.ShopCatalogData
-import bnbemu.data.shop.ShopItemEntry
+import bnbemu.data.ShopCatalogData
+import bnbemu.data.ShopItemEntry
 import bnbemu.netty.PKT
 
 /**

@@ -1,6 +1,6 @@
 package bnbemu.server
 
-import bnbemu.constants.MAX_SESSION_SLOTS
+import bnbemu.domain.MAX_SESSION_SLOTS
 import bnbemu.debugMode
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.PKT

@@ -1,6 +1,6 @@
 package bnbemu.packet.user
 
-import bnbemu.data.shop.ShopCatalogData
+import bnbemu.data.ShopCatalogData
 import bnbemu.netty.PKT
 import bnbemu.packet.CAPTURE_USER_ID
 import bnbemu.packet.SESSION_STRING

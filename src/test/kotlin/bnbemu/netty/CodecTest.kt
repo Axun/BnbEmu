@@ -1,6 +1,6 @@
 package bnbemu.netty
 
-import bnbemu.crypto.CRC8
+import bnbemu.codec.CRC8
 import bnbemu.packet.ChannelsGameState
 import bnbemu.packet.ConnEstablished
 import io.netty.buffer.ByteBuf

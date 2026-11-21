@@ -1,4 +1,4 @@
-package bnbemu.constants
+package bnbemu.domain
 
 // 早期角色是美服官方命名，由于关服早，后面的角色直接用韩服名
 enum class CharacterType(val value: Int) {
@@ -52,3 +52,11 @@ enum class CharacterType(val value: Int) {
     // 超级洋葱妹妹
     SuperErini(29)
 }
+
+/**
+ * 会话槽位上限 —— 真端 MAX_SESSION_SLOTS（reference/古早真端ts实现/src/FXGS/Defs.ts:109）。
+ *
+ * 房间恒为 8 槽；地图的 maxPlayer 可以小于它（4 人图 / 1 人的广场图），
+ * 超过它的地图人数一律按 8 截断（GameSession.ts:1384 LaunchGameStage）。
+ */
+const val MAX_SESSION_SLOTS = 8

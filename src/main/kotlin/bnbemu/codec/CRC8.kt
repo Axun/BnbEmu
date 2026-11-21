@@ -1,35 +1,35 @@
-package bnbemu.crypto
+package bnbemu.codec
 
 import io.netty.buffer.ByteBuf
 
-object CRC32 {
-    private val crc_table = IntArray(256)
+object CRC8 {
+    private val crc8_table = IntArray(256)
     private var bInit = false
 
     private fun GenCRCTable() {
         repeat(256) { i ->
-            var v = i shl 24
+            var v = i
             repeat(8) {
-                v = if ((v and Int.MIN_VALUE) != 0) {
-                    (v shl 1) xor 0x04C11DB7
+                v = if (v and 0x80 != 0) {
+                    (v shl 1) xor 7
                 } else {
                     v shl 1
                 }
             }
-            crc_table[i] = v
+            crc8_table[i] = v and 0xFF
         }
         bInit = true
     }
 
-    fun UpdateCRC(dwCrcKey: Int, data: ByteArray, Size: Int): Int {
+    fun UpdateCRC(dwCrcKey: Int, p: ByteArray, Size: Int): Int {
         if (!bInit)
             GenCRCTable()
 
-        var crc = dwCrcKey
+        var crc = dwCrcKey and 0xFF
 
         repeat(Size) { i ->
-            val index = ((data[i].toInt() and 0xFF) xor (crc ushr 24)) and 0xFF
-            crc = crc_table[index] xor (crc shl 8)
+            val index = p[i].toInt() and 0xFF
+            crc = crc8_table[crc xor index]
         }
 
         return crc
@@ -44,11 +44,11 @@ object CRC32 {
         if (!bInit)
             GenCRCTable()
 
-        var crc = dwCrcKey
+        var crc = dwCrcKey and 0xFF
 
         repeat(Size) { i ->
-            val index = (buf.getUnsignedByte(offset + i).toInt() xor (crc ushr 24)) and 0xFF
-            crc = crc_table[index] xor (crc shl 8)
+            val index = buf.getUnsignedByte(offset + i).toInt()
+            crc = crc8_table[crc xor index]
         }
 
         return crc

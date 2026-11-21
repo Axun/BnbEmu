@@ -4,7 +4,7 @@ import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
-import bnbemu.data.item.ItemDefCatalog
+import bnbemu.data.ItemDefCatalog
 import bnbemu.domain.EquipSlot
 import bnbemu.domain.PlayerProfile
 import bnbemu.handler.JoinSessionReq

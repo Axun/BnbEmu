@@ -1,8 +1,7 @@
-package bnbemu.data.shop
+package bnbemu.data
 
 import bnbemu.ACP
-import bnbemu.crypto.Adler32
-import bnbemu.data.DataResource
+import bnbemu.codec.Adler32
 import bnbemu.netty.buildSsdBlock
 import bnbemu.netty.ssdEncode
 import bnbemu.packet.u16le
@@ -142,7 +141,7 @@ data class ShopItemEntry(
 }
 
 /**
- * 商城目录主数据管理器（与 [bnbemu.data.map.MapCatalog] 平级）。
+ * 商城目录主数据管理器（与 [MapCatalog] 平级）。
  * 负责加载 `data/shop_catalog_base.bin`、商品查询、缓存块与版本戳生成。
  */
 object ShopCatalogData {

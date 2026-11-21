@@ -1,8 +1,6 @@
-package bnbemu.data.map
+package bnbemu.data
 
-import bnbemu.constants.MAX_SESSION_SLOTS
-import bnbemu.data.DataResource
-import bnbemu.data.FxdynMapInfo
+import bnbemu.domain.MAX_SESSION_SLOTS
 import java.io.File
 import java.net.JarURLConnection
 import kotlin.random.Random
@@ -99,7 +97,7 @@ object MapCatalog {
         for (name in names) {
             val data = DataResource.bytes("$DIR/$name.bin")
             out[name] = try {
-                MapTemplate.parse(name, data)
+                MapTemplate.Companion.parse(name, data)
             } catch (e: Exception) {
                 throw IllegalStateException("地图 $name 解析失败: ${e.message}", e)
             }

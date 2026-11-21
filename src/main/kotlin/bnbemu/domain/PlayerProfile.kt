@@ -1,6 +1,6 @@
 package bnbemu.domain
 
-import bnbemu.constants.CharacterType
+import bnbemu.domain.CharacterType
 
 /** 模拟器初始默认金币 (Lucci); 所有金币同步统一取此值, 避免各处硬编码漂移。 */
 const val DEFAULT_LUCCI = 1234567

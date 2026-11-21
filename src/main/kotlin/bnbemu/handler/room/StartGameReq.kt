@@ -1,7 +1,7 @@
 package bnbemu.handler.room
 
-import bnbemu.constants.CharacterType
-import bnbemu.data.map.MapCatalog
+import bnbemu.domain.CharacterType
+import bnbemu.data.MapCatalog
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4

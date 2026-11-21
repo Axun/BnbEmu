@@ -1,6 +1,6 @@
-package bnbemu.data.map
+package bnbemu.data
 
-import bnbemu.constants.MAX_SESSION_SLOTS
+import bnbemu.domain.MAX_SESSION_SLOTS
 
 // ============================================================================
 // Map/*.bin —— 单张地图的元数据（真端 CGameMapTmpl）

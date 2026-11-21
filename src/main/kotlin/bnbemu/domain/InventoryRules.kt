@@ -1,6 +1,6 @@
 package bnbemu.domain
 
-import bnbemu.data.item.ItemDefCatalog
+import bnbemu.data.ItemDefCatalog
 
 /** 每组装备的槽位数量 (客户端 24 个) */
 const val EQUIP_SLOTS_PER_GROUP = 24

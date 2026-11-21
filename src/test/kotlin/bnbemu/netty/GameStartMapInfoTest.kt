@@ -4,7 +4,7 @@ import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.assertArrayEquals
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import bnbemu.data.map.MapCatalog
+import bnbemu.data.MapCatalog
 import bnbemu.handler.room.StartGameReq
 import bnbemu.packet.battle.GameStartMapInfo
 import bnbemu.CaptureFixtures

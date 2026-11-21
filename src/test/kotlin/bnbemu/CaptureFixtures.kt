@@ -1,7 +1,7 @@
 package bnbemu
 
-import bnbemu.constants.CharacterType
-import bnbemu.constants.MAX_SESSION_SLOTS
+import bnbemu.domain.CharacterType
+import bnbemu.domain.MAX_SESSION_SLOTS
 import bnbemu.packet.battle.GameResultSlotSnapshot
 import bnbemu.packet.battle.GameStartSlotConfig
 

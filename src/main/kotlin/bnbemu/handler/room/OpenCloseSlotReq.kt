@@ -1,6 +1,6 @@
 package bnbemu.handler.room
 
-import bnbemu.constants.CharacterType
+import bnbemu.domain.CharacterType
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.room.PracticeSetPlayer

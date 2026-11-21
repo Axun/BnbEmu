@@ -13,7 +13,7 @@ import bnbemu.handler.StageStateSyncReq
 import bnbemu.handler.user.UserInfoReq
 import bnbemu.handler.user.sendUserInfo
 import bnbemu.handler.room.ShopToRoomReq
-import bnbemu.data.shop.ShopCatalogData
+import bnbemu.data.ShopCatalogData
 import bnbemu.domain.CharacterRules
 import bnbemu.domain.PlayerProfile
 import bnbemu.domain.UserItemEntry

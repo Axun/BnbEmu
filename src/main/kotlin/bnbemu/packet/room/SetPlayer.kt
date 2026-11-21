@@ -1,8 +1,8 @@
 package bnbemu.packet.room
 
-import bnbemu.constants.CharacterType
-import bnbemu.data.item.ItemDefCatalog
-import bnbemu.data.item.ItemDefEntry
+import bnbemu.domain.CharacterType
+import bnbemu.data.ItemDefCatalog
+import bnbemu.data.ItemDefEntry
 import bnbemu.domain.EquipSlot
 import bnbemu.domain.PlayerProfile
 import bnbemu.netty.PKT

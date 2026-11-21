@@ -1,6 +1,6 @@
 package bnbemu.handler.user
 
-import bnbemu.data.item.ItemDefCatalog
+import bnbemu.data.ItemDefCatalog
 import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
 import bnbemu.domain.EquipChangeEntry
 import bnbemu.domain.EquipSlot

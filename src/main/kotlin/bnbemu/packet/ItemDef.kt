@@ -1,7 +1,7 @@
 package bnbemu.packet
 
-import bnbemu.data.item.ItemDefCatalog
-import bnbemu.data.item.ItemDefEntry
+import bnbemu.data.ItemDefCatalog
+import bnbemu.data.ItemDefEntry
 import bnbemu.netty.PKT
 
 /**

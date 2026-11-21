@@ -1,7 +1,6 @@
-package bnbemu.data.item
+package bnbemu.data
 
 import bnbemu.ACP
-import bnbemu.data.DataResource
 import bnbemu.domain.CharacterRules
 import bnbemu.netty.buildSsdBlock
 import bnbemu.netty.ssdEncode
@@ -66,7 +65,7 @@ data class ItemDefEntry(
 }
 
 /**
- * 物品定义主数据目录（与 [bnbemu.data.map.MapCatalog] 平级）。
+ * 物品定义主数据目录（与 [MapCatalog] 平级）。
  * 负责加载 `data/item_def_base.bin`、按角色构建物品定义表及服务端查询。
  */
 object ItemDefCatalog {

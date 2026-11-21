@@ -1,7 +1,7 @@
 package bnbemu.service
 
-import bnbemu.data.shop.ShopCatalogData
-import bnbemu.data.shop.ShopCurrency
+import bnbemu.data.ShopCatalogData
+import bnbemu.data.ShopCurrency
 import bnbemu.domain.CharacterRules
 import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.domain.EquipChangeEntry

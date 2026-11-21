@@ -1,7 +1,7 @@
 package bnbemu.packet.battle
 
-import bnbemu.constants.MAX_SESSION_SLOTS
-import bnbemu.data.map.MapCatalog
+import bnbemu.domain.MAX_SESSION_SLOTS
+import bnbemu.data.MapCatalog
 import bnbemu.netty.PKT
 import bnbemu.packet.lobby.SESSION_TYPE_PRACTICE
 import kotlin.random.Random

@@ -1,6 +1,6 @@
 package bnbemu.server
 
-import bnbemu.constants.MAX_SESSION_SLOTS
+import bnbemu.domain.MAX_SESSION_SLOTS
 import bnbemu.netty.ClientSocket
 import bnbemu.packet.lobby.EnterSessionResult
 import bnbemu.packet.room.NpcAvailability

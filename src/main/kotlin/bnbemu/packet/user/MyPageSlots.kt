@@ -1,6 +1,6 @@
 package bnbemu.packet.user
 
-import bnbemu.data.item.ItemDefCatalog
+import bnbemu.data.ItemDefCatalog
 import bnbemu.domain.CharacterRules
 import bnbemu.netty.PKT
 

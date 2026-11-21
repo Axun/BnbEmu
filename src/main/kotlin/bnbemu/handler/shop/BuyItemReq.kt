@@ -1,7 +1,7 @@
 package bnbemu.handler.shop
 
-import bnbemu.data.shop.ShopCatalogData
-import bnbemu.data.shop.ShopCurrency
+import bnbemu.data.ShopCatalogData
+import bnbemu.data.ShopCurrency
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler

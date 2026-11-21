@@ -1,6 +1,6 @@
 package bnbemu.handler.lobby
 
-import bnbemu.constants.MAX_SESSION_SLOTS
+import bnbemu.domain.MAX_SESSION_SLOTS
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.PKTHandler

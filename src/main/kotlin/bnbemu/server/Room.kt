@@ -1,7 +1,7 @@
 package bnbemu.server
 
-import bnbemu.constants.MAX_SESSION_SLOTS
-import bnbemu.data.map.MapCatalog
+import bnbemu.domain.MAX_SESSION_SLOTS
+import bnbemu.data.MapCatalog
 import bnbemu.domain.CharacterRules
 import bnbemu.domain.PlayerProfile
 import bnbemu.netty.ClientSocket

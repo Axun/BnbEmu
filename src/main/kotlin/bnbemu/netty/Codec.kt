@@ -5,7 +5,7 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.handler.codec.ByteToMessageDecoder
 import io.netty.handler.codec.MessageToByteEncoder
 import bnbemu.*
-import bnbemu.crypto.CRC8
+import bnbemu.codec.CRC8
 import org.tinylog.kotlin.Logger
 
 // EN 真實伺服器 (66.135.19.7, PopTag 英文客戶端) 幀格式, 由 cap/*.pcap 逆向並以 CRC8 oracle 全量驗證 (188/188):

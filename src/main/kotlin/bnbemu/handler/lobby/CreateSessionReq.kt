@@ -1,6 +1,6 @@
 package bnbemu.handler.lobby
 
-import bnbemu.constants.CharacterType
+import bnbemu.domain.CharacterType
 import bnbemu.domain.CharacterRules
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode4

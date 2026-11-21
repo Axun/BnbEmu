@@ -1,6 +1,6 @@
 package bnbemu.handler.shop
 
-import bnbemu.data.shop.ShopCatalogData
+import bnbemu.data.ShopCatalogData
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.shop.ShopCatalog
 

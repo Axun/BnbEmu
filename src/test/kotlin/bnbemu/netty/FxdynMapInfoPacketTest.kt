@@ -1,7 +1,7 @@
 package bnbemu.netty
 
 import bnbemu.data.FxdynMapInfo
-import bnbemu.data.item.ItemDefCatalog
+import bnbemu.data.ItemDefCatalog
 import bnbemu.packet.DynamicMapInfo
 import bnbemu.packet.FxConfig
 import io.netty.buffer.Unpooled
