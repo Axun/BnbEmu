@@ -194,7 +194,7 @@ val ChangeEquipReq = PKTHandler { c ->
         // 必须由服务端下发 S→C op 100 SetPlayer (CSetPlayerOnPreparePacket) 触发 sub_4F7022 -> sub_4F6E89,
         // 重新按 CSlotAccessoryPacket 三段清单 (背景/边框/特效/纸娃娃) 刷新槽位 UI 并清理脱下的装扮。
         val roomSlotIdx = Room.slots.indexOfFirst {
-            it.client === c || it.player?.userId == player.userId
+            it.client === c || it.playerId == player.userId
         }
         if (roomSlotIdx != -1) {
             Room.BC(SetPlayer(roomSlotIdx, Room.slots[roomSlotIdx], player))

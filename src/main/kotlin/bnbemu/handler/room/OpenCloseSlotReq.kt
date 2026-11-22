@@ -38,7 +38,7 @@ val OpenCloseSlotReq = PKTHandler { c ->
         if (Room.isAIBattle && slotIdx in 0..3) {
             // 激战模式 0..3 是真人玩家槽位（支持房主开放等待其他玩家加入或关闭，但绝不自动填 AI）。
             // 必须回 S→C op 106 才能清掉 CPrepareStage[+3038]==2 的等待锁，否则客户端会卡死。
-            if (slot.player != null) {
+            if (slot.isHuman) {
                 val pkt106 = PracticeSlotReady(slot = slotIdx, state = 2)
                 if (Room.uniqueClients.any()) Room.BC(pkt106) else c.send(pkt106)
                 return@PKTHandler

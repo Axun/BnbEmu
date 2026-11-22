@@ -80,7 +80,7 @@ object Room {
     fun isBattleNpcBomber(bomber: Int): Boolean = bomber in 20..25
 
     fun chiefSlotIndex(): Int =
-        slots.indexOfFirst { it.player != null && (it.state.toInt() and FLAG_CHIEF) != 0 }
+        slots.indexOfFirst { it.isHuman && (it.state.toInt() and FLAG_CHIEF) != 0 }
             .takeIf { it >= 0 } ?: 0
 
     /**
@@ -101,7 +101,7 @@ object Room {
             PlayerService.selectBomber(player.userId, effectiveBomber)
 
             slots[0].apply {
-                assignHuman(player, client)
+                assignHuman(player.userId, client)
                 isAI = false
                 state = FLAG_CHIEF
                 bomber = effectiveBomber
@@ -133,7 +133,7 @@ object Room {
     }
 
     val activeSlotCount: Int
-        get() = slots.count { it.player != null || it.isAI }
+        get() = slots.count { it.isHuman || it.isAI }
 
     val uniqueClients: Sequence<ClientSocket>
         get() = slots.asSequence()
@@ -168,7 +168,7 @@ object Room {
         val limit = MapCatalog.maxPlayerOf(mapId).coerceIn(1, MAX_SESSION_SLOTS)
         val seated = slots.indices.filter { slots[it].hasSeat() }
         // 只踢「空的 AI 槽」; 从大槽号开始, 留下的槽号连续, 与真端房间 UI 顺序一致。
-        val aiSlots = slots.indices.filter { slots[it].isAI && slots[it].player == null }
+        val aiSlots = slots.indices.filter { slots[it].isAI && !slots[it].isHuman }
         val kicked = aiSlots.sortedDescending().take((seated.size - limit).coerceAtLeast(0))
 
         val packets = mutableListOf<PKT>()
@@ -196,7 +196,7 @@ object Room {
             battle?.destroy()
             val initialSlots = Array(MAX_SESSION_SLOTS) { idx ->
                 val s = slots[idx]
-                BattleSlotState(slotId = idx, isHuman = s.player != null, isAI = s.isAI)
+                BattleSlotState(slotId = idx, isHuman = s.isHuman, isAI = s.isAI)
             }
             BattleSession(
                 executor = executor,
@@ -275,7 +275,7 @@ object Room {
         if (sendRoomChain) {
             uniqueClients.forEach {
                 sendRoomEntryChain(it, init = false)
-                val lucci = it.player?.let { p -> PlayerService.findByUserId(p.userId)?.lucci ?: p.lucci }
+                val lucci = it.player?.lucci
                 if (lucci != null) {
                     it.send(UserDynamicInfoValue(0, lucci))
                 }
@@ -323,11 +323,10 @@ object Room {
         if (distinctPlayers.isEmpty()) {
             return BattleSession.MatchSettlement(expBefore = 0, expAfter = expGained, lucciGained = lucciGained)
         }
-        val primaryId = slots[0].player?.userId ?: distinctPlayers.first().userId
+        val primaryId = slots[0].playerId ?: distinctPlayers.first().userId
         var primaryExpBefore = 0
         var primaryExpAfter = expGained
-        for (slotPlayer in distinctPlayers) {
-            val liveProfile = PlayerService.findByUserId(slotPlayer.userId) ?: slotPlayer
+        for (liveProfile in distinctPlayers) {
             val expBefore = liveProfile.exp.coerceIn(0, 999)
             val settled = PlayerService.settleMatch(
                 profile = liveProfile,
@@ -336,9 +335,6 @@ object Room {
                 expGained = expGained,
                 lucciGained = lucciGained,
             )
-            if (liveProfile !== slotPlayer) {
-                slots.filter { it.player?.userId == slotPlayer.userId }.forEach { it.player = settled }
-            }
             if (settled.userId == primaryId) {
                 primaryExpBefore = expBefore
                 primaryExpAfter = settled.exp.coerceIn(0, 999)
@@ -365,7 +361,7 @@ object Room {
         }
     }
 
-    private fun Slot.hasSeat(): Boolean = player != null || isAI
+    private fun Slot.hasSeat(): Boolean = isHuman || isAI
 
     /** 销毁当前战斗会话（建新房或测试清理时调用）。 */
     fun reset() {

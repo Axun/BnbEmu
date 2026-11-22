@@ -16,6 +16,7 @@ import bnbemu.domain.UserItemEntry
 import bnbemu.netty.ClientSocket
 import bnbemu.repository.InMemoryPlayerRepository
 import bnbemu.repository.PlayerRepository
+import bnbemu.server.Slot
 
 enum class PurchaseStatus {
     SUCCESS,
@@ -320,6 +321,9 @@ object PlayerService {
 
 val ClientSocket.player: PlayerProfile?
     get() = PlayerService.currentPlayer(this)
+
+val Slot.player: PlayerProfile?
+    get() = playerId?.let { PlayerService.findByUserId(it) }
 
 /**
  * 当前连线的金币余额。

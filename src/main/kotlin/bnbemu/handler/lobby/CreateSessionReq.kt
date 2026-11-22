@@ -92,7 +92,7 @@ val CreateSessionReq = PKTHandler { c ->
         PlayerService.selectBomber(player.userId, effectiveBomber)
 
         Room.slots[0].apply {
-            assignHuman(player, c)
+            assignHuman(player.userId, c)
             this.isAI = false
             state = FLAG_CHIEF
             bomber = effectiveBomber

@@ -35,7 +35,7 @@ import bnbemu.service.player
 fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
     val player = c.player ?: PlayerService.activeProfile
     val closedSlots = Room.slots.count { (it.state.toInt() and FLAG_CLOSED) != 0 }
-    val humanCount = Room.slots.count { it.player != null }.coerceAtLeast(1)
+    val humanCount = Room.slots.count { it.isHuman }.coerceAtLeast(1)
     val roomEntry = RoomEntry(
         roomId = Room.sessionId,
         handle = player.userId,
@@ -94,7 +94,7 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
                 c.send(
                     PracticeSetSlotAI(
                         slot = slot,
-                        isAI = s.isAI && s.player == null,
+                        isAI = s.isAI && !s.isHuman,
                         refSlot = refSlot,
                         aiLevel = s.aILevel,
                     )
@@ -126,7 +126,7 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
                 c.send(
                     PracticeSetSlotAI(
                         slot = idx,
-                        isAI = s.isAI && s.player == null,
+                        isAI = s.isAI && !s.isHuman,
                         refSlot = idx,
                         aiLevel = s.aILevel,
                     )

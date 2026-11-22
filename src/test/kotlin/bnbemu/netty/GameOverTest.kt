@@ -11,6 +11,7 @@ import bnbemu.packet.battle.WINNER_TEAM_DRAW
 import bnbemu.domain.PlayerProfile
 import bnbemu.server.Room
 import bnbemu.server.SlotMatchState
+import bnbemu.service.PlayerService
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
@@ -59,7 +60,8 @@ class GameOverTest {
             slot.isAI = false
             slot.aILevel = 1 // 难度档回到抓包默认，避免单例 Room 被前序用例污染
         }
-        Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester"), cs)
+        val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
+        Room.slots[0].assignHuman(tester.userId, cs)
         for (i in 1..7) Room.slots[i].isAI = true
         Room.reset()
     }
@@ -277,7 +279,8 @@ class GameOverTest {
     fun testPureHumanRoomDoesNotEndOnFirstDeath() {
         // 将来若开纯人类 PvP 房 (无 AI), 死一个人不能被误判成"AI 全灭"而立刻结算
         for (i in 1..7) Room.slots[i].isAI = false
-        Room.slots[1].assignHuman(PlayerProfile(userId = 2, username = "tester2", charName = "tester2"), cs)
+        val tester2 = PlayerService.registerProfile(PlayerProfile(userId = 2, username = "tester2", charName = "tester2"))
+        Room.slots[1].assignHuman(tester2.userId, cs)
         val battle = Room.startGame()
         ch.outboundMessages().clear()
 
@@ -477,7 +480,8 @@ class GameOverTest {
     @Test
     fun testGameResultPreservesCustomPlayerLevelAndClampsZero() {
         val human = 11
-        Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester", level = 12), cs)
+        val leveled = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester", level = 12))
+        Room.slots[0].assignHuman(leveled.userId, cs)
         val body12 = bodyOf(GameResult(winnerTeam = 1, slots = Room.resultSlotSnapshots()))
         assertEquals(12, dec2(body12, human + 35), "+132 必须写入 PlayerProfile.level")
         assertEquals(12, dec2(body12, human + 37), "+136 必须写入 PlayerProfile.level")
@@ -576,8 +580,8 @@ class GameOverTest {
 
     @Test
     fun testMatchSettlementUpdatesPlayerProfileOnWinLoseAndDraw() {
-        val profile = PlayerProfile(userId = 1001, username = "settler", charName = "settler", level = 5, exp = 0, lucci = 1000)
-        Room.slots[0].assignHuman(profile, cs)
+        val profile = PlayerService.registerProfile(PlayerProfile(userId = 1001, username = "settler", charName = "settler", level = 5, exp = 0, lucci = 1000))
+        Room.slots[0].assignHuman(profile.userId, cs)
 
         // 1. 胜利
         val battle1 = Room.startGame()
@@ -628,8 +632,8 @@ class GameOverTest {
 
     @Test
     fun testMatchSettlementHandlesLevelUpExpWraparound() {
-        val profile = PlayerProfile(userId = 1002, username = "leveler", charName = "leveler", level = 5, exp = 970, lucci = 500)
-        Room.slots[0].assignHuman(profile, cs)
+        val profile = PlayerService.registerProfile(PlayerProfile(userId = 1002, username = "leveler", charName = "leveler", level = 5, exp = 970, lucci = 500))
+        Room.slots[0].assignHuman(profile.userId, cs)
 
         val battle = Room.startGame()
         ch.outboundMessages().clear()

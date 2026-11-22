@@ -28,7 +28,7 @@ val SetPlayerReadyReq = PKTHandler { c ->
 
     val player = c.player
     val slotIdx = if (player != null) {
-        Room.slots.indexOfFirst { it.client === c || it.player?.userId == player.userId }
+        Room.slots.indexOfFirst { it.client === c || it.playerId == player.userId }
             .takeIf { it >= 0 } ?: 0
     } else {
         0

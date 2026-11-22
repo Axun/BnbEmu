@@ -6,6 +6,7 @@ import bnbemu.server.BattleSession
 import bnbemu.server.Bomb
 import bnbemu.domain.PlayerProfile
 import bnbemu.server.Room
+import bnbemu.service.PlayerService
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.AfterEach
@@ -143,10 +144,11 @@ class BombMoveTest {
         // 端到端: C→S op 107 → BattleSession.onBombMove → BC → 客户端 ctx 真的收到 S→C op 141
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
-        val previousPlayer = Room.slots[0].player
+        val previousPlayerId = Room.slots[0].playerId
         val previousClient = Room.slots[0].client
         try {
-            Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester"), cs)
+            val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
+            Room.slots[0].assignHuman(tester.userId, cs)
             val activeBattle = Room.startGame()
             ch.outboundMessages().clear()
 
@@ -167,7 +169,7 @@ class BombMoveTest {
                 "广播包体必须等于 op107 实测 body 前 7 字节 (3A A5 7D 58 59 58 5E)"
             )
         } finally {
-            Room.slots[0].assignHuman(previousPlayer, previousClient)
+            Room.slots[0].assignHuman(previousPlayerId, previousClient)
             Room.reset()
             ch.finish()
         }

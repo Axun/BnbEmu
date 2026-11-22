@@ -40,7 +40,7 @@ val AILevelChangeReq = PKTHandler { c ->
             Logger.warn("[AILevelChangeReq] 激战模式忽略越界/真人槽 slot=$slotIdx")
             return@PKTHandler
         }
-        val refSlot = chiefSlot.takeIf { it in 0..3 && Room.slots[it].player != null }
+        val refSlot = chiefSlot.takeIf { it in 0..3 && Room.slots[it].isHuman }
             ?: Room.chiefSlotIndex()
         slot.isAI = true
         slot.clearHuman()

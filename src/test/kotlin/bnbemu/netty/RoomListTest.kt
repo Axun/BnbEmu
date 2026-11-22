@@ -169,13 +169,13 @@ class RoomListTest {
         val savedPw = Room.password
         val savedType = Room.sessionType
         val savedMapId = Room.mapId
-        val savedSlots = Room.slots.map { listOf(it.player, it.client, it.isAI, it.state) }
+        val savedSlots = Room.slots.map { listOf(it.playerId, it.client, it.isAI, it.state) }
         try {
             Room.name = "MyTestRoom!"
             Room.password = "secret"
             Room.sessionType = SESSION_TYPE_NORMAL
             Room.mapId = 176
-            Room.slots[0].apply { assignHuman(user, cs); isAI = false; state = FLAG_CHIEF }
+            Room.slots[0].apply { assignHuman(user.userId, cs); isAI = false; state = FLAG_CHIEF }
             for (i in 1..5) Room.slots[i].apply { clearHuman(); isAI = true; state = 0 }
             for (i in 6..7) Room.slots[i].apply { clearHuman(); isAI = false; state = FLAG_CLOSED }
 
@@ -199,7 +199,7 @@ class RoomListTest {
             Room.sessionType = savedType
             Room.mapId = savedMapId
             Room.slots.forEachIndexed { idx, slot ->
-                slot.assignHuman(savedSlots[idx][0] as PlayerProfile?, savedSlots[idx][1] as ClientSocket?)
+                slot.assignHuman(savedSlots[idx][0] as Int?, savedSlots[idx][1] as ClientSocket?)
                 slot.isAI = savedSlots[idx][2] as Boolean
                 slot.state = savedSlots[idx][3] as Byte
             }

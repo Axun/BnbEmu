@@ -12,6 +12,7 @@ import bnbemu.server.BattleSession
 import bnbemu.server.Bomb
 import bnbemu.server.Room
 import bnbemu.server.state
+import bnbemu.service.PlayerService
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.AfterEach
@@ -48,7 +49,8 @@ class BattleSessionLifecycleTest {
             it.isAI = false
             it.state = 0
         }
-        Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester"), cs)
+        val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
+        Room.slots[0].assignHuman(tester.userId, cs)
         Room.slots[1].isAI = true
         Room.reset()
     }

@@ -155,7 +155,7 @@ val UserInfoReq = PKTHandler { c ->
     //    表现就是「商城换角色 → 返回大厅变回默认角色」(反过来大厅用的是 op 87, 所以正常)。
     val player = c.player
     val userSlot = Room.slots.find {
-        it.client === c || (player != null && it.player?.userId == player.userId)
+        it.client === c || (player != null && it.playerId == player.userId)
     }
     // ⚠️ 上限 31 与「值没变就不写」都依赖客户端 0x006E50F0 的掩码：
     //    原版是 `CUDI_bomber & 7`（3 bit），25 会被读成 1 —— 打开名片上报 1，服务端就把 25 洗成 1，

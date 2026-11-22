@@ -89,7 +89,7 @@ val StartGameReq = PKTHandler { c ->
     // 「服務端按 6 個 AI 判勝負、客戶端卻照 op112 的 8 槽名冊生成 7 個 AI」的錯位。
     // 異常防護: 若房間槽位尚未初始化 (例如非練習房流程), 退回舊的 8 槽名冊,
     // 避免給客戶端發 slotCount=0 導致對局載入失敗。
-    val activeSlots = Room.slots.indices.filter { i -> Room.slots[i].player != null || Room.slots[i].isAI }
+    val activeSlots = Room.slots.indices.filter { i -> Room.slots[i].isHuman || Room.slots[i].isAI }
         .ifEmpty { (0..7).toList() }
     println("StartGame. activeSlots=$activeSlots (AI=${activeSlots.count { Room.slots[it].isAI }})")
 
@@ -103,7 +103,7 @@ val StartGameReq = PKTHandler { c ->
             i == 0 -> CharacterType.Dao.value
             else -> CharacterType.Boz.value
         }
-        val team = if (i == 0 || slot?.player != null) 0 else 8
+        val team = if (i == 0 || slot?.isHuman == true) 0 else 8
         val spawn = if (i < spawnPositions.size) spawnPositions[i] else i
         GameStartSlotConfig(slotIdx = i, spawnPos = spawn, bomber = bomberId, team = team)
     }

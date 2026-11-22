@@ -8,6 +8,7 @@ import bnbemu.domain.PlayerProfile
 import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.Room
 import bnbemu.server.state
+import bnbemu.service.PlayerService
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.AfterEach
@@ -53,7 +54,8 @@ class BackToRoomTest {
             slot.isAI = false
             slot.state = 0
         }
-        Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester"), cs)
+        val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
+        Room.slots[0].assignHuman(tester.userId, cs)
         Room.slots[0].state = FLAG_CHIEF
         for (i in 1..7) Room.slots[i].isAI = true
         Room.reset()

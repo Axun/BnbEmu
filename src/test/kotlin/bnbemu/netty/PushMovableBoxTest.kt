@@ -5,6 +5,7 @@ import bnbemu.packet.battle.MovableBoxMove
 import bnbemu.server.BattleSession
 import bnbemu.domain.PlayerProfile
 import bnbemu.server.Room
+import bnbemu.service.PlayerService
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.AfterEach
@@ -90,10 +91,11 @@ class PushMovableBoxTest {
         // 端到端: C→S op 109 → BattleSession.onMovableBoxPush → BC → 客户端 ctx 真的收到 S→C op 142
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
-        val previousPlayer = Room.slots[0].player
+        val previousPlayerId = Room.slots[0].playerId
         val previousClient = Room.slots[0].client
         try {
-            Room.slots[0].assignHuman(PlayerProfile(userId = 1, username = "tester", charName = "tester"), cs)
+            val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
+            Room.slots[0].assignHuman(tester.userId, cs)
             val activeBattle = Room.startGame()
             ch.outboundMessages().clear()
 
@@ -118,7 +120,7 @@ class PushMovableBoxTest {
             assertFalse(activeBattle.onMovableBoxPush(1, 1, 3, 1, 4, 0))
             assertEquals(1, ch.outboundMessages().size, "重复上报不得再次下发")
         } finally {
-            Room.slots[0].assignHuman(previousPlayer, previousClient)
+            Room.slots[0].assignHuman(previousPlayerId, previousClient)
             Room.reset()
             ch.finish()
         }

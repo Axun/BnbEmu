@@ -9,7 +9,9 @@ import bnbemu.domain.EquipSlot
 import bnbemu.domain.MAX_CASH
 import bnbemu.domain.MAX_LUCCI
 import bnbemu.domain.MAX_STACK_COUNT
+import bnbemu.domain.PlayerProfile
 import bnbemu.domain.StarterKit
+import bnbemu.server.Slot
 import bnbemu.handler.AskFirstInfo
 import bnbemu.handler.OnConnEstablished
 import bnbemu.handler.shop.BuyItemReq
@@ -378,5 +380,31 @@ class PlayerServiceTest {
         PlayerService.selectBomber(profile.userId, 5)
         assertEquals(5, profile.bomber)
         assertEquals(1, profile.inventory.size)
+    }
+
+    @Test
+    fun `slot resolves live PlayerProfile from repository by playerId`() {
+        val profile = PlayerService.loginOrRegister("slot_holder")
+        val slot = Slot()
+        slot.assignHuman(profile.userId)
+        assertTrue(slot.isHuman)
+        assertEquals(profile.userId, slot.playerId)
+        assertEquals(profile.lucci, slot.player?.lucci)
+
+        // 即使仓储中该 userId 替换为新实例，Slot.player 也能读到最新档案
+        val updated = PlayerProfile(
+            userId = profile.userId,
+            username = profile.username,
+            charName = "updated_name",
+            lucci = 999_999,
+        )
+        PlayerService.registerProfile(updated)
+        assertEquals("updated_name", slot.player?.charName)
+        assertEquals(999_999, slot.player?.lucci)
+
+        slot.clearHuman()
+        assertFalse(slot.isHuman)
+        assertNull(slot.playerId)
+        assertNull(slot.player)
     }
 }

@@ -202,7 +202,7 @@ private fun forceSetCurrentBomber(c: ClientSocket, bomber: Int) {
 
     // 2) 服务端房间槽位：只有真占着槽位才改，大厅期 Room.slots 可能还留着上局的残影
     val slotIdx = Room.slots.indexOfFirst {
-        it.client === c || it.player?.userId == player.userId
+        it.client === c || it.playerId == player.userId
     }
     if (slotIdx != -1) Room.slots[slotIdx].bomber = bomber
 

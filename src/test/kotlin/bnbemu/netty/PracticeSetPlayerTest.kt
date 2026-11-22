@@ -149,7 +149,7 @@ class PracticeSetPlayerTest {
         val savedType = Room.sessionType
         val savedRule = Room.ruleId
         val savedBombers = Room.localBombers
-        val savedSlotPlayer = Room.slots[0].player
+        val savedSlotPlayerId = Room.slots[0].playerId
         val savedSlotClient = Room.slots[0].client
         val savedSlotBomber = Room.slots[0].bomber
         val savedThemeId = Room.themeId
@@ -173,7 +173,7 @@ class PracticeSetPlayerTest {
             Room.sessionType = savedType
             Room.ruleId = savedRule
             Room.localBombers = savedBombers
-            Room.slots[0].assignHuman(savedSlotPlayer, savedSlotClient)
+            Room.slots[0].assignHuman(savedSlotPlayerId, savedSlotClient)
             Room.slots[0].bomber = savedSlotBomber
             Room.themeId = savedThemeId
             Room.mapId = savedMapId

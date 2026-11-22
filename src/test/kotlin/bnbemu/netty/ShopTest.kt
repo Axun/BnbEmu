@@ -500,7 +500,7 @@ class ShopTest {
         val ch = EmbeddedChannel(cs)
         val userId = 9310
         val chosen = 7 // Plunk, 既不是默认皮蛋(0) 也不是抓包基准的宝宝(5)
-        val prevPlayer = Room.slots[0].player
+        val prevPlayerId = Room.slots[0].playerId
         val prevClient = Room.slots[0].client
         val prevBomber = Room.slots[0].bomber.toInt()
 
@@ -514,7 +514,7 @@ class ShopTest {
         val user = PlayerService.registerProfile(PlayerProfile(userId, "shop_ret_tester", "tester"))
         cs.playerId = user.userId
         PlayerService.selectBomber(user.userId, chosen)
-        Room.slots[0].assignHuman(user, cs)
+        Room.slots[0].assignHuman(user.userId, cs)
         Room.slots[0].bomber = chosen
 
         try {
@@ -554,7 +554,7 @@ class ShopTest {
             val hex = bodyOf(profile!!).joinToString("") { "%02x".format(it) }
             assertFalse(hex.contains("%08x".format(5 xor 0x96CA5395.toInt()) + "55"))
         } finally {
-            Room.slots[0].assignHuman(prevPlayer, prevClient)
+            Room.slots[0].assignHuman(prevPlayerId, prevClient)
             Room.slots[0].bomber = prevBomber
             ch.finishAndReleaseAll()
         }

@@ -52,13 +52,13 @@ class SetPlayerReadyTest {
         cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
-        val prevPlayer = Room.slots[0].player
+        val prevPlayerId = Room.slots[0].playerId
         val prevClient = Room.slots[0].client
         val prevState = Room.slots[0].state
         val prevBomber = Room.slots[0].bomber
         val prevColor = Room.slots[0].color
         try {
-            Room.slots[0].assignHuman(user, cs)
+            Room.slots[0].assignHuman(user.userId, cs)
             Room.slots[0].state = FLAG_CHIEF
             Room.slots[0].bomber = 5
             Room.slots[0].color = 0
@@ -76,7 +76,7 @@ class SetPlayerReadyTest {
             assertEquals(5, meta[1].toInt() and 0xFF)
             assertEquals(0, meta[2].toInt() and 0xFF)
         } finally {
-            Room.slots[0].assignHuman(prevPlayer, prevClient)
+            Room.slots[0].assignHuman(prevPlayerId, prevClient)
             Room.slots[0].state = prevState
             Room.slots[0].bomber = prevBomber
             Room.slots[0].color = prevColor
@@ -92,13 +92,13 @@ class SetPlayerReadyTest {
         cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
-        val prevPlayer = Room.slots[0].player
+        val prevPlayerId = Room.slots[0].playerId
         val prevClient = Room.slots[0].client
         val prevState = Room.slots[0].state
         val prevBomber = Room.slots[0].bomber
         val prevColor = Room.slots[0].color
         try {
-            Room.slots[0].assignHuman(user, cs)
+            Room.slots[0].assignHuman(user.userId, cs)
             Room.slots[0].state = FLAG_CHIEF or FLAG_READY
             Room.slots[0].bomber = 5
             Room.slots[0].color = 0
@@ -120,7 +120,7 @@ class SetPlayerReadyTest {
             assertArrayEquals(byteArrayOf(FLAG_CHIEF.toByte(), 5, 0), decodeMeta3(replyBody.copyOfRange(1, 4)))
             assertEquals(0, (replyBody[4].toInt() and 0xFF) xor 0x5A)
         } finally {
-            Room.slots[0].assignHuman(prevPlayer, prevClient)
+            Room.slots[0].assignHuman(prevPlayerId, prevClient)
             Room.slots[0].state = prevState
             Room.slots[0].bomber = prevBomber
             Room.slots[0].color = prevColor
@@ -136,16 +136,16 @@ class SetPlayerReadyTest {
         cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
-        val prevPlayer0 = Room.slots[0].player
+        val prevPlayer0Id = Room.slots[0].playerId
         val prevClient0 = Room.slots[0].client
-        val prevPlayer = Room.slots[1].player
+        val prevPlayerId = Room.slots[1].playerId
         val prevClient = Room.slots[1].client
         val prevState = Room.slots[1].state
         val prevBomber = Room.slots[1].bomber
         val prevColor = Room.slots[1].color
         try {
             Room.slots[0].clearHuman()
-            Room.slots[1].assignHuman(user, cs)
+            Room.slots[1].assignHuman(user.userId, cs)
             Room.slots[1].state = 0
             Room.slots[1].bomber = 3
             Room.slots[1].color = 2
@@ -162,8 +162,8 @@ class SetPlayerReadyTest {
             assertEquals(1, (replyBody[0].toInt() and 0xFF) xor 0x5A)
             assertArrayEquals(byteArrayOf(FLAG_READY.toByte(), 3, 2), decodeMeta3(replyBody.copyOfRange(1, 4)))
         } finally {
-            Room.slots[0].assignHuman(prevPlayer0, prevClient0)
-            Room.slots[1].assignHuman(prevPlayer, prevClient)
+            Room.slots[0].assignHuman(prevPlayer0Id, prevClient0)
+            Room.slots[1].assignHuman(prevPlayerId, prevClient)
             Room.slots[1].state = prevState
             Room.slots[1].bomber = prevBomber
             Room.slots[1].color = prevColor
