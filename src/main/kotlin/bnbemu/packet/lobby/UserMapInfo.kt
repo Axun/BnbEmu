@@ -1,7 +1,6 @@
 package bnbemu.packet.lobby
 
 import bnbemu.netty.PKT
-import bnbemu.packet.SESSION_STRING
 
 // ============================================================================
 // S→C op 254: 頻道用戶佔位分佈 / 在線用戶地圖 (進頻道批次回應之一, seq=70, 54B)
@@ -21,7 +20,7 @@ import bnbemu.packet.SESSION_STRING
 //     隨後 0x004F83ED 將各槽狀態同步至 CUserDynamicInfo (0x00993E70) 的 [edi + esi + 0x2B8].
 //  大厅左上角显示的等级就是这里提供的（下方在线列表里不是）
 data class UserMapEntry(
-    val session: ByteArray = SESSION_STRING,
+    val session: ByteArray = ByteArray(0),
     val v1: Int = 0,
     val v2: Int = 0,
     val v3: Int = 0,
@@ -43,7 +42,7 @@ data class UserMapEntry(
 )
 
 fun UserMapInfo(
-    user: UserMapEntry? = UserMapEntry()
+    user: UserMapEntry? = null
 ) = PKT {
     if (user == null) {
         Encode1(0)

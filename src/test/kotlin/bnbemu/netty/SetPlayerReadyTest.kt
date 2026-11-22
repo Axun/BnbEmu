@@ -173,21 +173,22 @@ class SetPlayerReadyTest {
 
     @Test
     fun testProgrammaticSlotMetaThreeModes() {
+        val tok = bnbemu.CaptureFixtures.CAPTURE_SESSION_TOKEN
         // 1) !isStart, slot == null: 兼容 tst.pcap 抓包基准 (FLAG_CHIEF|FLAG_READY=0x06, Boz=5, color=0)
-        val roomNull = encodeBody(SetPlayer(slotId = 0, level = 1, isStart = false))
+        val roomNull = encodeBody(SetPlayer(slotId = 0, level = 1, session = tok, isStart = false))
         assertEquals(byteArrayOf(0x06, 0x05, 0x00).toList(), decodeMeta3(roomNull.copyOfRange(10, 13)).toList())
 
         // 2) isStart == true, slot == null: 对局开局态 (FLAG_READY=0x04, Boz=5, color=0; 无 enterEffectId 故偏移 9..11)
-        val startNull = encodeBody(SetPlayer(slotId = 0, level = 1, isStart = true))
+        val startNull = encodeBody(SetPlayer(slotId = 0, level = 1, session = tok, isStart = true))
         assertEquals(byteArrayOf(0x04, 0x05, 0x00).toList(), decodeMeta3(startNull.copyOfRange(9, 12)).toList())
 
         // 3) !isStart, slot != null: 按槽位真实 meta 构建 (房主仅 0x02, bomber=10, color=3)
         val explicitSlot = Slot(meta = byteArrayOf(FLAG_CHIEF.toByte(), 10, 3))
-        val withSlot = encodeBody(SetPlayer(slotId = 0, slot = explicitSlot, level = 1, isStart = false))
+        val withSlot = encodeBody(SetPlayer(slotId = 0, slot = explicitSlot, level = 1, session = tok, isStart = false))
         assertEquals(byteArrayOf(FLAG_CHIEF.toByte(), 10, 3).toList(), decodeMeta3(withSlot.copyOfRange(10, 13)).toList())
 
         // 4) isStart == true, slot != null: 开局态清除 FLAG_CHIEF 并置 FLAG_READY，保留槽位角色/颜色
-        val startWithSlot = encodeBody(SetPlayer(slotId = 0, slot = explicitSlot, level = 1, isStart = true))
+        val startWithSlot = encodeBody(SetPlayer(slotId = 0, slot = explicitSlot, level = 1, session = tok, isStart = true))
         assertEquals(byteArrayOf(FLAG_READY.toByte(), 10, 3).toList(), decodeMeta3(startWithSlot.copyOfRange(9, 12)).toList())
     }
 }

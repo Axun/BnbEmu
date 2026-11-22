@@ -1,5 +1,6 @@
 package bnbemu.server
 
+import bnbemu.codec.encodeName
 import bnbemu.domain.MAX_SESSION_SLOTS
 import bnbemu.netty.ClientSocket
 import bnbemu.packet.lobby.EnterSessionResult
@@ -51,7 +52,7 @@ fun sendRoomEntryChain(c: ClientSocket, init: Boolean = true) {
         RoomList(listOf(roomEntry)),
         // 进房结果 (op 83): 房型必须原样回显, 客户端 0x0068626F 存进 CFxContext[0x570]。
         EnterSessionResult(sessionId = Room.sessionId, sessionType = Room.sessionType),
-        UserSimpleInfoResult(), SessionInfoResult(userId = player.userId),
+        UserSimpleInfoResult(), SessionInfoResult(userId = player.userId, session = encodeName(player.charName)),
         // op 113 房名同步: 客户端把字符串直接写进会话对象 +0x1C4 并刷新房间标题。
         // 必须发 Room.name 而不是空串 —— 空串会把 op 87/op 83 刚填好的房名清掉（变空白）。
         RoomName(Room.name),

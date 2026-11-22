@@ -112,7 +112,7 @@ class ShopTest {
         assertEquals(bnbemu.packet.user.BAG_ONLY_SLOT, entries[0].slot)
         assertEquals("Item/ShopDeco", entries[0].token, "令牌应取自 op 60 定义表")
 
-        val inventory = bnbemu.packet.user.DEFAULT_USER_INVENTORY_ITEMS + entries
+        val inventory = bnbemu.CaptureFixtures.DEFAULT_USER_INVENTORY_ITEMS + entries
         val pkt = bnbemu.packet.user.UserInventory(listOf(inventory, inventory))
         val buf = Unpooled.buffer()
         pkt.encode(SendPacketBase(buf))

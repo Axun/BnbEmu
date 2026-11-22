@@ -1,5 +1,6 @@
 package bnbemu.handler
 
+import bnbemu.codec.encodeName
 import bnbemu.domain.CharacterRules
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ClientStage
@@ -33,14 +34,18 @@ val StageInitReq = PKTHandler { c ->
     c.stage = ClientStage.Lobby.value
     // op 60 先按当前角色生成 (更新所有 cat=3 模型名与 skinId),
     val player = c.player ?: PlayerService.activeProfile
+    val session = encodeName(player.charName)
     val bomber = player.bomber
     val model = CharacterRules.bomberModelName(bomber)
     println("[StageInitReq] op 60 物品定义表: bomber=$bomber ($model), cat=3 模型同步")
     c.send(
         Unk293(), QuestConfigTable(),
         UserSimpleInfoResult(),
-        SessionInfoResult(userId = player.userId),
-        MyPageInfo(users = listOf(MyPageUser(slotIndex = 0, userId = player.userId))),
+        SessionInfoResult(userId = player.userId, session = session),
+        MyPageInfo(
+            session = session,
+            users = listOf(MyPageUser(slotIndex = 0, userId = player.userId, session = session)),
+        ),
         ItemDef(bomber),
         UserMarketItemList(), UserMarketMyItemList(),
     )

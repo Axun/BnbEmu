@@ -1,5 +1,6 @@
 package bnbemu.handler
 
+import bnbemu.codec.encodeName
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.lobby.SessionList
 import bnbemu.packet.lobby.UserMapEntry
@@ -17,7 +18,7 @@ import bnbemu.service.player
 val UserMapListReq = PKTHandler { c ->
     val player = c.player ?: PlayerService.activeProfile
     c.send(
-        UserMapInfo(UserMapEntry(level = player.level)),
+        UserMapInfo(UserMapEntry(session = encodeName(player.charName), level = player.level)),
         SessionList(),
     )
 }

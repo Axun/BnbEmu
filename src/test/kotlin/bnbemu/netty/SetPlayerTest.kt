@@ -1,5 +1,6 @@
 package bnbemu.netty
 
+import bnbemu.CaptureFixtures
 import bnbemu.data.ItemDefCatalog
 import bnbemu.data.ItemDefEntry
 import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
@@ -15,6 +16,20 @@ import org.junit.jupiter.api.Test
 import java.io.File
 
 class SetPlayerTest {
+
+    private fun captureSetPlayer(
+        slotId: Int = 0,
+        level: Int = 1,
+        isStart: Boolean = false,
+        equips: Map<Int, Int> = emptyMap(),
+    ) = SetPlayer(
+        slotId = slotId,
+        level = level,
+        userId = CaptureFixtures.CAPTURE_USER_ID,
+        session = CaptureFixtures.CAPTURE_SESSION_TOKEN,
+        isStart = isStart,
+        equips = equips,
+    )
 
     private fun body(pkt: PKT): ByteArray {
         val buf = Unpooled.buffer()
@@ -44,7 +59,7 @@ class SetPlayerTest {
         assertTrue(captureFile.exists(), "cap/practice_s2c_op100_80B_0.bin 必须存在")
         val exp = captureFile.readBytes().drop(2).toByteArray() // 去掉 2B opcode 前缀
 
-        val pkt = SetPlayer(slotId = 0, level = 1, isStart = false)
+        val pkt = captureSetPlayer(slotId = 0, level = 1, isStart = false)
         val got = body(pkt)
 
         assertEquals(78, got.size)
@@ -59,7 +74,7 @@ class SetPlayerTest {
         assertTrue(captureFile.exists(), "cap/practice_s2c_op100_79B_1.bin 必须存在")
         val exp = captureFile.readBytes().drop(2).toByteArray() // 去掉 2B opcode 前缀
 
-        val pkt = SetPlayer(slotId = 0, level = 1, isStart = true)
+        val pkt = captureSetPlayer(slotId = 0, level = 1, isStart = true)
         val got = body(pkt)
 
         assertEquals(77, got.size)
@@ -69,7 +84,7 @@ class SetPlayerTest {
 
     @Test
     fun testDynamicLevel5Encoding() {
-        val pkt = SetPlayer(slotId = 0, level = 5, isStart = false)
+        val pkt = captureSetPlayer(slotId = 0, level = 5, isStart = false)
         val got = body(pkt)
         assertEquals(78, got.size)
 
@@ -110,10 +125,12 @@ class SetPlayerTest {
         val avatars: List<Triple<Int, Int, Int>>,
     )
 
-    /** 按 sub_44A856 的读取顺序解出尾部清单 (前缀 = 固定 67B / 开局版 66B) */
+    /** 按 sub_44A856 的读取顺序解出尾部清单 (兼容任意长度 session) */
     private fun decodeAccessories(bytes: ByteArray, isStart: Boolean = false): ParsedAccessories {
         val buf = Unpooled.wrappedBuffer(bytes)
-        buf.skipBytes(if (isStart) 66 else 67)
+        buf.skipBytes(if (isStart) 12 else 13)
+        val sessionLen = buf.Decode2
+        buf.skipBytes(sessionLen + 42 + 6)
         val u16 = buf.Decode2
         val decorations = (0 until buf.Decode1).map { buf.Decode1 to buf.Decode2 }
         val effects = (0 until buf.Decode1).map { Triple(buf.Decode4, buf.Decode4, buf.Decode4) }
@@ -127,7 +144,7 @@ class SetPlayerTest {
 
     @Test
     fun testEmptyAccessoriesParseAsCaptureBaseline() {
-        val acc = decodeAccessories(body(SetPlayer(slotId = 0, level = 1, isStart = false)))
+        val acc = decodeAccessories(body(captureSetPlayer(slotId = 0, level = 1, isStart = false)))
         assertEquals(0, acc.u16)
         assertTrue(acc.decorations.isEmpty())
         assertTrue(acc.effects.isEmpty())
@@ -141,7 +158,7 @@ class SetPlayerTest {
     fun testBackground710418IsSentInCount1() {
         // C→S op 273 实测: slot=0xDC(220) = 大类9(装扮/背景) 子槽4, item=710418
         val got = body(
-            SetPlayer(
+            captureSetPlayer(
                 slotId = 0, level = 1, isStart = false,
                 equips = mapOf(9 * EQUIP_SLOTS_PER_GROUP + 4 to 710418),
             )
@@ -167,7 +184,7 @@ class SetPlayerTest {
     @Test
     fun testStartVariantAlsoCarriesDecoration() {
         val got = body(
-            SetPlayer(slotId = 0, level = 1, isStart = true, equips = mapOf(220 to 710418))
+            captureSetPlayer(slotId = 0, level = 1, isStart = true, equips = mapOf(220 to 710418))
         )
         assertEquals(80, got.size, "77B 基准 + 3B")
         assertEquals(listOf(1 to 418), decodeAccessories(got, isStart = true).decorations)
@@ -176,7 +193,7 @@ class SetPlayerTest {
     @Test
     fun testUnequipAndUnknownItemProduceNoDecoration() {
         val got = body(
-            SetPlayer(slotId = 0, level = 1, equips = mapOf(220 to 0, 221 to 999999999))
+            captureSetPlayer(slotId = 0, level = 1, equips = mapOf(220 to 0, 221 to 999999999))
         )
         assertEquals(78, got.size)
         assertTrue(decodeAccessories(got).decorations.isEmpty())
@@ -185,7 +202,7 @@ class SetPlayerTest {
     @Test
     fun testCount2OrderBeforeTailFlags() {
         // 2040 "CharDeco A0016": category 12 / skinId -1 / targetCharId 0 / param 16
-        val got = body(SetPlayer(slotId = 0, level = 1, equips = mapOf(240 to 2040)))
+        val got = body(captureSetPlayer(slotId = 0, level = 1, equips = mapOf(240 to 2040)))
         assertEquals(90, got.size, "78B 基准 + 1 条 count2 (3×E4=12B)")
         val acc = decodeAccessories(got)
         assertEquals(listOf(Triple(-1, 0, 16)), acc.effects)
@@ -241,7 +258,7 @@ class SetPlayerTest {
     @Test
     fun testEquippedBombSkinGoesIntoF32() {
         val got = body(
-            SetPlayer(slotId = 0, level = 1, equips = mapOf(bombSlot() to 930000655))
+            captureSetPlayer(slotId = 0, level = 1, equips = mapOf(bombSlot() to 930000655))
         )
         // f32 是定长字段, 装备水泡不改变包长 (旧实现恒 0 时也是 78B)
         assertEquals(78, got.size, "水泡皮肤走 f32, 不应往 count1/2/3 追加条目")
@@ -260,7 +277,7 @@ class SetPlayerTest {
         // 进战斗前的最后一次 op 100 (isStart=true) 会覆写 CFxContext+472,
         // 这一发必须同样带上水泡, 否则进房时设的值会被清回默认。
         val got = body(
-            SetPlayer(slotId = 0, level = 1, isStart = true, equips = mapOf(bombSlot() to 930000655))
+            captureSetPlayer(slotId = 0, level = 1, isStart = true, equips = mapOf(bombSlot() to 930000655))
         )
         assertEquals(77, got.size)
         assertEquals(655, decodeAccessories(got, isStart = true).f32)
@@ -270,7 +287,7 @@ class SetPlayerTest {
     fun testBombSkinCoexistsWithOtherAccessories() {
         // 背景 (count1) + 角色特效 (count2) + 水泡 (f32) 三种通道互不干扰
         val got = body(
-            SetPlayer(
+            captureSetPlayer(
                 slotId = 0, level = 1,
                 equips = mapOf(
                     220 to 710418,   // category 10 背景
@@ -297,7 +314,7 @@ class SetPlayerTest {
             mapOf(0xFF to 930000655),
         )
         cases.forEach { equips ->
-            val acc = decodeAccessories(body(SetPlayer(slotId = 0, level = 1, equips = equips)))
+            val acc = decodeAccessories(body(captureSetPlayer(slotId = 0, level = 1, equips = equips)))
             assertEquals(0, acc.f32, "equips=$equips 不应下发水泡皮肤")
         }
     }

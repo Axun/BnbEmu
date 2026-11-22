@@ -14,6 +14,7 @@ import bnbemu.packet.PermissionInfo
 import bnbemu.packet.ChangeStage
 import bnbemu.packet.ClientStage
 import bnbemu.service.PlayerService
+import bnbemu.service.lucci
 import org.tinylog.kotlin.Logger
 
 // 進頻道後第一個包
@@ -67,7 +68,7 @@ val OnConnEstablished = PKTHandler { c ->
             ChannelsState(),
             ChannelsGameState(),
             ChangeStage(),
-            UserDynamicInfoValue(),
+            UserDynamicInfoValue(0, c.lucci),
             RoomList(),
             WelcomeNotice(),
         )

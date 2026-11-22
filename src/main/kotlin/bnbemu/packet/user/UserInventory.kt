@@ -3,7 +3,6 @@ package bnbemu.packet.user
 import bnbemu.data.ItemDefCatalog
 import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
 import bnbemu.domain.EquipSlot
-import bnbemu.domain.StarterKit
 import bnbemu.domain.UserItemEntry
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
@@ -49,11 +48,6 @@ val DEFAULT_EXPIRE_DATE: ByteArray = byteArrayOf(
     0xD6.toByte(), 0x2C.toByte(), 0xC4.toByte(), 0x91.toByte()
 )
 
-val DEFAULT_PRACTICE_EXPIRE_DATE: ByteArray = byteArrayOf(
-    0x3B.toByte(), 0xA6.toByte(), 0x4A.toByte(), 0x48.toByte(),
-    0xD6.toByte(), 0x2C.toByte(), 0xC4.toByte(), 0xA4.toByte()
-)
-
 class UserInventoryEntry(
     val itemId: Int,
     val slot: Int = BAG_ONLY_SLOT,
@@ -78,17 +72,8 @@ class UserInventoryEntry(
     }
 }
 
-// 进频道大厅默认生效/穿戴道具列表 (由 StarterKit 统一定义)
-val DEFAULT_USER_INVENTORY_ITEMS: List<UserInventoryEntry> = defaultUserInventoryItems()
-
-/**
- * 默认初始穿戴条目清单（基于 [StarterKit.defaultInventory]）。
- */
-fun defaultUserInventoryItems(): List<UserInventoryEntry> =
-    inventoryEntries(StarterKit.defaultInventory())
-
 fun UserInventory(
-    inventories: List<List<UserInventoryEntry>> = listOf(DEFAULT_USER_INVENTORY_ITEMS, DEFAULT_USER_INVENTORY_ITEMS)
+    inventories: List<List<UserInventoryEntry>>
 ) = PKT {
     Encode1(inventories.size)
     inventories.forEach { items ->

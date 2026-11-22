@@ -4,7 +4,7 @@ import io.netty.buffer.Unpooled
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import bnbemu.ACP
-import bnbemu.packet.user.DEFAULT_USER_EQUIPS
+import bnbemu.CaptureFixtures
 import bnbemu.packet.user.UserInfoResult
 import bnbemu.codec.decodeName
 
@@ -40,7 +40,7 @@ class MyPageTest {
 
     @Test
     fun testUserInfoResultPacket() {
-        val pkt = UserInfoResult()
+        val pkt = UserInfoResult(characterName = CaptureFixtures.CAPTURE_CHAR_NAME)
         val op = OpcodeManager.getSendOp(pkt::class.java)
         assertEquals(73, op, "UserInfoResult send opcode must be 73")
 
@@ -198,14 +198,14 @@ class MyPageTest {
         val pkt = UserInfoResult(
             isSelf = false,
             characterName = "Jacko",
-            equips = DEFAULT_USER_EQUIPS
+            equips = CaptureFixtures.DEFAULT_USER_EQUIPS
         )
         val buf = Unpooled.buffer()
         val sendPkt = SendPacketBase(buf)
         pkt.encode(sendPkt)
 
         // 空装备时为 202 字节，每件装备 13 字节 (4+1+4+4)
-        assertEquals(202 + DEFAULT_USER_EQUIPS.size * 13, buf.readableBytes())
+        assertEquals(202 + CaptureFixtures.DEFAULT_USER_EQUIPS.size * 13, buf.readableBytes())
     }
 
     @Test

@@ -126,12 +126,6 @@ object PassportServer {
 
     fun isOnline(passportId: String): Boolean = SESSIONS.containsKey(passportId.lowercase())
 
-    // cmd 0x000B 成功回應 (86B, login.pcap s0: 帳號 kcworms1) - 保留常量供回歸與參照
-    internal val REPLY_0C = buildReply0C(0, "nmco_session", "NGPkcworms1")
-
-    // cmd 0x002D 成功回應 (135B, login.pcap s1: 角色名 ffdf, userId 7215) - 保留常量供回歸與參照
-    internal val REPLY_2E = buildReply2E(0, 7215, "ffdf")
-
     /**
      * NMCO PCBC 解密演算法 (32-bit 明文回饋)
      */
@@ -250,8 +244,8 @@ object PassportServer {
      */
     fun buildReply0C(
         returnCode: Int = 0,
-        sessionType: String = "nmco_session",
-        passportId: String = "NGPkcworms1"
+        sessionType: String,
+        passportId: String
     ): ByteArray {
         val s1 = encodeStr(sessionType)
         val s2 = encodeStr(passportId)
@@ -269,12 +263,12 @@ object PassportServer {
      * 動態構造 S→C 0x002E (Session Query 角色查詢回應)
      * @param returnCode 0 為成功
      * @param userId 帳號數值 (如 7215 / 7307)
-     * @param charName 角色名稱 (如 "ffdf")
+     * @param charName 角色名稱
      */
     fun buildReply2E(
         returnCode: Int = 0,
-        userId: Int = 7215,
-        charName: String = "ffdf"
+        userId: Int,
+        charName: String
     ): ByteArray {
         val prefix = ByteArray(32).apply { this[15] = 1 }
         val nameBytes = encodeStr(charName)

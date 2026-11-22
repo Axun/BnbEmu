@@ -4,19 +4,19 @@ import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import bnbemu.CaptureFixtures
 import bnbemu.domain.CharacterRules
 import bnbemu.domain.EquipSlot
 import bnbemu.domain.PlayerProfile
 import bnbemu.handler.JoinSessionReq
 import bnbemu.handler.user.sendUserInfo
-import bnbemu.packet.user.defaultUserInventoryItems
 import bnbemu.service.PlayerService
 
 class LobbyReturnTest {
 
     @Test
     fun testDefaultUserInventoryItemsContainsOnlyRealStarterEquip() {
-        val items = defaultUserInventoryItems()
+        val items = CaptureFixtures.defaultUserInventoryItems()
         assertEquals(1, items.size, "默认装备清单只含 2082 进阶卡，不再包含会被丢弃的 cat=15/13 条目")
         val evoCard = items.single()
         assertEquals(CharacterRules.MARID_EVO_CARD_ITEM_ID, evoCard.itemId)

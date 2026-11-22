@@ -1,6 +1,5 @@
 package bnbemu.packet.user
 
-import bnbemu.domain.EquipSlot
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
 import bnbemu.codec.encodeName
@@ -21,14 +20,10 @@ private fun SendPacketBase.EncodeTokenStr(s: String) {
 }
 
 data class UserEquipEntry(
-    val itemId: Int = 2082,
-    val slot: Int = EquipSlot.CHAR_DECO,
+    val itemId: Int,
+    val slot: Int,
     val param1: Int = 1,
     val param2: Int = 0
-)
-
-val DEFAULT_USER_EQUIPS = listOf(
-    UserEquipEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param1 = 1, param2 = 0)
 )
 
 /**
@@ -62,7 +57,7 @@ fun UserInfoResult(
     errCode: Int = 0,
     isSelf: Boolean = true,
     slotIndex: Int = 0,
-    characterName: String = "ffdf",
+    characterName: String = "",
     gender: Int = 0, // 0=男, 1=女
     motto: String = "PopTag Forever!", // 个性签名 (Profile)
     guildName: String = "",

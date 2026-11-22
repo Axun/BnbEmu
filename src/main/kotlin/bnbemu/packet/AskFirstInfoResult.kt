@@ -2,14 +2,12 @@ package bnbemu.packet
 
 import bnbemu.netty.PKT
 import bnbemu.netty.SendPacketBase
-import bnbemu.netty.toBA
 
 // AskFirstInfo (C→S op 2, 登錄連線第一個業務包, op 之後跟 40B 票據資料) 的回應
-// login.pcap sq=43, 65B (63B body); 內含抓包帳號 kcworms1 的身份值 — 模擬器暫無帳號體系,
-// 暫以抓包值重放 (會話串另見 op7 OnConnEstablished / op254 / op297, 同串)
+// login.pcap sq=43, 65B (63B body); 由呼叫方顯式傳入玩家 userId 與會話令牌 (encodeName(charName))。
 fun AskFirstInfoResult(
-    userId: Int = CAPTURE_USER_ID,
-    session: ByteArray = SESSION_STRING,
+    userId: Int,
+    session: ByteArray = ByteArray(0),
     level: Int = 1,
 ) = PKT {
     UserInfo(
@@ -19,10 +17,6 @@ fun AskFirstInfoResult(
         channelTabCount = CHANNEL_TAB_COUNT,
     ).Encode(this)
 }
-
-// 抓包帳號 kcworms1 的身份值 (userId 7215 = passport 0x2E 回應的賬號數值; 暫無帳號體系故用常量)
-internal const val CAPTURE_USER_ID = 7215
-internal val SESSION_STRING = "f0ae35f3".toBA()
 
 // 頻道選擇頁的頁籤數上限 (op 4 末位元組 E1)。
 // 逆向: CA.exe 0x006220A8 解析 op 4 時把 E2(connectTimeoutMs) 寫入 [CShareContext+0x204]、

@@ -92,7 +92,7 @@ internal fun roomsStream(rooms: List<RoomEntry>): ByteArray {
 
 // enter-channel.pcap 41B 样本 = "rd" 房（1/1 人，激战模式，mapId=4）——
 // RoomList() 默认下发此样本以与 replay_test.py 的 enter 用例逐字节一致。
-internal val EN_SAMPLE_ROOMS = listOf(
+private val EN_SAMPLE_ROOMS = listOf(
     RoomEntry(
         roomId = 61,
         handle = 119,

@@ -1,5 +1,6 @@
 package bnbemu.packet.user
 
+import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.netty.PKT
 
 /**
@@ -23,7 +24,7 @@ import bnbemu.netty.PKT
  * 命名说明: 客户端里 `CUserDynamicInfo` 的整包解析入口是 op 20（见 `packet/UserDynamicInfo.kt`，
  * 与客户端类同名），本包只是它的一个 setter 端点，故加 `Value` 后缀区分。
  */
-fun UserDynamicInfoValue(key: Int = 0, value: Int = 1234567) = PKT {
+fun UserDynamicInfoValue(key: Int = 0, value: Int = DEFAULT_LUCCI) = PKT {
     Encode1(key)
     Encode4(value)
 }

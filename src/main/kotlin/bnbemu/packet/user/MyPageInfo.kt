@@ -2,8 +2,6 @@ package bnbemu.packet.user
 
 import bnbemu.data.ShopCatalogData
 import bnbemu.netty.PKT
-import bnbemu.packet.CAPTURE_USER_ID
-import bnbemu.packet.SESSION_STRING
 
 // ============================================================================
 // S→C op 227: 個人資料摘要 / 戰績與商城版本 (進頻道批次回應之一, seq=88, 35B)
@@ -26,8 +24,8 @@ import bnbemu.packet.SESSION_STRING
 //     ]
 data class MyPageUser(
     val slotIndex: Int = 0,
-    val userId: Int = CAPTURE_USER_ID,
-    val session: ByteArray = SESSION_STRING
+    val userId: Int,
+    val session: ByteArray = ByteArray(0),
 )
 
 fun MyPageInfo(
@@ -35,9 +33,9 @@ fun MyPageInfo(
     shopVersion: Int = ShopCatalogData.CATALOG_HASH,
     packageVersion: Int = 0,
     bannerVersion: Int = 0,
-    session: ByteArray = SESSION_STRING,
+    session: ByteArray = ByteArray(0),
     feature0x1a: Int = 0,
-    users: List<MyPageUser> = listOf(MyPageUser())
+    users: List<MyPageUser> = emptyList(),
 ) = PKT {
     Encode1(if (hasProfile) 1 else 0)
     if (hasProfile) {

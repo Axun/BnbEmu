@@ -9,8 +9,8 @@ import bnbemu.netty.PKT
 // 令 sub_626742 回傳 0 而否決全部頁索引 (記住的 LastChannelType 被丟棄、每次退回 Beginner 頁)。
 // 故與登入版統一為 CHANNEL_TAB_COUNT; replay_test 的 65B 基準只豁免末位元組。
 fun SessionInfoResult(
-    userId: Int = CAPTURE_USER_ID,
-    session: ByteArray = SESSION_STRING,
+    userId: Int,
+    session: ByteArray = ByteArray(0),
 ) = PKT {
     UserInfo(
         userId2 = userId, session = session,

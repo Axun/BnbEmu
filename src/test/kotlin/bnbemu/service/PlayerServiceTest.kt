@@ -1,5 +1,6 @@
 package bnbemu.service
 
+import bnbemu.codec.decodeName
 import bnbemu.data.ShopCatalogData
 import bnbemu.data.ShopCurrency
 import bnbemu.domain.CharacterRules
@@ -21,6 +22,7 @@ import bnbemu.handler.shop.ChargeNxReq
 import bnbemu.handler.shop.ShopUserSyncReq
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.Decode1
+import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.OpcodeManager
 import bnbemu.netty.PKT
@@ -229,6 +231,12 @@ class PlayerServiceTest {
             // AskFirstInfoResult -> UserInfo: E1(0), E2(scWord), E1(1), E4(permId), E4(userId)
             body.skipBytes(1 + 2 + 1 + 4)
             assertEquals(profile.userId, body.Decode4)
+            // E2(0), E2(0), E4(0), E4(userId2), E2(sessionLen)+session
+            body.skipBytes(2 + 2 + 4)
+            assertEquals(profile.userId, body.Decode4)
+            val sessionLen = body.Decode2
+            val sessionBytes = ByteArray(sessionLen).also { body.readBytes(it) }
+            assertEquals(profile.charName, decodeName(sessionBytes))
         } finally {
             ch.finishAndReleaseAll()
         }

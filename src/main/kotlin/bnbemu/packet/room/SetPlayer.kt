@@ -1,13 +1,12 @@
 package bnbemu.packet.room
 
+import bnbemu.codec.encodeName
 import bnbemu.domain.CharacterType
 import bnbemu.data.ItemDefCatalog
 import bnbemu.data.ItemDefEntry
 import bnbemu.domain.EquipSlot
 import bnbemu.domain.PlayerProfile
 import bnbemu.netty.PKT
-import bnbemu.packet.CAPTURE_USER_ID
-import bnbemu.packet.SESSION_STRING
 import bnbemu.server.EncodeSlotMeta
 import bnbemu.server.FLAG_CHIEF
 import bnbemu.server.FLAG_READY
@@ -185,8 +184,8 @@ fun SetPlayer(
     slot: Slot? = null,
     player: PlayerProfile? = null,
     level: Int = player?.level ?: 5,
-    userId: Int = player?.userId ?: CAPTURE_USER_ID,
-    session: ByteArray = SESSION_STRING,
+    userId: Int = player?.userId ?: 0,
+    session: ByteArray = player?.let { encodeName(it.charName) } ?: ByteArray(0),
     isStart: Boolean = false,
     slotState: Int = when {
         isStart -> ((slot?.state?.toInt() ?: 0) and FLAG_CHIEF.inv()) or FLAG_READY
