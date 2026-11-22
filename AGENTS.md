@@ -81,14 +81,18 @@
 
 ## SSD 资料块编码（op1/op2/op51/op11/op13/op12 内嵌子块）
 - 结构：`Encode1Bool(true) + Encode4(len) + len 字节资料块`（op13/op12 无开头的 Encode1Bool）；
-  资料块变换：**每 dword 以 BE 读取、XOR 0x96CA5395、按 LE 写回**（即 Encode4 的字节序交换形式）
-- 块头规律（op1/op2/op11/op12/op13 五块吻合）：`[0x18][(块长-5)&0xFF][u32 0]`（参见ssdEncode函数）
+  资料块变换：**4/2/1 三档**——4B 一组 BE 读、XOR 0x96CA5395、按 LE 写回；余 2B BE 读 ^0xA569；余 1B ^0x5A
+  （客户端 `sub_75DAF0`，CA.exe.c:709349）。块长非 4 的倍数时尾部同样要解，**没有"原样保留"的余数**
+- 块头规律（op1/op2/op11/op12/op13 五块吻合）：`[0x18][u32 LE 块长-5][u8 compress]`（`SsdCodec.buildSsdBlock`；
+  客户端 `sub_78C120` 按 u32 读长度，块 < 16 MB 所以高字节恒 0）
 - **op11 = 频道列表、op13 = 各频道开关/状态、op12 = 公告与PPL广告信息，均已结构化**：频道表 `EN_CHANNELS` 定义在
   `packet/ChannelsExtraInfo.kt`（`ChannelEntry`，op13 用其 `state`/`enabled` 栏，
   生成逻辑在 `ChannelsState.kt`；
 - op1 = multisvr.ssd 缓存体（`MultiServerInit.kt`；
   op51 = filterstr.ssd 敏感词库（`CurseFilterTable.kt`
-  op2 = 字串表（仍为硬编码回放）；**op12 = 公告与广告块 `ChannelsNotice.kt`
+  op2 = csysstr.ssd 系统字串字典（客户端 `CStringMan`，38 条 key→文案，客户端会小写化 key；
+  `data/CsysStr.kt` 程序化生成，`packet/FirstInfoInit.kt` 只写三个字段，细节见 `docs/client/ssd-file.md` (4.2)）；
+  **op12 = 公告与广告块 `ChannelsNotice.kt`
 - 已改写为 127.0.0.1 的 IP 位置：`packet/MultiServerInit.kt` EN_LOGIN_SERVERS[].ip（op1）、
   `packet/ChannelsExtraInfo.kt` ChannelEntry.ip（op11）——**改服务器地址需同步**
   `tools/client/patch_ip.py`（客户端二进制侧，含 nmconew.dll/nmcogame.dll 的 UTF-16LE 表各 8 槽；

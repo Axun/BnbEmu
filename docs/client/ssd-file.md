@@ -18,11 +18,16 @@
   等价写法 `zlib.adler32(body) - (len(body)<<16) - 1`。
   `multisvr / filterstr / csysstr / channel2_000 / fxdynmapinfo / packagemap.ini` 六个文件逐一复算通过。
 - `0x08 ~ 结尾`：SSD 数据块，**本地落盘为明文或 zlib 压缩流，并未加密**：
-  `[0x18][u24 LE payloadLen][u8 0][u8 compress][u32 LE rawSize 仅 compress=1][payload]`，
+  `[0x18][u32 LE payloadLen][u8 compress][u32 LE rawSize 仅 compress=1][payload]`，
   其中 `payloadLen = 数据块总长 - 5`，`compress=1` 时 payload 为 `78 da` 开头的 zlib 流，`rawSize` 为解压后字节数。
+  ⚠ 长度是**完整 u32**（客户端 `sub_78C120`（`CA.exe.c:748271`）直接 `*(DWORD*)(a2+1)` 读），
+  只是块都小于 16 MB 所以高字节恒为 0；旧文写作「u24 + u8 0」把同一字段拆成了两段。
   ⚠ 旧版本此处写作「dword 字节序逆转 + 异或 `0x96CA5395` 加密」有误：那是**服务端网络下发** SSD 资料块时
   的编码（见 `tools/extract_first_push.py` 的 `ssd_decode` / AGENTS.md 的 SSD 资料块章节），
   客户端解码后才写盘；本地 `.ssd` 与之不是同一种字节形态，混用会解出乱码。
+  该网络变换是 **4/2/1 三档**而不是「整块按 dword」：4 B 一组 BE 读 ^ `0x96CA5395` 按 LE 写回，
+  余 2 B BE 读 ^ `0xA569`，余 1 B ^ `0x5A`（客户端 `sub_75DAF0`，`CA.exe.c:709349`）。
+  块长非 4 的倍数时尾部**不是原样保留**——`csysstr` 块尾两字节 `85 47` 就是明文 `". "` 经 `0xA569` 编出的。
 
 #### (3) `fxdynmapinfo.ssd` 解析结论（`CDynamicMapMan` 动态地图表）
 实例：`F:\Games\PopTag\fxdynmapinfo.ssd`，4130 B，校验和 `0x71EC01A6`，`compress=1`，
@@ -102,7 +107,7 @@ JSON 是 YAML 1.2 子集，现有 kaml 可直接解析，**未新增依赖**。
 | :--- | :--- | :--- | :--- |
 | `multisvr.ssd` | `CMultiServer` | 登录服务器与各区服 IP:Port 列表 | 首连推送 S→C op 1 (`MultiServerInit`) |
 | `filterstr.ssd` | `CCurseFilter` 敏感词库 | 聊天与起名的屏蔽词列表 | 首连推送 S→C op 51 (`CurseFilterTable`) |
-| `csysstr.ssd` | 系统字串表 | 客户端界面文本与任务字串 | 首连推送 S→C op 2 (`FirstInfoInit`) |
+| `csysstr.ssd` | `CStringMan` 系统字串字典 | 运营可热更文案（38 条 key→文本：任务/角色名/频道描述/tooltip/聊天模板） | 首连推送 S→C op 2 (`FirstInfoInit`) |
 | `fxdynmapinfo.ssd` | `CDynamicMapMan` | 动态地图配置（活动地图属性、分组） | 进频道握手 S→C op 210 无条件推送（2026-11-04 正名 `DynamicMapInfo`，旧名 `EnableShop`；内容由 JSON 实时生成） |
 | `channel2_000.ssd` | 频道列表缓存 | 各频道 ID、状态与人数上限 | 进频道连线 S→C op 11 |
 | **`fxdynimginfo.ssd`** | `CDynamicImgInfo` | **动态广告与运营图像信息表** | **由握手 Banner 中的 `55` 控制版本** |
@@ -118,7 +123,42 @@ JSON 是 YAML 1.2 子集，现有 kaml 可直接解析，**未新增依赖**。
 抓包内容 = 1 条 `group=0 / "Channel 1" / "Normal"`，块 32 B、包 39 B —— op 51 是**单块**包，
 没有 op 1 那样的结尾第二个 `Encode1`。早期笔记把它当「频道名资料块」是误读。
 Kotlin 侧 `packet/CurseFilterTable.kt`（`EN_CURSE_FILTER` 词表 + `curseFilterStream`）重建的包体
-与 `cap/firstconn_s2c_op51.bin` 逐字节一致，回归见 `CurseFilterTableTest`。
+与 `cap/firstconn_s2c_op51.bin` 逐字节一致（当前无独立测试，靠 `tools/replay_test.py` 首连用例兜底）。
+
+#### (4.2) `csysstr.ssd` 字典流（S→C op 2 的真实含义）
+
+块明文（抓包 1848 B） = `u16 LE count` + `count × [ u32 LE key ][ u32 LE value ]`，串长恒为 u32 LE。
+依据客户端 `sub_6C3ED6`（`CA.exe.c:615187`）：`ReadUInt16` 取条数，循环两次 `CISmartStream::ReadString`
+（`sub_78CE60`）；key 经 `sub_75C7E0`（`:708243`）逐字符 `_mbctolower` 后进 `CDictionary`（`CStringMan+3`），
+所以查询大小写不敏感。归属是 **`CStringMan`**（构造 `sub_6C3E2B` `:615148`，`:615164` 拼 `csysstr.ssd`），
+不是 `CQuestStringMan`（那个读 `csysqstr.ssd`，走 op 67，`sub_6C3CAD` `:615048`）；
+两者在 C→S op 0 / op 55 各报一个版本号，别混。
+
+抓包 38 条，内容不是「全部 UI 文本」，而是运营可热更的文案子集：
+- 任务/地图：`Wriggle`、`WriggleRandom`、`MissionWriggleMsg`、`Gather11Balls`、`QuestStart`/`QuestStop`
+- 角色名：`Ch14`→`Posh Dao`、`LuxuryKephi`、`SuperUni`（键由 `CCharacterNameMan` 用 `"Ch%02d"` 拼，`:181615`）
+- 频道描述：`ChannelDesc0`、`ChannelDesc50`（键由 `"ChannelDesc%d"` 拼，`:187140`）
+- 房间/广场 tooltip：`SquareToolTip*`、`ShowWaitRoomToolTip`、`CreatePracticeRoomToolTip`…
+- 聊天与系统消息模板：`JoinSession`=`"%s has joined.\n"`、`ConnectedTo`=`"Online - %s"`、`CannotJoinOverflow`，
+  `%s`/`%d` 由客户端显示时格式化
+
+表里查不到的键（例如 `ErrCannotLogin`）说明它只做**覆盖**，基础文案另有来源；所以缺这张表不是「界面全变空」，
+而是这些运营文案与系统消息模板缺失。
+
+包与块：`Encode1Bool(hasNew) + Encode4(1854) + 块`；块 = `[0x18][u32 1849][compress=0][1848 B 字典流]`。
+`hasNew=0` 时客户端不读块，直接复用本地 `csysstr.ssd`（`sub_6C406B` 的 else 分支）。
+抓包这份是 **`compress=0`**（1848 B 压完 909 B）：真服下发未压缩块，客户端收包后自己 zlib 压成
+`compress=1` 再写盘，所以磁盘形态（927 B）比线上块小。
+
+版本戳 = 块校验和（`[compress..末端]` 的 Adler-32 变体，`sub_78BB60` `:747990`）：客户端存在 `CStringMan+92`，
+随 C→S op 0 上传（抓包 5 个 u32 的第 2 个 = `0x1255CF6D`，即本地**压缩**块的校验，已复算一致）。
+因为「线上未压缩块（校验 `0x20803D73`）」与「磁盘压缩块」天然不等，真服也永远发 `hasNew=1`，
+客户端每次登录都会把内容相同的文件重写一遍（`sub_6B8F7E` 只在校验和变化时写盘，但这里必然不等）。
+
+Kotlin 侧自 2026-11-22 起**程序化生成**，不再有 1854 B hex 常量：
+`data/CsysStr.kt` 的 `EN_SYS_STR`（38 条）→ `serializePlain` → `buildSsdBlock(compress = false)` → `ssdEncode`；
+`packet/FirstInfoInit.kt` 只写 `Encode1Bool/Encode4/EncodeBuffer` 三个字段。
+回归 `CsysStrPacketTest` 断言明文 1848 B / 块 1854 B / 包体 1859 B 与 `cap/firstconn_s2c_op2.bin` 逐字节一致。
 
 #### (5) JSON 单一事实源与字节级可复现性
 
