@@ -122,7 +122,7 @@ SetSlotFanfare: 114
 PracticeSetSlotAI: 103
 StartGameResult: 111
 GameStartMapInfo: 112
-PracticeBoard: 136
+GameStart: 136
 # 局内 AI/角色事件回显 (S→C op 139): 对每个 C→S op 106 回一个, 载荷由 op 106 字段生成
 SetBomberEvent: 139
 NpcEvent: 270

@@ -7,7 +7,8 @@ import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.room.StartGameResult
-import bnbemu.packet.room.PracticeBoard
+import bnbemu.packet.battle.GameStart
+import bnbemu.packet.battle.GameStartPeer
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.lobby.SESSION_TYPE_BATTLE
 import bnbemu.packet.lobby.SESSION_TYPE_PRACTICE
@@ -45,12 +46,19 @@ private const val FALLBACK_MAP_NAME = "Cemetery03"
 //   ⚠️ CA.exe 0x00531A09 在 isCustomMap 之后仅当 sub_686233(CFxContext) != 0（即
 //      CA.exe 0x0052725F 仅对 sessionType == 15 练习模式置 1）时才写 fileCheckType(+CRC32)；
 //      激战模式 (16) 与普通房 (0) 不写该字段，body 为 16B (tst.pcap 练习房为 17B)。
-//   在舊版 TW_5 / CN_12 協議中對應 StartGameReq (TW_5 op 106).
 // 伺服器回覆對局啟動序列:
-//   [111 StartGameResult(0), 112 GameStartMapInfo, 100 SetPlayer(isStart=true), 136 PracticeBoard].
-//   op 111 是「開始遊戲」的結果碼 (E1, 0/1 = 成功, 2..24 = 拒絕原因, 見 packet/room/Practice.kt):
-//   它不解鎖也不推進流程, 失敗碼才會彈提示; 練習房正常路徑回 0。
+//   [111 StartGameResult(0), 112 GameStartMapInfo, 100 SetPlayer(isStart=true), 136 GameStart].
+//   op 111 是「開始遊戲」的結果碼 (E1, 0/1 = 成功, 2..24 = 拒絕原因, 取值表見
+//   packet/room/StartGameResult.kt): 它不解鎖也不推進流程, 失敗碼才會彈提示; 練習房正常路徑回 0。
+//   收尾的 op 136 (GameStart) 才是真正開局: 啟動對局時鐘 + 每個 bomber 的激活,
+//   並附帶局次密鑰與 UDP 對端表 (真端 DoStartGame + OnUDPPeerInfo 兩包合一,
+//   逐字段見 packet/battle/GameStart.kt)。它不含棋盤資料。
 // 之後客戶端完成加載發送 149 Ready Ack, 伺服器啟動對局主循環 (Room.startGame).
+//
+// 本鏈的抓包基準 (tst.pcap stream 4) 提取工具: tools/extract_op75.py;
+// 其餘回放 blob 由 tools/gen_practice_kotlin.py 生成。
+// ⚠️ 真实服务器另会按地图事件时间轴发 S→C op 172 (MapEventSync), 既非 ItemThrow
+//    也与 AI 行动无关, 见 packet/room/MapEventSync.kt。
 val StartGameReq = PKTHandler { c ->
     val mapId = Decode4
     val themeId = Decode2
@@ -117,7 +125,18 @@ val StartGameReq = PKTHandler { c ->
         // 与房主位, 只置 FLAG_READY。slotId 恒 0 —— 真人恒在槽 0 (CreateSessionReq / Room.begin),
         // 角色与颜色由上一发 op 112 的槽位名册决定, 这里的槽位元数据与抓包基准保持 Boz/0。
         SetPlayer(slotId = 0, player = player, isStart = true),
-        PracticeBoard(),
+        // op 136 開局令: 時鐘 + 局次密鑰 + UDP 對端表。名冊必須與上面 op 112 的 slotConfigs
+        // 同源 (客戶端會按 occupied 位反向校驗名冊: flag=0 就刪人, flag=1 卻沒人就回 op 149)。
+        // 本模擬器只有 TCP, 所有 UDP 端點填 0 —— 客戶端 0x00789FD0 對 ip/port 為 0 直接跳過,
+        // 不會去連抓包裡那台早已下線的 66.135.19.7。
+        GameStart(
+            // 兩個秒級時長沿用抓包實測值: A=180s (3 分鐘) / B=0。CA.exe 收下後只把它們
+            // ×1000 寫進 +13808/+13812, 之後從不讀取, 故對行為沒有影響 (語義未定案,
+            // 真端同位置是 ghostStart/ghostFreq, 參考分支按「對局時限」使用)。
+            timerASec = 180,
+            timerBSec = 0,
+            peers = activeSlots.map { GameStartPeer(it) },
+        ),
     )
 
     // 啟動對局主循環 (onTick: 水泡倒计时与 op 138 爆炸状态同步)

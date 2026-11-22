@@ -235,11 +235,11 @@ class GameStartMapInfoTest {
             buf.handle(client)
         }
 
-        // 伺服器回覆序列: StartGameResult, GameStartMapInfo, SetPlayer(isStart=true), PracticeBoard
+        // 伺服器回覆序列: StartGameResult, GameStartMapInfo, SetPlayer(isStart=true), GameStart
         val pkt1 = ch.readOutbound<PKT>() // StartGameResult (op 111, E1(0))
         val pkt2 = ch.readOutbound<PKT>() // GameStartMapInfo
         val pkt3 = ch.readOutbound<PKT>() // op 100 開局版 (SetPlayer isStart=true)
-        val pkt4 = ch.readOutbound<PKT>() // PracticeBoard
+        val pkt4 = ch.readOutbound<PKT>() // GameStart (op 136 開局令)
 
         assertNotNull(pkt2)
 

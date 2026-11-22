@@ -69,6 +69,26 @@ def op112_random_mask(p: bytes) -> set:
     return set(range(2, 6)) | {28 + 17 * n for n in range(slot_count)} | {7, 18, 23}
 
 
+def op136_mask(p: bytes) -> set:
+    """op136 GameStart 每局/部署相關欄位。
+
+    放行: 時鐘基 A(2..5)、局次密鑰 B(6..9)、兩個秒級時長 C/D(10..17)、
+    本機 UDP 端點(19..25)、以及每個佔用槽的 3 組 (E4 ip, E2 port)。
+    仍逐位元組釘死: 包長、tickFlag(18)、10 項槽表的佔用位 —— 佔用位是名冊校驗
+    (flag=0 客戶端會刪掉該用戶), 不能跟端點一起放行。
+    """
+    masked = set(range(2, 18)) | set(range(19, 26))
+    i = 26
+    for _ in range(10):
+        if p[i] ^ 0x5A:
+            masked |= set(range(i + 1, i + 19))
+            i += 19
+        else:
+            i += 1
+    assert i == len(p), f"op136 槽位表長度不符: 走到 {i}, 實際 {len(p)}"
+    return masked
+
+
 def welcome_notice_payload():
     """op 423 期望載荷: 依 packet/WelcomeNotice.kt 當前的預設 text/displayMs 生成 (含 2B opcode)。
 
@@ -227,10 +247,12 @@ if __name__ == "__main__":
     #   + op 92 開始遊戲 (重封裝至 seq=46)。
     # → EN 回整套房間設置 (87, 83, 4×2, 113, 100, 108, 106×8, 每槽 114/104/105/103, 198, 423);
     #   op 92 觸發遊戲開始 [111, 112, 100(77B), 136]。
-    #   各包 (83/113/100/108/136/198 為回放 blob, 423 由 WelcomeNotice 結構化生成並按當前預設文案比對)
+    #   各包 (83/113/100/108/198 為回放 blob, 423 由 WelcomeNotice 結構化生成並按當前預設文案比對)
 #   載荷逐位元組一致; op 423 文案自定義後不再比對原廠抓包基準, 見 welcome_notice_payload();
     #   op 112 的 randomSeed 與每槽 spawnPos 每局重新產生, 只比對其餘固定欄位
     #   (詳見 op112_random_mask), 並額外驗證 spawnPos 是 0..7 的不重複排列。
+    #   op 136 GameStart 已結構化 (packet/battle/GameStart.kt): 時鐘/密鑰/ghost 時長/UDP 端點
+    #   由伺服器按會話生成, 只釘死包長、tickFlag 與 10 項槽表的佔用位 (見 op136_mask)。
     #   (op 139 只在收到 C→S op 106 後回顯, 見 tools/test_ai_sync.py)
     #   ⚠️ 真實伺服器另有 op 172 (MapEventSync 地圖事件時間軸同步, 驅動 "Wave/Game/AirPlane1"),
     #      模擬器不主動週期廣播, 故 expect_ops 不含 172 (逆向見 tools/rev_op172.py)
@@ -243,5 +265,5 @@ if __name__ == "__main__":
             136: open(os.path.join(base, "cap/practice_s2c_op136_180B_0.bin"), "rb").read().hex(),
             198: open(os.path.join(base, "cap/practice_s2c_op198_poshevie.bin"), "rb").read().hex(),
             423: welcome_notice_payload()},
-           expect_payload_masks={112: op112_random_mask})
+           expect_payload_masks={112: op112_random_mask, 136: op136_mask})
     print("ALL PASS")

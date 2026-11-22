@@ -157,8 +157,9 @@
   `--legacy-die154` 保留老的逐槽 action=5 路径。 对应单元测试 `GameOverTest.kt`（20 项）。
 - `tools/extract_op75.py`：从 tst.pcap stream4 提取练习房流程的 C→S 完整流/裁剪回放
   （op7/op75/op92 帧，op75/op92 以 ssc_enc 重封装到连续 seq）+ S→C 各 op 完整 payload
-  （cap/practice_s2c_op*.bin，含 2B opcode，replay_test 基准）；`tools/gen_practice_kotlin.py`：
-  由上述 payload（去 2B opcode）生成 `packet/PracticeBlobs.kt` 的 blob 常量
+  （cap/practice_s2c_op*.bin，含 2B opcode，replay_test 基准）；`tools/gen_practice_kotlin.py` 原用于
+  生成 `packet/PracticeBlobs.kt` 的 blob 常量，该文件已删除（op 100/108/111/112/136 均已结构化），
+  脚本现仅作历史参考；op 136 见 `GameStart.kt`（逐字节等价性由 `GameStartTest.testMatchesCaptureBlob` 用抓包原值守护）
 - `tools/extract_first_push.py`：从 start.pcap 提取首连推送明文（cap/firstconn_s2c_op*.bin）、
   改写 op1 内 IP 并生成 Kotlin hex 常量与 replay_first_cs.bin
 - `tools/extract_login_flow.py`：从 login.pcap 提取登录连接的 op4/11/13/12 明文
