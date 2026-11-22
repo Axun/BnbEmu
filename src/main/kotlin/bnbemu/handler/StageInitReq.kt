@@ -31,11 +31,11 @@ val StageInitReq = PKTHandler { c ->
     // 客户端只在 SetStage(11) 之后自动补发 op 78 (ChangeStage.kt 注释 / 0x0068D80F),
     // 所以收到它就说明已经在大厅了 —— 清除房间舞台状态, 避免下次进商城误回房间。
     c.stage = ClientStage.Lobby.value
-    // op 60 先按当前角色生成 (角色卡 itemId/skinId + 所有 cat=3 模型名都在里面),
+    // op 60 先按当前角色生成 (更新所有 cat=3 模型名与 skinId),
     val player = c.player ?: PlayerService.activeProfile
     val bomber = player.bomber
-    val (charItemId, charToken) = CharacterRules.bomberCharCard(bomber)
-    println("[StageInitReq] op 60 物品定义表: bomber=$bomber → 角色卡 item $charItemId ($charToken), cat=3 模型同步")
+    val model = CharacterRules.bomberModelName(bomber)
+    println("[StageInitReq] op 60 物品定义表: bomber=$bomber ($model), cat=3 模型同步")
     c.send(
         Unk293(), QuestConfigTable(),
         UserSimpleInfoResult(),

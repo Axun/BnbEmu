@@ -5,6 +5,7 @@ import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import bnbemu.data.ItemDefCatalog
+import bnbemu.domain.CharacterRules
 import bnbemu.domain.EquipSlot
 import bnbemu.domain.PlayerProfile
 import bnbemu.handler.JoinSessionReq
@@ -17,16 +18,12 @@ import bnbemu.service.PlayerService
 import java.io.File
 
 /**
- * 「商城里换角色 → 返回大厅后角色变回皮蛋」的回归测试。
+ * 「商城里换角色 → 返回大厅后角色保持权威值」的回归测试。
  *
- * 两个根因:
- *  1. C→S op 73 是**商城/大厅换角色的唯一上报通道** (商城的选角界面不发 op 273 装备包),
- *     旧 handler 只写 `Room.slots.find { it.user?.c == c }` —— 大厅里玩家不在房间槽位,
- *     `user.bomber` 永远停在旧值 ⇒ 下一次 op 198 的默认角色卡还是皮蛋。
- *     (反过来在大厅换角色走 op 87 SelectBomberReq, 那条路会写 user.bomber, 所以正常)
- *  2. op 60 的物品定义表只有 itemId=1 (Dao), 角色卡 2..7 缺失 ⇒ 客户端
- *     `ApplyEquippedInventory` (`0x6757A6`) 查不到定义会整条丢弃, 角色槽清空。
- *  3. 名片 (op 73 UserInfoResult) 曾把 5/4/10/2 之外的角色一律映射成 Dao。
+ * - 客户端通过 `C→S op 73` 上报当前角色、`JoinSessionReq` 通过 `S→C op 20` (`CUDI+3s+111`)
+ *   与 `S→C op 60` (`cat=3` 表情/动作模型定义) 保持选角状态。
+ * - `cat=15` 基础角色卡 (`itemId=1 Dao` 等) 会被客户端 `sub_65C81A` 首行直接丢弃，
+ *   服务端不再伪造 `2..7` 角色卡也不在 `op 198`/`op 274`/`op 73` 中塞入 `slot=15` 条目。
  */
 class CharSelectSyncTest {
 
@@ -42,7 +39,7 @@ class CharSelectSyncTest {
         return out.toByteArray()
     }
 
-    private fun decodeOp198Entry(entry: PKT): Pair<Int, Int>? {
+    private fun decodeOp198Entries(entry: PKT): List<Pair<Int, Int>> {
         val out = Unpooled.buffer()
         entry.encode(SendPacketBase(out))
         val invCount = out.Decode1
@@ -61,19 +58,22 @@ class CharSelectSyncTest {
                 result += itemId to slot
             }
         }
-        return result.firstOrNull { it.second == EquipSlot.CHARACTER }
+        return result
     }
 
     @Test
-    fun testCharacterCardDefsExistForAllBombers() {
-        for (itemId in 1..7) {
-            val def = ItemDefCatalog.find(itemId)
-            assertNotNull(def, "op 60 必须包含角色卡 itemId=$itemId, 否则客户端会整条丢弃")
-            assertEquals(15, def!!.category, "角色卡分类应为 15 (与抓包 itemId=1 一致)")
-        }
-        assertEquals("Dao", ItemDefCatalog.find(1)?.name)
-        assertEquals("Boz", ItemDefCatalog.find(5)?.name, "练习房抓包里 Boz = item 5 / token Boz")
-        assertEquals("Plunk", ItemDefCatalog.find(7)?.name)
+    fun testBaseCatalogKeepsCapturedItem1AndNoFakeCards() {
+        val daoDef = ItemDefCatalog.find(1)
+        assertNotNull(daoDef, "基础表应保留抓包原始 itemId=1 (Dao)")
+        assertEquals(15, daoDef!!.category)
+        assertEquals("Dao", daoDef.name)
+
+        // 进阶卡 2082 必须启用为 cat=16 (sub_67884E(16)==6), 目标基础角色 4 (Marid) -> skinId 10
+        val maridEvo = ItemDefCatalog.find(CharacterRules.MARID_EVO_CARD_ITEM_ID)
+        assertNotNull(maridEvo)
+        assertEquals(0x10, maridEvo!!.category)
+        assertEquals(4, maridEvo.targetCharId)
+        assertEquals(10, maridEvo.skinId)
     }
 
     @Test
@@ -102,7 +102,7 @@ class CharSelectSyncTest {
     }
 
     @Test
-    fun testOp198CarriesSelectedCharacter() {
+    fun testJoinSessionSyncsSelectedCharacterViaOp20AndOp60() {
         val ch = EmbeddedChannel()
         val cs = ClientSocket()
         val user = PlayerService.registerProfile(PlayerProfile(USER_ID + 2, "char_t3", "tester"))
@@ -120,45 +120,23 @@ class CharSelectSyncTest {
 
             val packets = mutableListOf<PKT>()
             while (true) packets += ch.readOutbound<PKT>() ?: break
+
+            // 1) op 20 UserDynamicInfo 必须携带权威角色 bomber=7 (Plunk)
+            val op20 = packets.firstOrNull { OpcodeManager.getSendOp(it::class.java) == 20 }
+            assertNotNull(op20, "JoinSessionReq 必须下发 op 20")
+            val op20Buf = Unpooled.buffer()
+            op20!!.encode(SendPacketBase(op20Buf))
+            assertEquals(7, (op20Buf.getUnsignedByte(28).toInt()) xor 0x5A, "op 20 必须携带 Plunk (7)")
+
+            // 2) op 198 只下发真实穿戴物 (2082 @ CHAR_DECO)，不塞入 slot=15 伪角色卡
             val op198 = packets.firstOrNull { OpcodeManager.getSendOp(it::class.java) == 198 }
             assertNotNull(op198, "JoinSessionReq 必须下发 op 198")
+            val entries = decodeOp198Entries(op198!!)
+            assertTrue(entries.none { it.second == 15 }, "op 198 不应再发送会被丢弃的 slot=15 角色卡")
+            assertTrue(entries.any { it.first == CharacterRules.MARID_EVO_CARD_ITEM_ID && it.second == EquipSlot.CHAR_DECO })
 
-            val charEntry = decodeOp198Entry(op198!!)
-            assertNotNull(charEntry, "op 198 必须带角色卡条目")
-            assertEquals(7, charEntry!!.first, "回大厅后角色卡必须是 Plunk (7), 不能回落到皮蛋 (1)")
-            assertEquals(EquipSlot.CHARACTER, charEntry.second)
-        } finally {
-            ch.finishAndReleaseAll()
-        }
-    }
-
-    @Test
-    fun testOp274CarriesCharacterCard() {
-        // op 274 的 itemId 是角色卡: chan 基准 (皮蛋) = 1, practice 基准 (宝宝) = 5。
-        // 写死 1 会在 op 198 之后把客户端强行拉回 Dao —— 换角色失效的真正原因。
-        val ch = EmbeddedChannel()
-        val cs = ClientSocket()
-        val user = PlayerService.registerProfile(PlayerProfile(USER_ID + 4, "char_t5", "tester", bomber = 5))
-        cs.playerId = user.userId
-        ch.pipeline().addLast(cs)
-
-        try {
-            val buf = Unpooled.buffer()
-            with(JoinSessionReq) { buf.handle(cs) }
-
-            val packets = mutableListOf<PKT>()
-            while (true) packets += ch.readOutbound<PKT>() ?: break
-            val op274 = packets.filter { OpcodeManager.getSendOp(it::class.java) == 274 }
-            assertEquals(2, op274.size, "进频道应连发两发 op 274 (玩家槽 0 / 1)")
-
-            op274.forEachIndexed { idx, pkt ->
-                val out = Unpooled.buffer()
-                pkt.encode(SendPacketBase(out))
-                val slotType = out.Decode1
-                val itemId = out.Decode4
-                assertEquals(idx, slotType, "第 ${idx + 1} 发 op 274 的 slotType 应为 $idx")
-                assertEquals(5, itemId, "op 274 必须带角色卡 item 5 (Boz), 不能写死 1 (Dao)")
-            }
+            // 3) JoinSessionReq 不再下发旧版 op 274 伪角色卡更新
+            assertTrue(packets.none { OpcodeManager.getSendOp(it::class.java) == 274 })
         } finally {
             ch.finishAndReleaseAll()
         }
@@ -166,17 +144,9 @@ class CharSelectSyncTest {
 
     @Test
     fun testOp60RebuiltPerCharacter() {
-        // 抓包实证 (cap/chan_s2c_op60_46885B vs cap/practice_s2c_op60_46883B, 同为 882 条):
-        //   皮蛋会话: 角色卡 item 1 / name "Dao" / skinId 0, 所有 cat=3 定义 name "Dao" / skin 0
-        //   宝宝会话: 角色卡 item 5 / name "Boz" / skinId 5, 所有 cat=3 定义 name "Boz" / skin 5
+        // 宝宝会话: 所有 cat=3 表情/动作定义换成 name "Boz" / skin 5，其余条目保留底表
         val boz = ItemDefCatalog.itemsFor(5)
         assertEquals(882, boz.size, "两张角色版 op60 条目数一致 (882)")
-        val bozCard = boz.firstOrNull { it.itemId == 5 }
-        assertNotNull(bozCard, "宝宝版 op60 的角色卡是 itemId 5")
-        assertEquals(15, bozCard!!.category)
-        assertEquals("Boz", bozCard.name)
-        assertEquals(5, bozCard.skinId, "角色卡的 skinId = 角色 ID")
-        assertNull(boz.firstOrNull { it.itemId == 1 }, "宝宝版 op60 不该再有皮蛋卡 (item 1)")
 
         val bozActions = boz.filter { it.category == 3 }
         assertTrue(bozActions.isNotEmpty(), "cat=3 (表情/动作) 定义应存在")
@@ -186,9 +156,9 @@ class CharSelectSyncTest {
         )
 
         val dao = ItemDefCatalog.itemsFor(0)
-        val daoCard = dao.firstOrNull { it.itemId == 1 }!!
-        assertEquals("Dao", daoCard.name)
-        assertEquals(0, daoCard.skinId)
+        val daoBaseCard = dao.firstOrNull { it.itemId == 1 }!!
+        assertEquals("Dao", daoBaseCard.name)
+        assertEquals(0, daoBaseCard.skinId)
         assertTrue(dao.filter { it.category == 3 }.all { it.name == "Dao" && it.skinId == 0 })
 
         assertFalse(
@@ -198,7 +168,7 @@ class CharSelectSyncTest {
     }
 
     @Test
-    fun testProfileUsesSelectedCharacter() {
+    fun testProfileExcludesFakeCharCardAndKeepsBomber() {
         val ch = EmbeddedChannel()
         val cs = ClientSocket()
         val user = PlayerService.registerProfile(PlayerProfile(USER_ID + 3, "char_t4", "tester", bomber = 7))
@@ -218,9 +188,11 @@ class CharSelectSyncTest {
             val hex = ByteArray(out.readableBytes()).also { out.readBytes(it) }
                 .joinToString("") { "%02x".format(it) }
 
-            // itemId 7 (E4) = 0x96CA5392, slot 15 (E1) = 0x55
-            assertTrue(hex.contains("96ca539255"), "名片装备列表必须含 Plunk (item 7 @ slot 15)")
-            assertFalse(hex.contains("96ca539455"), "名片不能再显示皮蛋 (item 1)")
+            val evoCardHex = "%08x%02x".format(CharacterRules.MARID_EVO_CARD_ITEM_ID xor 0x96CA5395.toInt(), EquipSlot.CHAR_DECO xor 0x5A)
+            assertTrue(hex.contains(evoCardHex), "名片装备列表必须含真实穿戴的 2082 进阶卡")
+            assertFalse(hex.contains("96ca539255"), "名片装备列表不应包含伪造的 slot 15 角色卡 (Plunk)")
+            assertFalse(hex.contains("96ca539455"), "名片装备列表不应包含伪造的 slot 15 角色卡 (Dao)")
+            assertEquals(7, user.bomber)
         } finally {
             ch.finishAndReleaseAll()
         }

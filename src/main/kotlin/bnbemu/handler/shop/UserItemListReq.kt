@@ -15,9 +15,8 @@ import bnbemu.service.player
 // ⚠️ 这里同样是「全量真相」：直接从玩家统一库存读取，保证与进频道完全一致。
 val UserItemListReq = PKTHandler { c ->
     val player = c.player
-    val bomber = player?.bomber ?: 0
-    val rawInventory = player?.inventory ?: StarterKit.defaultInventory(bomber)
-    val inventory = inventoryEntries(rawInventory, bomber)
+    val rawInventory = player?.inventory ?: StarterKit.defaultInventory()
+    val inventory = inventoryEntries(rawInventory)
     if (player != null) {
         println(
             "[UserItemListReq] op 198 清单: 背包 ${player.items.size} 件 + 装备 ${player.equips.size} 件" +

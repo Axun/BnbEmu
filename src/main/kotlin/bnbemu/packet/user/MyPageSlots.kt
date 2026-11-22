@@ -1,7 +1,6 @@
 package bnbemu.packet.user
 
 import bnbemu.data.ItemDefCatalog
-import bnbemu.domain.CharacterRules
 import bnbemu.netty.PKT
 
 // ============================================================================
@@ -92,19 +91,14 @@ data class MyPageSlot(
 }
 
 /**
- * S→C op 200：2 页 × 8 槽的 My Page 槽位表。
+ * S→C op 200：2 页 × 8 槽的 My Page 快捷表情/动作槽位表（默认全空）。
  *
- * 默认（`bomber = 0`，即抓包里的皮蛋会话）逐字节等于 cap/chan_s2c_op200_105B_0.bin：
- * 两页的 slot 7 都填该角色的角色卡（0 → itemId 1 / "Dao"），其余槽为空。
- *
- * 客户端收到后还会被同批的 S→C op 274 把 slot 7 重新钉成当前角色卡，
- * 因此 slot 7 只起占位作用；真正有内容的是 0..6 的表情/动作槽。
+ * 抓包（cap/chan_s2c_op200_105B_0.bin）曾在两页 slot 7 塞入 `(1, "Dao")` 占位，
+ * 但因客户端背包里不存在 `cat=15` 角色卡，复检 (`0x00672746`) 会自动清零并回发 C→S 274；
+ * 现默认全部下发空槽，显式传参构造时仍支持按抓包结构编解码。
  */
-fun MyPageSlots(bomber: Int = 0): PKT {
-    val (charItemId, charName) = CharacterRules.bomberCharCard(bomber)
-    val page = List(MY_PAGE_SLOTS_PER_PAGE) { slot ->
-        if (slot == MY_PAGE_COUPLE_SLOT) MyPageSlot(charItemId, charName) else MyPageSlot.EMPTY
-    }
+fun MyPageSlots(): PKT {
+    val page = List(MY_PAGE_SLOTS_PER_PAGE) { MyPageSlot.EMPTY }
     return MyPageSlots(listOf(page, page))
 }
 

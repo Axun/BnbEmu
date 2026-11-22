@@ -21,15 +21,13 @@ private fun SendPacketBase.EncodeTokenStr(s: String) {
 }
 
 data class UserEquipEntry(
-    val itemId: Int = 1,
-    val slot: Int = EquipSlot.CHARACTER,
-    val param1: Int = 20,
+    val itemId: Int = 2082,
+    val slot: Int = EquipSlot.CHAR_DECO,
+    val param1: Int = 1,
     val param2: Int = 0
 )
 
 val DEFAULT_USER_EQUIPS = listOf(
-    UserEquipEntry(itemId = 1, slot = EquipSlot.CHARACTER, param1 = 20, param2 = 0),
-    UserEquipEntry(itemId = 10006, slot = EquipSlot.ITEM_BAG, param1 = 1, param2 = 0),
     UserEquipEntry(itemId = 2082, slot = EquipSlot.CHAR_DECO, param1 = 1, param2 = 0)
 )
 

@@ -1,11 +1,11 @@
-- **装备槽位编码与「回大厅装备被自动脱掉」的坑（2026-11-08）**：
+- **装备槽位编码与「回大厅装备被自动脱掉」的坑**：
     - op 273 的 `E1(equipSlot)` 是**复合槽位 = 24 × 装备大类 + 子槽位**
       （`sub_65C81A` 557216 写入槽项 +116，即物品 +84；`sub_659004` 553095 原样发回。
       实证：蓝妹妹 2082 上报 `0x94 = 148 = 6×24+4`）。大类由物品 category 经 `sub_67884E` 推导：
       cat 1/3→8、2/9/20/33/36/41→7、4/5/6/**10(背景/旗帜/边框)**/18/28/29→9、12/14→10、16→6、19→5、42→4。
       ⇒ **装扮背景（cat 10）槽位是 216~239，只有 0xFF 才是「背包伪槽位」**，不得再设 200 之类的上限。
     - op 198 / op 73 的 `E1(slot)` 只放**子槽位**（客户端 `sub_65D55F` 用 category 自行还原大类，
-      再 `slot % 24`），所以抓包里 2082 是 slot=4、角色卡 15、道具栏 13；回放时要 `% 24`。
+      再 `slot % 24`），所以抓包里 2082 是 slot=4；回放时要 `% 24`（抓包里的 slot=15 角色卡与 slot=13 道具栏见下方结论）。
     - op 198 是客户端**唯一全量真相**（`sub_67601D` 先清空两位玩家的背包+装备，`sub_6757A6` 逐条
       `sub_65D55F` 重建，末尾 `sub_659334` 按 13×24 重铺纸娃娃）：**每次回大厅重走进频道握手
       （op 81）都会重发 198**，清单里没有的装备一律被清掉。所以 273 记录下来的装备必须并入
@@ -45,8 +45,15 @@
     - 实现：`packet/room/SetPlayer.kt` 的 `slotAccessoriesOf(equips)`（按复合槽位排序，从
       `user.equips` 查 ItemDef 生成三段清单），`SetPlayer(..., equips = user?.equips.orEmpty())`；
       无装备时输出仍与 `cap/practice_s2c_op100_*.bin` 逐字节一致。回归 `SetPlayerTest.kt` 11 项。
-- **角色卡**：
-    - 角色卡按角色分 id：**item 1 = Dao、item 5 = Boz**（实证：`cap/chan_s2c_op198_137B_0.bin`
-      `cap/practice_s2c_op198_137B_0.bin`），条目格式固定 `slot=15 param=20 status=192 duration=240000`。
-      改角色卡一律走 `packet/UserInventory.kt` 的 `bomberCharCard(bomber)`（op 198 与 op 73 共用一份映射）。
-    - op 60 ItemDef不按当前角色生成也不会把角色换掉，对角色装扮有没有影响还待测试
+- **角色卡与基础角色机制**：
+    - **`cat=15` 基础角色卡（`itemId=1 Dao`、`5 Boz` 等，`slot=15`）在 EN v18 客户端完全无效**：
+      `sub_67884E(15)` 返回 `0`（不可穿戴大类），在 `op 198` (`sub_65D55F` → `sub_65C81A`) 与 `op 274` (`sub_4FCCBF`) 入口首行即 `if (v41 == 0) return 0` 直接丢弃；既不进入背包向量（`CInventoryWndNew` 分页 `sub_658C8F` 仅显示大类 `{5,8,9,10}`，全 exe 仅大喇叭框 `CSpeakerHotKeyDlg`/`CSpeakerMultiLineDlg` via `sub_67777B(..., 15, ...)` 显式查询 `cat=15`），也不进入装备槽。`itemId=10006 (cat=13 Item/ItemBag)` 同理（`sub_67884E(13)==0`，背包容量改由 `op 20` `bagLevel` 与 `op 413` 控制）。
+    - **装扮 / 纸娃娃 / 商城预览 / 他人名片均不读取 `cat=15`**：
+      - 自身纸娃娃/装扮：`CAvatarContextMyInfo::sub_67973E` 与 MyPage (`sub_5DEE4E`)、商城预览 (`sub_5CE575`) 读取 **`op 20` `bomber`** 与 **`equip[4/5/6/9/10]`**（装饰大类由 `sub_676EB7` 限定 `{5,6,10,12,14,18,19,20,28,29}`）；`sub_65631F` 仅处理 `cat=1`。
+      - 房间/对局他人形象：走 `op 100 SetPlayer` 元数据 `bomber` + 三段装扮清单 (`cat 10/12/19`) + `f32` (`cat 14`)，与 `op 198` 无关。
+      - 名片 `op 73 UserInfoResult`：`equips` 列表在 `sub_449F23` 存入 `a2[59]/a2[60]`，全 exe 仅 `CSeasonLadderWnd::sub_5F488E` 读取该列表显示赛季天梯奖杯；`COtherUserPageDialog::InitData` (`sub_5E2F9B`) 走 `sub_5DE6E0` 渲染角色与装扮。
+    - **真正控制角色与进阶解锁的通道**：
+      1. 当前角色：`S→C op 20 UserDynamicInfo` 第 12 栏（`CUDI+3s+111`）、`op 105`、`op 100`；
+      2. 表情/动作模型表：`op 60 ItemDef` 重建 `cat=3` 条目为当前角色 `name` / `skinId`（不需伪造 `2..7` 角色卡）；
+      3. 进阶角色卡（如蓝妹妹 `2082`）：走 **`cat=16`**（`sub_67884E(16)==6`）存入 `equip[6][targetCharId]`（复合槽 `148 = 6×24+4`），由 `sub_671C3A` → `sub_65975C` 读取。
+    - 抓包里 `op 198` 的 `itemId=1 (slot=15)` 与 `op 200` slot 7 的 `(1, "Dao")`（客户端 `sub_672746` 查背包找不到还会回 `C→S 274` 清零）均为服务端历史遗留冗余数据；模拟器不再将基础角色卡或 `10006` 写入 `PlayerProfile.inventory` / `op 198` / `op 200` / `op 274` / `op 73`。

@@ -1,10 +1,10 @@
 package bnbemu.netty
 
-import bnbemu.codec.decodeName
 import io.netty.buffer.Unpooled
 import io.netty.channel.embedded.EmbeddedChannel
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import bnbemu.domain.CharacterRules
 import bnbemu.domain.EquipSlot
 import bnbemu.domain.PlayerProfile
 import bnbemu.handler.JoinSessionReq
@@ -15,29 +15,13 @@ import bnbemu.service.PlayerService
 class LobbyReturnTest {
 
     @Test
-    fun testDefaultUserInventoryItemsDao() {
-        val items = defaultUserInventoryItems(0)
-        val charEntry = items.firstOrNull { it.slot == EquipSlot.CHARACTER }
-        assertNotNull(charEntry)
-        assertEquals(1, charEntry?.itemId, "Bomber 0 should map to itemId 1 (Dao)")
-        assertEquals("Dao", charEntry?.token)
-    }
-
-    @Test
-    fun testDefaultUserInventoryItemsBoz() {
-        val items = defaultUserInventoryItems(5)
-        val charEntry = items.firstOrNull { it.slot == EquipSlot.CHARACTER }
-        assertNotNull(charEntry)
-        assertEquals(5, charEntry?.itemId, "Bomber 5 should map to itemId 5 (Boz)")
-        assertEquals("Boz", charEntry?.token)
-    }
-
-    @Test
-    fun testDefaultUserInventoryItemsMarid() {
-        val items = defaultUserInventoryItems(10)
-        val charEntry = items.firstOrNull { it.slot == EquipSlot.CHARACTER }
-        assertNotNull(charEntry)
-        assertEquals(2082, charEntry?.itemId, "Bomber 10 should map to LuxuryMarid (2082)")
+    fun testDefaultUserInventoryItemsContainsOnlyRealStarterEquip() {
+        val items = defaultUserInventoryItems()
+        assertEquals(1, items.size, "默认装备清单只含 2082 进阶卡，不再包含会被丢弃的 cat=15/13 条目")
+        val evoCard = items.single()
+        assertEquals(CharacterRules.MARID_EVO_CARD_ITEM_ID, evoCard.itemId)
+        assertEquals(EquipSlot.CHAR_DECO, evoCard.slot)
+        assertTrue(items.none { it.slot == 15 }, "不应再发送会被客户端首行丢弃的 slot=15 角色卡")
     }
 
     @Test
@@ -61,38 +45,29 @@ class LobbyReturnTest {
                 sentPackets.add(p)
             }
 
-            // 过滤出下发的 op 198 (UserInventory)
+            // 1) op 20 UserDynamicInfo 必须携带权威角色 bomber=5
+            val op20 = sentPackets.find { OpcodeManager.getSendOp(it::class.java) == 20 }
+            assertNotNull(op20, "JoinSessionReq must send op 20 (UserDynamicInfo)")
+            val op20Buf = Unpooled.buffer()
+            op20!!.encode(SendPacketBase(op20Buf))
+            assertEquals(5, (op20Buf.getUnsignedByte(28).toInt()) xor 0x5A, "op 20 must carry bomber=5 (Boz)")
+
+            // 2) op 198 (UserInventory) 首件只带真实装扮 2082，不再夹带伪造角色卡
             val op198 = sentPackets.find { OpcodeManager.getSendOp(it::class.java) == 198 }
             assertNotNull(op198, "JoinSessionReq must send op 198 (UserInventory)")
 
             val outBuf = Unpooled.buffer()
-            op198?.encode(SendPacketBase(outBuf))
-
-            // 解码 op 198 头部:
-            // Encode1(inventoryCount)
+            op198!!.encode(SendPacketBase(outBuf))
             val invCount = outBuf.Decode1
             assertTrue(invCount >= 1)
-
-            // Encode4(itemCount)
             val itemCount = outBuf.Decode4
             assertTrue(itemCount >= 1)
 
-            // 读取首件物品 (角色卡):
-            // Encode4(itemId)
             val firstItemId = outBuf.Decode4
-            // Encode1(slot)
             val firstSlot = outBuf.Decode1
-            // Encode4(param)
-            val firstParam = outBuf.Decode4
-            // Encode2(strLen) + strBytes
-            val strLen = outBuf.Decode2
-            val tokenBytes = ByteArray(strLen)
-            outBuf.readBytes(tokenBytes)
-            val token = decodeName(tokenBytes)
-
-            assertEquals(EquipSlot.CHARACTER, firstSlot, "First item must be character slot (15)")
-            assertEquals(5, firstItemId, "Item ID in op 198 must be 5 (Boz), NOT reverted to 1 (Dao)!")
-            assertEquals("Boz", token, "Token in op 198 must be Boz!")
+            assertEquals(EquipSlot.CHAR_DECO, firstSlot, "First item must be CHAR_DECO slot (4)")
+            assertEquals(CharacterRules.MARID_EVO_CARD_ITEM_ID, firstItemId, "First item must be 2082")
+            assertEquals(5, user.bomber, "JoinSessionReq must preserve selected bomber=5")
         } finally {
             ch.finishAndReleaseAll()
         }
@@ -121,15 +96,16 @@ class LobbyReturnTest {
             assertNotNull(op73, "Must send op 73 (UserInfoResult)")
 
             val outBuf = Unpooled.buffer()
-            op73?.encode(SendPacketBase(outBuf))
+            op73!!.encode(SendPacketBase(outBuf))
 
-            // 验证 UserInfoResult 包含 Boz 角色装备条目: itemId 5 (96CA5390) + slot 15 (0x55), 且不含 Dao (96CA5394)
+            // op 73 不包含无效 slot 15 角色卡，包含真实穿戴 2082 @ CHAR_DECO (4)
             val hex = ByteArray(outBuf.readableBytes()).also { outBuf.readBytes(it) }
                 .joinToString("") { "%02x".format(it) }
-            val bozItemHex = "96ca539055"
-            val daoItemHex = "96ca539455"
-            assertTrue(hex.contains(bozItemHex), "UserInfoResult payload must contain Boz equip entry ($bozItemHex)")
-            assertFalse(hex.contains(daoItemHex), "UserInfoResult payload must NOT contain Dao equip entry ($daoItemHex)")
+            val evoCardHex = "%08x%02x".format(CharacterRules.MARID_EVO_CARD_ITEM_ID xor 0x96CA5395.toInt(), EquipSlot.CHAR_DECO xor 0x5A)
+            assertTrue(hex.contains(evoCardHex), "UserInfoResult payload must contain 2082 @ CHAR_DECO ($evoCardHex)")
+            assertFalse(hex.contains("96ca539055"), "UserInfoResult payload must NOT contain fake slot 15 Boz card")
+            assertFalse(hex.contains("96ca539455"), "UserInfoResult payload must NOT contain fake slot 15 Dao card")
+            assertEquals(5, user.bomber)
         } finally {
             ch.finishAndReleaseAll()
         }

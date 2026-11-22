@@ -7,8 +7,8 @@ import bnbemu.netty.PKT
 /**
  * 进频道批次回应: 物品唯一定义表 (Opcode 60, S→C)
  *
- * 先传玩家当前角色，按角色重建 (角色卡 itemId/skinId + 所有 cat=3
- * 表情/动作定义的模型名)。传错不会更改当前选中的角色类型。
+ * 先传玩家当前角色，按角色重建 (更新所有 cat=3
+ * 表情/动作定义的模型名与 skinId)。传错不会更改当前选中的角色类型。
  * 主数据加载与查询已收口至 [ItemDefCatalog]。
  */
 fun ItemDef(bomber: Int = 0): PKT = PKT {

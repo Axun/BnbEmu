@@ -31,10 +31,25 @@ class MyPageSlotsTest {
     }
 
     @Test
-    fun `默认表与抓包逐字节一致`() {
+    fun `默认表全部为空槽`() {
         val actual = encode(MyPageSlots())
+        assertEquals(97, actual.size, "2 页 × 8 空槽 → 1 + 16×6 = 97 B")
+        val slots = decode(actual)
+        assertEquals(MY_PAGE_MAX_PAGES, slots.size)
+        slots.forEach { page ->
+            assertEquals(MY_PAGE_SLOTS_PER_PAGE, page.size)
+            assertTrue(page.all { it.itemId == 0 && it.name.isEmpty() }, "默认无快捷表情与伪角色卡占位")
+        }
+    }
+
+    @Test
+    fun `显式构造槽 7 占位与抓包逐字节一致`() {
+        val capPage = List(MY_PAGE_SLOTS_PER_PAGE) { i ->
+            if (i == MY_PAGE_COUPLE_SLOT) MyPageSlot(1, "Dao") else MyPageSlot.EMPTY
+        }
+        val actual = encode(MyPageSlots(listOf(capPage, capPage)))
         assertEquals(103, actual.size, "2 页 × 8 槽、仅两槽非空 → 1 + 14×6 + 2×9 = 103 B")
-        assertArrayEquals(CAPTURE_BODY, actual, "op 200 包体必须与 cap/chan_s2c_op200_105B_0.bin 的 body 一致")
+        assertArrayEquals(CAPTURE_BODY, actual, "op 200 包体结构与 cap/chan_s2c_op200_105B_0.bin 逐字节一致")
     }
 
     @Test
@@ -57,14 +72,17 @@ class MyPageSlotsTest {
 
     @Test
     fun `包体布局可逆解析`() {
-        val body = encode(MyPageSlots())
+        val capPage = List(MY_PAGE_SLOTS_PER_PAGE) { i ->
+            if (i == MY_PAGE_COUPLE_SLOT) MyPageSlot(1, "Dao") else MyPageSlot.EMPTY
+        }
+        val body = encode(MyPageSlots(listOf(capPage, capPage)))
         val slots = decode(body)
         assertEquals(MY_PAGE_MAX_PAGES, slots.size, "页数 = E1")
         slots.forEach { page ->
             assertEquals(MY_PAGE_SLOTS_PER_PAGE, page.size, "每页恒 8 槽")
             page.forEachIndexed { i, slot ->
                 if (i == MY_PAGE_COUPLE_SLOT) {
-                    assertEquals(1, slot.itemId, "槽 7 = 皮蛋角色卡 itemId 1")
+                    assertEquals(1, slot.itemId, "显式填充槽 7 = itemId 1")
                     assertEquals("Dao", slot.name, "名字取自 op 60 定义表")
                 } else {
                     assertEquals(0, slot.itemId, "其余槽为空")

@@ -4,7 +4,6 @@ import io.netty.util.AttributeKey
 import bnbemu.domain.CharacterRules
 import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
-import bnbemu.domain.EquipSlot
 import bnbemu.domain.StarterKit
 import bnbemu.domain.UserItemEntry
 import bnbemu.netty.ClientSocket
@@ -23,17 +22,15 @@ private val LAST_USER_INFO_SEND_TIME = AttributeKey.valueOf<Long>("LAST_USER_INF
 /**
  * S→C op 73 名片里的装备槽位列表（直接读取玩家统一库存的已穿戴条目）。
  *
- * slot 只放**子槽位**（与抓包一致: 2082 进阶卡→4, 角色卡→15, 道具栏→13），
- * 客户端 `COtherUserPageDialog::InitData` (`0x005E2F9B` → `0x005F488E`) 会用 itemId 查
- * op 60 定义表的 category 自行还原装备大类，所以复合槽位这里取 `% 24`。
+ * slot 只放**子槽位**（如 2082 进阶卡→4），客户端按 itemId 查 op 60 定义表的
+ * category 自行还原装备大类，所以复合槽位这里取 `% 24`（见 `docs/agents-notes-equip.md`）。
  */
 private fun buildEquipEntries(inventory: List<UserItemEntry>): List<UserEquipEntry> =
     inventory
         .filter { it.isEquipped && it.itemId != 0 }
         .map { entry ->
             val slot = entry.equipSlot!! % EQUIP_SLOTS_PER_GROUP
-            val param1 = if (entry.equipSlot == EquipSlot.CHARACTER) 20 else 1
-            UserEquipEntry(itemId = entry.itemId, slot = slot, param1 = param1, param2 = 0)
+            UserEquipEntry(itemId = entry.itemId, slot = slot, param1 = 1, param2 = 0)
         }
 
 /**
@@ -59,11 +56,7 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
     // 超过 1 会在 0x67973E ([0x009E06C0 + slotIndex * 0x438]) 发生堆越界导致 0xC0000005 崩溃闪退
     val safeSlotIndex = slotIndex.coerceIn(0, 1)
 
-    val userSlot = Room.slots.find {
-        it.client === c || (player != null && it.player?.userId == player.userId)
-    }
-    val currentBomber = userSlot?.bomber?.toInt() ?: player?.bomber ?: 0
-    val inventory = player?.inventory ?: StarterKit.defaultInventory(currentBomber)
+    val inventory = player?.inventory ?: StarterKit.defaultInventory()
     val equips = buildEquipEntries(inventory)
     if (equips.isNotEmpty()) {
         println("[UserInfoReq] op 73 装备槽: ${equips.joinToString { "${it.itemId}@${it.slot}" }}")
@@ -97,8 +90,7 @@ fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
     val targetSlot = Room.slots.find { it.player?.charName.equals(targetCharName, ignoreCase = true) }
     val targetPlayer = targetSlot?.player ?: PlayerService.findByCharName(targetCharName)
 
-    val bomberId = targetSlot?.bomber?.toInt() ?: targetPlayer?.bomber ?: 0
-    val equips = buildEquipEntries(targetPlayer?.inventory ?: StarterKit.defaultInventory(bomberId))
+    val equips = buildEquipEntries(targetPlayer?.inventory ?: StarterKit.defaultInventory())
 
     val win = targetPlayer?.win ?: 10
     val draw = targetPlayer?.draw ?: 0
@@ -159,7 +151,7 @@ val UserInfoReq = PKTHandler { c ->
     // ⚠️ 关键: 商城/大厅里换角色**只靠这个包**上报 (商城的选角界面不发 op 273 装备包,
     //    退出商城时那发 273 是 action=1 count=0 的空包), 所以这里必须写 User.bomber:
     //    旧实现只写 `Room.slots.find { it.user?.c == c }` —— 大厅里玩家不在房间槽位上,
-    //    于是 user.bomber 永远停在旧值, 下一次 op 198 的默认角色卡还是皮蛋,
+    //    于是 user.bomber 永远停在旧值, 下一次 op 20/op 60 仍用旧角色,
     //    表现就是「商城换角色 → 返回大厅变回默认角色」(反过来大厅用的是 op 87, 所以正常)。
     val player = c.player
     val userSlot = Room.slots.find {
@@ -201,6 +193,6 @@ val UserInfoReq = PKTHandler { c ->
       - `+0x98`: Level (`Encode4`)
       - Lucci 金币由先行下发的 `UserDynamicInfoValue(0, lucci)`（op 122）写入客户端单例 `CUserDynamicInfo`。
   - 实现见 `handler/UserInfoReq.kt` + `handler/UserRestrictReq.kt` + `packet/UserInfoResult.kt`；关闭包见 `handler/WatchUserInfoReq.kt` (74) + `handler/ChangeEquipReq.kt` (273)；单元测试见 `src/test/kotlin/bnbemu/netty/MyPageTest.kt`。
-  - **他人名片角色形象显示机制（S→C op 73 UserInfoResult 装备槽位列表）**：
-    `COtherUserPageDialog::InitData` (`0x005E2F9B`) 调用 `0x005F488E` 设置角色装扮。客户端反序列化 `UserInfoResult` 时在 `0x0044A178` 读取 `[esi + 0xec]`（`subListCount`，装备条目数）及循环条目（`Encode4(itemId) + Encode1(slot) + Encode4(param1) + Encode4(param2)`）。若 `subListCount == 0`，客户端跳过装备查找，无法解析角色卡与外观导致他人角色形象不显示；服务端在 `UserInfoResult` 下发装备槽位（包含角色卡 `itemId=1/5/2082` 等）即可让他人形象完整渲染。
+  - **名片装扮与天梯奖杯条目（S→C op 73 UserInfoResult）**：
+    客户端反序列化 `UserInfoResult` 时在 `0x0044A178` 读取 `[esi + 0xec]`（`subListCount`，装备条目数）及循环条目（`Encode4(itemId) + Encode1(slot) + Encode4(param1) + Encode4(param2)`）。`sub_5F488E` 实际属于 `CSeasonLadderWnd`（读取这批条目显示天梯奖杯），`COtherUserPageDialog::InitData` (`0x005E2F9B`) 则通过 `sub_5DE6E0` 渲染他人形象（`cat=15` 基础角色卡同样无效，真正装扮走 `equip[4/5/6/9/10]` 与真实已穿戴物品）。
  */

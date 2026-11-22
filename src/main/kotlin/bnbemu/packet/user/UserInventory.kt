@@ -1,7 +1,6 @@
 package bnbemu.packet.user
 
 import bnbemu.data.ItemDefCatalog
-import bnbemu.domain.CharacterRules
 import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
 import bnbemu.domain.EquipSlot
 import bnbemu.domain.StarterKit
@@ -57,7 +56,7 @@ val DEFAULT_PRACTICE_EXPIRE_DATE: ByteArray = byteArrayOf(
 
 class UserInventoryEntry(
     val itemId: Int,
-    val slot: Int = EquipSlot.CHARACTER,
+    val slot: Int = BAG_ONLY_SLOT,
     val param: Int = 1,
     val token: String = "",
     val expireDate: ByteArray = DEFAULT_EXPIRE_DATE,
@@ -80,13 +79,13 @@ class UserInventoryEntry(
 }
 
 // 进频道大厅默认生效/穿戴道具列表 (由 StarterKit 统一定义)
-val DEFAULT_USER_INVENTORY_ITEMS: List<UserInventoryEntry> = defaultUserInventoryItems(0)
+val DEFAULT_USER_INVENTORY_ITEMS: List<UserInventoryEntry> = defaultUserInventoryItems()
 
 /**
  * 默认初始穿戴条目清单（基于 [StarterKit.defaultInventory]）。
  */
-fun defaultUserInventoryItems(bomber: Int = 0): List<UserInventoryEntry> =
-    inventoryEntries(StarterKit.defaultInventory(bomber), bomber)
+fun defaultUserInventoryItems(): List<UserInventoryEntry> =
+    inventoryEntries(StarterKit.defaultInventory())
 
 fun UserInventory(
     inventories: List<List<UserInventoryEntry>> = listOf(DEFAULT_USER_INVENTORY_ITEMS, DEFAULT_USER_INVENTORY_ITEMS)
@@ -109,27 +108,18 @@ fun UserInventory(
  */
 const val BAG_ONLY_SLOT = EquipSlot.BAG
 
-private fun toInventoryPacketEntry(item: UserItemEntry, bomber: Int): UserInventoryEntry {
+private fun toInventoryPacketEntry(item: UserItemEntry): UserInventoryEntry {
     val def = ItemDefCatalog.find(item.itemId)
-    return when {
-        item.equipSlot == EquipSlot.CHARACTER -> {
-            val (charItemId, charToken) = CharacterRules.bomberCharCard(bomber)
-            UserInventoryEntry(
-                itemId = item.itemId.takeIf { it != 0 } ?: charItemId,
-                slot = EquipSlot.CHARACTER,
-                param = 20,
-                token = charToken,
-                status = 192,
-            )
-        }
-        item.isEquipped -> UserInventoryEntry(
+    return if (item.isEquipped) {
+        UserInventoryEntry(
             itemId = item.itemId,
             slot = item.equipSlot!! % EQUIP_SLOTS_PER_GROUP,
             param = item.count.coerceAtLeast(1),
             token = def?.name ?: "",
             status = 255,
         )
-        else -> UserInventoryEntry(
+    } else {
+        UserInventoryEntry(
             itemId = item.itemId,
             slot = BAG_ONLY_SLOT,
             param = item.count.coerceAtLeast(1),
@@ -144,7 +134,7 @@ fun bagInventoryEntries(
     excludeIds: Set<Int> = emptySet(),
 ): List<UserInventoryEntry> = items
     .filter { it.itemId != 0 && !it.isEquipped && it.itemId !in excludeIds }
-    .map { toInventoryPacketEntry(it, bomber = 0) }
+    .map { toInventoryPacketEntry(it) }
 
 /**
  * 把统一库存列表（[UserItemEntry]）编码为 S→C op 198 清单：
@@ -152,10 +142,9 @@ fun bagInventoryEntries(
  */
 fun inventoryEntries(
     inventory: List<UserItemEntry>,
-    bomber: Int = 0,
 ): List<UserInventoryEntry> {
     val valid = inventory.filter { it.itemId != 0 }
-    val equipped = valid.filter { it.isEquipped }.map { toInventoryPacketEntry(it, bomber) }
-    val bag = valid.filter { !it.isEquipped }.map { toInventoryPacketEntry(it, bomber) }
+    val equipped = valid.filter { it.isEquipped }.map { toInventoryPacketEntry(it) }
+    val bag = valid.filter { !it.isEquipped }.map { toInventoryPacketEntry(it) }
     return equipped + bag
 }

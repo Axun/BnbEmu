@@ -1,6 +1,5 @@
 package bnbemu.handler
 
-import bnbemu.domain.CharacterRules
 import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.domain.StarterKit
 import bnbemu.netty.PKTHandler
@@ -23,7 +22,6 @@ import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.packet.user.UserInventory
 import bnbemu.packet.user.inventoryEntries
 import bnbemu.packet.user.UserInventoryInfo
-import bnbemu.packet.user.UserItemUpdate
 import bnbemu.service.PlayerService
 import bnbemu.service.player
 
@@ -56,7 +54,7 @@ val JoinSessionReq = PKTHandler { c ->
     val lucci = player?.lucci ?: DEFAULT_LUCCI
 
     // op 60 (ItemDef) 必须最先: 198 里的物品要靠它查定义表
-    // 先按当前角色生成: 角色卡 itemId/skinId 与所有 cat=3 表情/动作模型名都在里面。不匹配也不会更改当前选中的角色类型
+    // 先按当前角色生成: 所有 cat=3 表情/动作模型名都在里面。不匹配也不会更改当前选中的角色类型
     c send ItemDef(player?.bomber ?: 0)
 
     // 服务端认账的背包（商城购买 + 273 上报）必须并入 op 198 的清单里下发：
@@ -67,18 +65,13 @@ val JoinSessionReq = PKTHandler { c ->
     //   C→S op 273 记录下来的装备（背景/旗帜/边框/气泡/特效…）用**真实槽位**下发，
     //   否则回大厅时会被这次清空重建抹掉（表现为「背景自动取消装备」）。
     val bomber = player?.bomber ?: 0
-    val rawInventory = player?.inventory ?: StarterKit.defaultInventory(bomber)
-    val inventory = inventoryEntries(rawInventory, bomber)
+    val rawInventory = player?.inventory ?: StarterKit.defaultInventory()
+    val inventory = inventoryEntries(rawInventory)
     val bag = player?.items.orEmpty()
     val equips = player?.equips.orEmpty()
     println(
         "[JoinSessionReq] op 198 清单: 库存 ${rawInventory.size} 条 (背包 ${bag.size} 件" +
             " + 装备 ${equips.size} 件) → 下发 ${inventory.size} 条"
-    )
-    val (charItemId, charToken) = CharacterRules.bomberCharCard(bomber)
-    println(
-        "[JoinSessionReq] 角色: bomber=$bomber → item $charItemId ($charToken)" +
-            " [op 198 角色卡 + op 274 玩家槽 0/1 + op 20 玩家槽 0]"
     )
     if (bag.isNotEmpty()) {
         println("[JoinSessionReq] op 198 携带背包物品: ${bag.map { it.itemId }}")
@@ -106,7 +99,6 @@ val JoinSessionReq = PKTHandler { c ->
         //    把 413 挪到 198 之后，运行时直读 dyn+0x1EC = 50 → 容量 400，购买可正常进入流程。
         //    另: op 60 (ItemDef) 仍需在 413 之前，客户端按 itemId 查定义表，查不到整条丢弃。
         UserInventory(listOf(inventory, inventory)), MyPageSlots(),
-        UserItemUpdate(0, charItemId), UserItemUpdate(1, charItemId),
         UserDynamicInfoValue(0, lucci), FxConfig(), DynamicMapInfo(),
         RoomList(),
         ShopStringTable(), ShopPackageMap(), ChannelsGameState(tailOnes = 2),

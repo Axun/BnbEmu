@@ -96,33 +96,12 @@ object ItemDefCatalog {
 
     private val BASE_ITEMS: List<ItemDefEntry> by lazy { loadBaseItems() }
 
-    private fun charCardDef(bomber: Int): ItemDefEntry {
-        val (itemId, model) = CharacterRules.bomberCharCard(bomber)
-        return ItemDefEntry(
-            itemId = itemId,
-            category = 15,
-            name = model,
-            skinId = bomber,
-            targetCharId = 0,
-            param = 0,
-            desc = "",
-            flags = 1,
-            status = 0,
-        )
-    }
-
     fun itemsFor(bomber: Int): List<ItemDefEntry> {
-        val (charItemId, model) = CharacterRules.bomberCharCard(bomber)
-        val hasOwnCard = charItemId != 1 && BASE_ITEMS.any { it.itemId == charItemId && it.category == 15 }
+        val model = CharacterRules.bomberModelName(bomber)
 
         val list = ArrayList<ItemDefEntry>(BASE_ITEMS.size)
         BASE_ITEMS.forEach { e ->
             when {
-                e.itemId == 1 -> when {
-                    charItemId == 1 -> list += e.copy(name = model, skinId = bomber)
-                    hasOwnCard -> Unit
-                    else -> list += charCardDef(bomber)
-                }
                 e.category == 3 -> list += e.copy(name = model, skinId = bomber)
                 else -> list += e
             }
@@ -148,13 +127,7 @@ object ItemDefCatalog {
     val CACHED_BLOB: ByteArray by lazy { blobFor(0) }
 
     private val byId: Map<Int, ItemDefEntry> by lazy {
-        val m = HashMap<Int, ItemDefEntry>(DEFAULT_ITEMS.size + 8)
-        DEFAULT_ITEMS.forEach { m[it.itemId] = it }
-        for (b in 0..7) {
-            val def = charCardDef(b)
-            if (!m.containsKey(def.itemId) || m[def.itemId]!!.category != 15) m[def.itemId] = def
-        }
-        m
+        DEFAULT_ITEMS.associateBy { it.itemId }
     }
 
     fun find(itemId: Int): ItemDefEntry? = byId[itemId]

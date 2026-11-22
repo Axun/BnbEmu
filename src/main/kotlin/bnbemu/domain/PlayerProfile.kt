@@ -63,7 +63,7 @@ class PlayerProfile(
     var favorite: String = "Bazzi",
     /** 玩家当前选中的角色 */
     var bomber: Int = CharacterType.Dao.value,
-    inventory: List<UserItemEntry> = StarterKit.defaultInventory(bomber),
+    inventory: List<UserItemEntry> = StarterKit.defaultInventory(),
 ) {
     internal val mutableInventory: MutableList<UserItemEntry> = inventory.toMutableList()
 

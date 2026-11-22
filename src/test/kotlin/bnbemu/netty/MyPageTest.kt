@@ -204,8 +204,8 @@ class MyPageTest {
         val sendPkt = SendPacketBase(buf)
         pkt.encode(sendPkt)
 
-        // 空装备时为 202 字节，3 件装备每件 13 字节 (4+1+4+4)，总共增加 39 字节 = 241 字节
-        assertEquals(202 + 3 * 13, buf.readableBytes())
+        // 空装备时为 202 字节，每件装备 13 字节 (4+1+4+4)
+        assertEquals(202 + DEFAULT_USER_EQUIPS.size * 13, buf.readableBytes())
     }
 
     @Test

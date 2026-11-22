@@ -542,18 +542,17 @@ class ShopTest {
             with(UserInfoReq) { Unpooled.wrappedBuffer(e1(1) + e1(clientCudiBomber)).handle(cs) }
             sendUserInfo(cs, 0)
 
+            // op 20 必须把客户端 CUserDynamicInfo 的当前角色恢复为服务端权威值 chosen
+            assertEquals(chosen, clientCudiBomber, "返回房间时 S→C op 20 必须把 CUDI 恢复为 Plunk ($chosen)")
+            assertEquals(chosen, user.bomber, "服务端档案角色必须保持为 Plunk ($chosen)")
+            assertEquals(chosen, Room.slots[0].bomber.toInt(), "房间槽位角色必须保持为 Plunk ($chosen)")
+
             val profile = generateSequence { ch.readOutbound<PKT>() }
                 .firstOrNull { OpcodeManager.getSendOp(it::class.java) == 73 }
             assertNotNull(profile, "必须下发 S→C op 73 UserInfoResult")
+            // cat=15 角色卡不再进背包/装备列表，op 73 不再夹带伪造的 slot 15 条目
             val hex = bodyOf(profile!!).joinToString("") { "%02x".format(it) }
-            val expectedCard = CharacterRules.bomberCharCard(chosen).first
-            // 角色卡条目 = Encode4(itemId) + Encode1(slot 15)
-            val cardHex = "%08x".format(expectedCard xor 0x96CA5395.toInt()) + "55"
-            assertTrue(hex.contains(cardHex), "名片角色卡必须是 Plunk (item $expectedCard @ slot 15)")
-            assertFalse(
-                hex.contains("%08x".format(5 xor 0x96CA5395.toInt()) + "55"),
-                "名片不能再显示宝宝 (item 5)"
-            )
+            assertFalse(hex.contains("%08x".format(5 xor 0x96CA5395.toInt()) + "55"))
         } finally {
             Room.slots[0].assignHuman(prevPlayer, prevClient)
             Room.slots[0].bomber = prevBomber

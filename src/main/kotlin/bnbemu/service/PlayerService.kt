@@ -203,7 +203,7 @@ object PlayerService {
                 if (change.itemId == 0) continue
                 if (change.equipSlot == EquipSlot.BAG) {
                     val equippedIdx = inv.indexOfFirst {
-                        it.itemId == change.itemId && it.isEquipped && it.equipSlot != EquipSlot.CHARACTER
+                        it.itemId == change.itemId && it.isEquipped
                     }
                     if (equippedIdx != -1) {
                         val oldSlot = inv[equippedIdx].equipSlot!!
@@ -226,8 +226,7 @@ object PlayerService {
                         }
                     }
                     val targetIdx = inv.indexOfFirst {
-                        it.equipSlot == change.equipSlot ||
-                            (it.itemId == change.itemId && it.equipSlot != EquipSlot.CHARACTER)
+                        it.equipSlot == change.equipSlot || it.itemId == change.itemId
                     }
                     if (targetIdx != -1) {
                         val existing = inv[targetIdx]
@@ -256,18 +255,11 @@ object PlayerService {
         }
     }
 
-    /** 统一写入当前选中角色，并同步更新角色卡槽位 ([EquipSlot.CHARACTER])。 */
+    /** 统一写入当前选中角色。 */
     fun selectBomber(userId: Int, bomber: Int): PlayerProfile? {
         val profile = repository.findByUserId(userId) ?: return null
         synchronized(profile) {
             profile.bomber = bomber
-            val (charItemId, _) = CharacterRules.bomberCharCard(bomber)
-            val charIdx = profile.mutableInventory.indexOfFirst { it.equipSlot == EquipSlot.CHARACTER }
-            if (charIdx >= 0) {
-                profile.mutableInventory[charIdx] = profile.mutableInventory[charIdx].copy(itemId = charItemId)
-            } else {
-                profile.mutableInventory.add(0, UserItemEntry(itemId = charItemId, equipSlot = EquipSlot.CHARACTER))
-            }
             repository.save(profile)
             return profile
         }

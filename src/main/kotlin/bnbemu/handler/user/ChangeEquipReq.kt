@@ -87,7 +87,7 @@ private const val NON_EQUIP_SLOT = EquipSlot.BAG
 /** 装备大类名 (仅用于日志可读性) */
 private val EQUIP_GROUP_NAMES = mapOf(
     4 to "情侣/戒指", 5 to "19类", 6 to "进阶卡", 7 to "卡牌类",
-    8 to "角色卡", 9 to "装扮/背景", 10 to "特效/气泡",
+    8 to "表情/动作", 9 to "装扮/背景", 10 to "特效/气泡",
 )
 
 /** 把复合槽位翻译成日志可读文本, 例: `0xD9(217) → 大类9(装扮/背景) 子槽 1` */
