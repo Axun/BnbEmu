@@ -14,21 +14,6 @@ import bnbemu.netty.PKT
 // 工具: tools/extract_op75.py / tools/gen_practice_kotlin.py; 基准 cap/practice_s2c_op*.bin
 
 
-// ---- op 100 没有独立包装函数 ----
-// 官方内部名 MakeSetPlayerPacket / SetPlayer，房间设置版 (78B) 与开局版 (77B) 只差 isStart 一个 flag，
-// 两版都由 packet/room/SetPlayer.kt 生成：
-//   房间设置 → server/RoomEntryChain.kt 调 SetPlayer(slot = Room.slots[0], ...)（带真实槽位状态）
-//   开局     → handler/room/StartGameReq.kt 调 SetPlayer(slotId = 0, player, isStart = true)
-
-// ---- op 111 空体 (1B): E1(0) —— 开局时的房间 UI 开关通知 ----
-// ⚠️ 历史误标：函数名 PracticeAiLevel / yaml 的 AILevelChange: 111 都沿袭 TW_5 的猜测，
-//    它跟 AI 难度档毫无关系。CA.exe sub_5285BD (reference/CA.exe.c:249938) 只读 1B 参数，
-//    case 0/1 调虚表 +0x1C4(this, 0) 关掉房间 UI 按钮，完全不碰全局槽位结构
-//    (0x685E9B / 0x686A4C，也就是 op 103 写 AI 等级的地方)。
-fun PracticeAiLevel() = PKT {
-    EncodeBuffer(EN_OP111)
-}
-
 // ---- op 136 棋盘/开局数据块 (178B) — 原样重放 ----
 fun PracticeBoard() = PKT {
     EncodeBuffer(EN_OP136)

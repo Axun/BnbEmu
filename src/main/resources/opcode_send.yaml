@@ -43,9 +43,12 @@ SelectBomber: 109
 # 客戶端據此清除槽位等待鎖 [+0x2f64]==5 (CA.exe 0x4EFC96)
 SlotBomber: 105
 DoOpenCloseSlot: 110
-AILevelChange: 111
 SelectMap: 108
-StartGameResult: 115
+# op 115 = CPrepareStage::OnPacket 0x00527754: E1(code=0..7) 的房主限制提示
+# (0 BanChiefWarning / 1 BanChiefOddSlotWarning / 2 BanChiefExceedMaxPlayerWarning /
+#  3 BanChiefNotStart / 4 BanChiefOddSlot / 5 BanChiefNoPlay / 6 BanChiefTooMinSlotWarning /
+#  7 BanChiefTooMinSlot), 仅弹本地化文案, 尚未实现。
+#BanChiefWarning: 115
 LaunchGameStage: 170
 DoStartGame: 171
 # ----- battle -----
@@ -117,11 +120,7 @@ SetSlotColor: 104
 PracticeSetPlayer: 105
 SetSlotFanfare: 114
 PracticeSetSlotAI: 103
-# op 100 的房间设置版/开局版都由 SetPlayer 生成 (见上方 SetPlayer: 100)，不再需要独立 key。
-# 练习房开局链里的 8B 选图包已改用结构化 SelectMap(mapId=172) 生成, 不再需要独立 key。
-# 旧名 PracticeColor 来自 TW_5_send.yaml 的历史误标 (把 op 108 当成颜色), 实际是选图回应。
-#PracticeColor: 108
-PracticeAiLevel: 111
+StartGameResult: 111
 GameStartMapInfo: 112
 PracticeBoard: 136
 # 局内 AI/角色事件回显 (S→C op 139): 对每个 C→S op 106 回一个, 载荷由 op 106 字段生成

@@ -235,13 +235,21 @@ class GameStartMapInfoTest {
             buf.handle(client)
         }
 
-        // 伺服器回覆序列: PracticeAiLevel, GameStartMapInfo, SetPlayer(isStart=true), PracticeBoard
-        val pkt1 = ch.readOutbound<PKT>() // PracticeAiLevel
+        // 伺服器回覆序列: StartGameResult, GameStartMapInfo, SetPlayer(isStart=true), PracticeBoard
+        val pkt1 = ch.readOutbound<PKT>() // StartGameResult (op 111, E1(0))
         val pkt2 = ch.readOutbound<PKT>() // GameStartMapInfo
         val pkt3 = ch.readOutbound<PKT>() // op 100 開局版 (SetPlayer isStart=true)
         val pkt4 = ch.readOutbound<PKT>() // PracticeBoard
 
         assertNotNull(pkt2)
+
+        // op 111 = 开局结果码, 1B。code 0 → Encode1(0) = 0x5A，与抓包
+        // cap/practice_s2c_op111_1B_0.bin 逐字节一致（不是 2B 的 Encode2(0)）。
+        val resBuf = Unpooled.buffer()
+        pkt1!!.encode(SendPacketBase(resBuf))
+        assertEquals(1, resBuf.readableBytes(), "op 111 帧体只有 1B 结果码")
+        assertEquals(0x5A, resBuf.readUnsignedByte(), "code=0 经 Encode1 → 0x5A")
+
         val encBuf = Unpooled.buffer()
         val sPkt = SendPacketBase(encBuf)
         pkt2.encode(sPkt)
@@ -275,7 +283,7 @@ class GameStartMapInfoTest {
             buf.handle(client)
         }
 
-        ch.readOutbound<PKT>() // PracticeAiLevel
+        ch.readOutbound<PKT>() // StartGameResult
         val pkt2 = ch.readOutbound<PKT>() // GameStartMapInfo
         assertNotNull(pkt2)
 
@@ -341,7 +349,7 @@ class GameStartMapInfoTest {
             sendPkt.Encode4(0)
             with(StartGameReq) { buf.handle(client) }
 
-            ch.readOutbound<PKT>() // PracticeAiLevel
+            ch.readOutbound<PKT>() // StartGameResult
             val pkt112 = ch.readOutbound<PKT>() ?: error("缺少 op112 GameStartMapInfo")
             val encBuf = Unpooled.buffer()
             pkt112.encode(SendPacketBase(encBuf))
@@ -439,7 +447,7 @@ class GameStartMapInfoTest {
         reqPkt.Encode4(0)     // eventParam
         with(StartGameReq) { req.handle(client) }
 
-        ch.readOutbound<PKT>() // 111 PracticeAiLevel
+        ch.readOutbound<PKT>() // 111 StartGameResult
         val pkt112 = ch.readOutbound<PKT>() ?: error("缺少 op112 GameStartMapInfo")
         val buf = Unpooled.buffer()
         pkt112.encode(SendPacketBase(buf))

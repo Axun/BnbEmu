@@ -60,7 +60,7 @@ data class GameStartSlotConfig(
  * 逆向確認:
  *   CA.exe 0x0051F29C (CPrepareStage::OnPacket -> Case 112).
  *   客戶端在開局序列 (op 92 StartGameReq) 後接收:
- *     [111 PracticeAiLevel, 112 GameStartMapInfo, 100 SetPlayer(isStart=true), 136 PracticeBoard].
+ *     [111 StartGameResult(0) 开局结果码, 112 GameStartMapInfo, 100 SetPlayer(isStart=true), 136 PracticeBoard].
  *   若本地無此地圖或校驗不通過, 客戶端彈窗 "InvalidMapReturnToLobby" (0x51F7B0) 退回大廳.
  *
  * 封包體欄位結構 (165B body, 抓包 practice_s2c_op112_167B_0.bin):

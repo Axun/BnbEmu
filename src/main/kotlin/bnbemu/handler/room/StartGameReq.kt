@@ -6,7 +6,7 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
-import bnbemu.packet.room.PracticeAiLevel
+import bnbemu.packet.room.StartGameResult
 import bnbemu.packet.room.PracticeBoard
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.lobby.SESSION_TYPE_BATTLE
@@ -47,7 +47,9 @@ private const val FALLBACK_MAP_NAME = "Cemetery03"
 //      激战模式 (16) 与普通房 (0) 不写该字段，body 为 16B (tst.pcap 练习房为 17B)。
 //   在舊版 TW_5 / CN_12 協議中對應 StartGameReq (TW_5 op 106).
 // 伺服器回覆對局啟動序列:
-//   [111 PracticeAiLevel, 112 GameStartMapInfo, 100 SetPlayer(isStart=true), 136 PracticeBoard].
+//   [111 StartGameResult(0), 112 GameStartMapInfo, 100 SetPlayer(isStart=true), 136 PracticeBoard].
+//   op 111 是「開始遊戲」的結果碼 (E1, 0/1 = 成功, 2..24 = 拒絕原因, 見 packet/room/Practice.kt):
+//   它不解鎖也不推進流程, 失敗碼才會彈提示; 練習房正常路徑回 0。
 // 之後客戶端完成加載發送 149 Ready Ack, 伺服器啟動對局主循環 (Room.startGame).
 val StartGameReq = PKTHandler { c ->
     val mapId = Decode4
@@ -100,7 +102,7 @@ val StartGameReq = PKTHandler { c ->
 
     val player = c.player
     c.send(
-        PracticeAiLevel(),
+        StartGameResult(),  // op 111 开局结果码 = 0 (成功)。
         GameStartMapInfo(
             randomSeed = Random.nextInt(0x7FFFFFFF),
             mapId = mapId,

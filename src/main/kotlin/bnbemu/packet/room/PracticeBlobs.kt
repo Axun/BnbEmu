@@ -8,10 +8,6 @@ import bnbemu.netty.toBA
 // tools/gen_practice_kotlin.py. Do not hand-edit.
 // ============================================================
 
-internal val EN_OP111 = """
-    5a
-""".toBA()
-
 internal val EN_OP136 = """
     c1 3c 57 71 96 ca 53 95 96 ca 53 21 96 ca 53 95
     5a d4 4d 40 92 b5 5e 5b 5b d4 4d 40 92 b5 5e d4
