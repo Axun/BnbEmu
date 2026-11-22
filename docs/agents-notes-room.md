@@ -35,6 +35,19 @@
   于 `0x4EFC96` 把 `[+0x2f64] == 5` 清零。缺此应答 → 槽位永久卡等待锁、再点角色无任何反应。
   实现见 `handler/room/SelectBomberReq.kt` + `packet/room/SlotBomber.kt`（op 105 的 2B 变体，
   与 SetPlayer/PracticeSetPlayer 的整槽版同 op 异体）；回归测试 `tools/test_room_select_bomber.py`。
+- **调试命令 `!char <id>` 强制设置当前角色（2026-11-22）**：聊天框发 `!char 7`（别名 `!bomber 7`，
+  id 0..31，客户端 `CBomberAttr` 只有 32 条记录）。**不做进阶映射**（想蓝妹妹直接敲 10，敲 4 就是蓝蓝）、
+  **不校验持有**。角色在两端各有两份互不相干的存储，必须一起写，否则「服务端是 A、画面还是 B」：
+  服务端 `PlayerProfile.bomber`（`PlayerService.selectBomber`，不再写库存角色卡槽位，后续仅影响 op 60 `cat=3` 模型与 op 20）、
+  `Room.slots[i].bomber`（开局名册 op 112 / 回房链读它）；客户端 **S→C op 20 第 12 栏**
+  （`CUDI + 3s + 111`，客户端唯一的当前角色真相，op 73 上报/名片都从它取）与
+  **S→C op 105**（房间槽位头像当场换形象，客户端 `sub_4EFBF6` 无条件应用）。
+  ⚠️ op 20 是整包快照：**第 12 栏 = 角色、第 8 栏 = Lucci**（`CUDI + 3s + 12`，与 op 122 同一个
+  setter/同一套钳制），所以同一包里必须把 `player.lucci` 一起带上；发 0 会把金币清零，
+  也不要再靠"紧跟一发 op 122 补回"（op 122 排在前面的批次里那种补救会反而丢钱）；
+  ⚠️ 不要顺手补发 op 198/60：op 198 会先清空客户端背包再按 op 60 重建实际装扮；
+  房间/对局形象只依赖 op 20 与 op 105，表情/动作表 op 60 等下次进频道握手 op 81 再同步即可。
+  实现 `handler/lobby/ChatMsg.kt` 的 `forceSetCurrentBomber`；回归测试 `DebugCharCommandTest.kt`。
 - **房间内选择地图（C→S op 85 SelectMapReq / S→C op 108 SelectMap，2026-11-03 逆向 CA.exe 确认）**：在房间界面选择地图时由客户端发出 **op 85 (0x55)**（CA.exe 中 `0x51c60f` 触发，原 TW_5 为 op 97）。body = `E2(themeId) + E4(mapId)`（6 字节，实测 `A5 75 96 CA 53 3A` → themeId 28, mapId 175）。
   ⚠️ 发包后客户端在 `0x51c65b` 设置选图等待锁 `[esi + 0x2f78] = 1` 并调用虚表 `[+0x1c4](0)` 禁用选图按钮。
   **服务端响应必须下发 S→C op 108 SelectMap**（原 TW_5 误标为 112；112 实为开局 165B 对局地图与出生点初始化 `GameStartMapInfo`）。

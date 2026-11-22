@@ -99,13 +99,17 @@ val JoinSessionReq = PKTHandler { c ->
         //    把 413 挪到 198 之后，运行时直读 dyn+0x1EC = 50 → 容量 400，购买可正常进入流程。
         //    另: op 60 (ItemDef) 仍需在 413 之前，客户端按 itemId 查定义表，查不到整条丢弃。
         UserInventory(listOf(inventory, inventory)), MyPageSlots(),
+        // op 122 是抓包线序里原服自己的 Lucci 同步（不是给 op 20 兜底），这里保留以对齐 seq；
+        // op 20 第 8 栏现在也带同一个值，两者谁先谁后都不再影响余额。
         UserDynamicInfoValue(0, lucci), FxConfig(), DynamicMapInfo(),
         RoomList(),
         ShopStringTable(), ShopPackageMap(), ChannelsGameState(tailOnes = 2),
-        // ⚠️ op 20 (UserDynamicInfo) 是本機玩家動態檔案快照, 第 12 欄 = 角色 ID, 必須按當前角色生成!
+        // ⚠️ op 20 (UserDynamicInfo) 是本機玩家動態檔案快照:
+        //    第 12 欄 = 角色 ID, 必須按當前角色生成；第 8 欄 = Lucci (整包快照, 发 0 会清零余额)。
         UserDynamicInfo(
             bomber = bomber,
             level = player?.level ?: 5,
+            lucci = lucci,
             win = player?.win ?: 0,
             lose = player?.lose ?: 0,
             draw = player?.draw ?: 0,

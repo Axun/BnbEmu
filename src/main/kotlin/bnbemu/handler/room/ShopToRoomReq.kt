@@ -5,7 +5,6 @@ import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.ClientStage
 import bnbemu.packet.user.UserDynamicInfo
-import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.packet.isRoomStage
 import bnbemu.server.sendRoomEntryChain
 import bnbemu.service.lucci
@@ -51,7 +50,8 @@ import bnbemu.service.player
  *
  * ⇒ 只需在重放房间链之后按 `user.bomber` 补发 op 20，把权威角色写回客户端 CUDI；
  *   之后客户端上报、服务端同步、名片生成自然一致，无需进商城前快照、忽略上报或重设槽位。
- *   op 20 会把 Lucci 字段刷成 0，末尾紧跟 op 122 补回当前金币。
+ *   op 20 第 8 栏就是 Lucci（`CUDI + 3s + 12`），同一包里带上当前金币即可，
+ *   不必再额外补 op 122（见 packet/UserDynamicInfo.kt 的字段表）。
  */
 val ShopToRoomReq = PKTHandler { c ->
     val sessionShort = if (readableBytes() >= 2) Decode2 else 0
@@ -64,16 +64,16 @@ val ShopToRoomReq = PKTHandler { c ->
     println("[ShopToRoomReq] op80 客户端已切回房间舞台 stage=${c.stage} | sessionShort=$sessionShort sessionId=$sessionId")
     sendRoomEntryChain(c, init = false)
 
-    // 按服务端权威角色回灌客户端 CUserDynamicInfo 的角色字段 (op 20 第 12 项)，
-    // 它直接决定下一次 C→S op 73 的上报值；op 122 补回被 op 20 刷成 0 的 Lucci。
+    // 按服务端权威角色回灌客户端 CUserDynamicInfo：第 12 项 = 角色（决定下一次 C→S op 73
+    // 的上报值），第 8 项 = Lucci（同一 setter，和 op 122 等价），一并带上即可。
     c.send(
         UserDynamicInfo(
             bomber = bomber,
             level = player?.level ?: 5,
+            lucci = c.lucci,
             win = player?.win ?: 0,
             lose = player?.lose ?: 0,
             draw = player?.draw ?: 0,
         ),
-        UserDynamicInfoValue(0, c.lucci),
     )
 }

@@ -150,6 +150,11 @@ def replay(name: str, blob: bytes, expect_ops: set, expect_payloads: dict = None
                     assert all(0 <= s <= 7 for s in spawns) and len(set(spawns)) == slot_count, \
                         f"[{name}] op112 spawnPos 必須是 0..7 的不重複排列: {spawns}"
                     print(f"[{name}] op112 出生點排列 = {spawns}")
+                if op == 20:
+                    lucci = struct.unpack(">I", got[0][17:21])[0] ^ 0x96CA5395
+                    assert 0 <= lucci <= 3_000_000, f"[{name}] op20 第 8 欄 Lucci 越界: {lucci}"
+                    print(f"[{name}] op20 第 8 欄 Lucci = {lucci} "
+                          f"(整包快照, 必須帶真實餘額而不是 0)")
                 print(f"[{name}] op {op} 固定欄位逐位元組與抓包一致 ✓ "
                       f"(忽略 {len(masked)} 個隨機欄位位元組, 實際變動 {len(diff)}B)")
         for op, hxs in (expect_all or {}).items():
@@ -182,6 +187,9 @@ if __name__ == "__main__":
     #   [310,302,254,72 用戶列表,293,78,4×2,227,60,310,302]; C 的 81 空包 → 進頻道握手推送
     #   [413,198,200,274×2,122,212,210,87,65,204,66,14(9B),20,261,247,423,81 名冊,72]
     # op 72 SessionList / op 87 RoomList / op 81 JoinSessionResult 已結構化, 載荷須與抓包逐位元組一致
+    # ⚠️ op 20 第 8 欄 = Lucci (body 偏移 15 的 E4, CUDI + 3s + 12, 與 op 122 同一 setter):
+    #    模擬器按玩家當前餘額下發, 抓包基準是 0, 故只放行該 4B (expect_payload_masks 的 20: 17..20), 
+    #    並在上面的 mask 分支裡解碼校驗範圍 — 這欄是整包快照, 發 0 會把 op 122 剛寫的金幣清零。
     # ⚠️ 頻道版 65B op4 只有末位元組 E1(channelTabCount) 與抓包不同 (抓包 0, 模擬器 3),
     #    基準檔本身不改動, 只把期望值的末位元組換算成 Encode1(CHANNEL_TAB_COUNT), 其餘 64B 仍逐位元組比對
     chan_op4_65b = bytearray(open(os.path.join(base, "cap/chan_s2c_op4_65B_0.bin"), "rb").read())
@@ -211,7 +219,7 @@ if __name__ == "__main__":
                   open(os.path.join(base, "cap/chan_s2c_op274_17B_1.bin"), "rb").read().hex()],
             14: [open(os.path.join(base, "cap/chan_s2c_op14_10B_0.bin"), "rb").read().hex(),
                  open(os.path.join(base, "cap/chan_s2c_op14_9B_0.bin"), "rb").read().hex()]},
-            {227: set(range(3, 7)), 261: set(range(3, 7))})
+            {20: set(range(17, 21)), 227: set(range(3, 7)), 261: set(range(3, 7))})
     # op 6 流程: 真實請求載荷 (E1(10)+E4(2), seq70/uid198 原幀以 ssc_enc 重封裝至 seq=40)
     # → EN 必須回 **op 7** ResConnectToSvr (客戶端等 7 才會開進頻道連線; 回 6 客戶端會忽略)
     replay("connect", open(os.path.join(base, "tools/replay_connect_cs.bin"), "rb").read(), {7})

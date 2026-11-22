@@ -244,6 +244,17 @@ class CharSelectSyncTest {
             "op 20 默认必须带上背包等级"
         )
 
+        // 第 8 栏 = Lucci (记录偏移 15 的 E4, CUDI + 3s + 12)：必须按传入值下发。
+        // 这一栏是整包快照，发 0 会把 op 122 刚同步的金币清零（两者是同一个 setter）。
+        val withLucci = body(UserDynamicInfo(0, lucci = 5000))
+        val lucciBuf = Unpooled.wrappedBuffer(withLucci)
+        lucciBuf.skipBytes(15)   // body 内偏移 15（0 = count 字节，表里的「偏移」即 body 偏移）
+        assertEquals(
+            5000,
+            lucciBuf.readInt() xor 0x96CA5395.toInt(),
+            "op 20 第 8 栏必须是 Lucci"
+        )
+
         File("cap/chan_s2c_op20_46B_0.bin").takeIf { it.isFile }?.let {
             val raw = it.readBytes()
             assertArrayEquals(

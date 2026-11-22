@@ -8,9 +8,10 @@
   （rd 实例：f1=33, f2=7192[低16位恒 0x18], f3=61<<16, f4=119, t1=0x08000000, t2=0x04100077, t3=0）；
   下一步：在真实服务器房间界面（rd #12 1/1）抓 1 分钟 op 87，按 12/1/1 值匹配钉死字段；
   op 86（12 次，23~25B）；
-  **op 122 UserDynamicInfoValue = CUserDynamicInfo 单Lucci同步；op 20 UserDynamicInfo = 本机玩家动态档案快照**；op 4 有三个变体（登录连线 65B /
+  **op 122 UserDynamicInfoValue = CUserDynamicInfo 单Lucci同步；op 20 UserDynamicInfo = 本机玩家动态档案快照**
+  （⚠️ op 20 第 8 栏也直接写 Lucci，与 op 122 同一个 setter，字段表见 `packet/user/UserDynamicInfo.kt`）；op 4 有三个变体（登录连线 65B /
   频道连线 65B 全零 / 13B 查询应答，均含或邻接 4B 会话串）；
-  op 210 DynamicMapInfo为 **动态地图表**（CDynamicMapMan；由 `fxdynmapinfo.json` 实时生成，见 `docs/client/ssd-file.md`）、op 65 ShopCatalog ≈50KB（商城商品与角色卡全量目录，已结构化）、op 60 ItemDef ≈46KB（全量物品定义目录，已结构化支持动态配置与进阶角色卡启用）；
+  op 210 DynamicMapInfo为 **动态地图表**（CDynamicMapMan；由 `fxdynmapinfo.json` 实时生成，见 `docs/client/ssd-file.md`）、op 65 ShopCatalog ≈6.8KB（商城商品与角色卡全量目录，已结构化；明文 50KB，现以 zlib 压缩块下发，客户端 `sub_78BB60` 的 `*a2==1` 分支解压）、op 60 ItemDef ≈46KB（全量物品定义目录，已结构化支持动态配置与进阶角色卡启用）；
   **op 72 SessionList = 频道在线用户列表**（⚠️ 2026-08-30 与游戏界面比对，非房间列表；已结构化：`packet/SessionList.kt` 的 SessionEntry）：
   `E2(0) + E1(条目数) + N 条目`，条目 = `E2(len)+角色名令牌(4~6B) + 42B 固定栏位`；
   已解出栏位语义：number=E2 玩家**等级**（样本 326→1 递减 = 326..1 级玩家，非房间号）、
