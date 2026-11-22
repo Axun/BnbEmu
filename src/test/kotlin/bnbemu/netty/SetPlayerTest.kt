@@ -5,7 +5,6 @@ import bnbemu.data.ItemDefEntry
 import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
 import bnbemu.domain.PlayerProfile
 import bnbemu.handler.user.ChangeEquipReq
-import bnbemu.packet.room.PracticeRoomInfo
 import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.room.slotAccessoriesOf
 import bnbemu.service.PlayerService
@@ -84,11 +83,11 @@ class SetPlayerTest {
     }
 
     @Test
-    fun testPracticeRoomInfoDelegation() {
-        // 验证 PracticeRoomInfo 传 player 时动态应用 level
+    fun testRoomVariantLevelComesFromPlayerProfile() {
+        // 房间设置版 (isStart=false, 78B): 不显式给 level 时必须从 PlayerProfile 取值
         val user = PlayerProfile(userId = 7215, username = "kcworms1", charName = "ffdf", level = 5)
 
-        val pkt = PracticeRoomInfo(player = user)
+        val pkt = SetPlayer(slotId = 0, player = user)
         val got = body(pkt)
         assertEquals(78, got.size)
         assertEquals(0xa5.toByte(), got[30])
@@ -258,7 +257,7 @@ class SetPlayerTest {
 
     @Test
     fun testBombSkinSurvivesGameStartVariant() {
-        // 进战斗前的最后一次 op 100 (PracticeStartInfo) 会覆写 CFxContext+472,
+        // 进战斗前的最后一次 op 100 (isStart=true) 会覆写 CFxContext+472,
         // 这一发必须同样带上水泡, 否则进房时设的值会被清回默认。
         val got = body(
             SetPlayer(slotId = 0, level = 1, isStart = true, equips = mapOf(bombSlot() to 930000655))

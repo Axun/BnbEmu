@@ -117,8 +117,7 @@ SetSlotColor: 104
 PracticeSetPlayer: 105
 SetSlotFanfare: 114
 PracticeSetSlotAI: 103
-PracticeRoomInfo: 100
-PracticeStartInfo: 100
+# op 100 的房间设置版/开局版都由 SetPlayer 生成 (见上方 SetPlayer: 100)，不再需要独立 key。
 # 练习房开局链里的 8B 选图包已改用结构化 SelectMap(mapId=172) 生成, 不再需要独立 key。
 # 旧名 PracticeColor 来自 TW_5_send.yaml 的历史误标 (把 op 108 当成颜色), 实际是选图回应。
 #PracticeColor: 108

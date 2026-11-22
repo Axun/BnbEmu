@@ -1,6 +1,6 @@
 - **对局阶段启动与水泡引爆机制**：
     1. **练习房/单人模式（tst.pcap stream 4）**：
-       由 `Unk_92` (C→S op 92) 触发开始序列：`[111 AILevelChange, 112 GameStartMapInfo, 100 PracticeStartInfo, 136 PracticeBoard]`。
+       由 `Unk_92` (C→S op 92) 触发开始序列：`[111 AILevelChange, 112 GameStartMapInfo, 100 SetPlayer(isStart=true), 136 PracticeBoard]`。
        - **S→C op 112 GameStartMapInfo（对局地图与出生点/角色槽位初始化，165 字节，CA.exe 0x51F29C）**：在开局时初始化随机数种子、主题 ID、加密地图名（`EncodeCipherStr` 经 `0x75daf0` 加密为 10B `"Cemetery04"`）、地图 ID、槽位出生点/角色/队伍标志等。若地图校验失败会弹出 `"InvalidMapReturnToLobby"` 退回大厅。实现见 `packet/room/GameStartMapInfo.kt`。
        - ⚠️ **这份包同时是「开局有几个电脑」的唯一名册**：`CA.exe 0x0051F522` 读 `E1(slotCount)` 写到 `CGameContext+0x154`，`0x0051F52A` 起按 slotCount 循环读 N 条 17B 记录（`E1 slotIdx / E1 spawnPos / E1 bomber / E1 teamFlag / E1 state / E4×3`），每条第一个字节是**真实槽号**（客户端 `0x51F555/0x51F568/0x51F57B` 用它索引 `CGameContext+0x1e0+slot*0x1e4`），不是循环序号。`0x51F29C` 开头那段 10 次循环由 `0x51F2DF` 的 `je 0x51f408` 在练习房模式直接跳过。
          房间阶段 op 89 踢 AI 只清 `CPrepareStrategyAIBattle` 的本地槽位（`0x52B450 → 0x685ED9` 把 12B AI 配置清成 `(0,0,-1)`），**开局仍以 op112 名册为准**。旧实现写死 `Encode1(8)` + `for (0 until 8)` + `team = if (i==0) 0 else 8`，于是无论踢几个，开局都重建 7 个 AI。

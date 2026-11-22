@@ -8,7 +8,7 @@ import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
 import bnbemu.packet.room.PracticeAiLevel
 import bnbemu.packet.room.PracticeBoard
-import bnbemu.packet.room.PracticeStartInfo
+import bnbemu.packet.room.SetPlayer
 import bnbemu.packet.lobby.SESSION_TYPE_BATTLE
 import bnbemu.packet.lobby.SESSION_TYPE_PRACTICE
 import bnbemu.packet.battle.GameStartMapInfo
@@ -47,7 +47,7 @@ private const val FALLBACK_MAP_NAME = "Cemetery03"
 //      激战模式 (16) 与普通房 (0) 不写该字段，body 为 16B (tst.pcap 练习房为 17B)。
 //   在舊版 TW_5 / CN_12 協議中對應 StartGameReq (TW_5 op 106).
 // 伺服器回覆對局啟動序列:
-//   [111 PracticeAiLevel, 112 GameStartMapInfo, 100 PracticeStartInfo, 136 PracticeBoard].
+//   [111 PracticeAiLevel, 112 GameStartMapInfo, 100 SetPlayer(isStart=true), 136 PracticeBoard].
 // 之後客戶端完成加載發送 149 Ready Ack, 伺服器啟動對局主循環 (Room.startGame).
 val StartGameReq = PKTHandler { c ->
     val mapId = Decode4
@@ -111,7 +111,10 @@ val StartGameReq = PKTHandler { c ->
             // 出生點數量由地圖決定（4 人图只有 0..3），按参战槽顺序分配，见 assignSpawnPositions
             slotConfigs = slotConfigs,
         ),
-        PracticeStartInfo(player = player),
+        // op 100 开局版 (77B, 抓包 practice_s2c_op100_79B_1.bin): isStart=true 去掉 enterEffectId
+        // 与房主位, 只置 FLAG_READY。slotId 恒 0 —— 真人恒在槽 0 (CreateSessionReq / Room.begin),
+        // 角色与颜色由上一发 op 112 的槽位名册决定, 这里的槽位元数据与抓包基准保持 Boz/0。
+        SetPlayer(slotId = 0, player = player, isStart = true),
         PracticeBoard(),
     )
 

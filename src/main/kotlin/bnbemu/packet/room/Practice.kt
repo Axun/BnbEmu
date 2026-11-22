@@ -1,8 +1,6 @@
 package bnbemu.packet.room
 
-import bnbemu.domain.PlayerProfile
 import bnbemu.netty.PKT
-import bnbemu.packet.room.SetPlayer
 
 // ============================================================================
 // 进练习房 (C→S op 75) 回应链 — 按 tst.pcap stream 4 真实线序 (TCP seq) 原样重放
@@ -16,12 +14,11 @@ import bnbemu.packet.room.SetPlayer
 // 工具: tools/extract_op75.py / tools/gen_practice_kotlin.py; 基准 cap/practice_s2c_op*.bin
 
 
-// ---- op 100 房间设置版 (78B) / 游戏开始版 (77B) — 官方命名 MakeSetPlayerPacket / SetPlayer ----
-fun PracticeRoomInfo(player: PlayerProfile? = null, level: Int = player?.level ?: 5) =
-    SetPlayer(slotId = 0, player = player, level = level, isStart = false)
-
-fun PracticeStartInfo(player: PlayerProfile? = null, level: Int = player?.level ?: 5) =
-    SetPlayer(slotId = 0, player = player, level = level, isStart = true)
+// ---- op 100 没有独立包装函数 ----
+// 官方内部名 MakeSetPlayerPacket / SetPlayer，房间设置版 (78B) 与开局版 (77B) 只差 isStart 一个 flag，
+// 两版都由 packet/room/SetPlayer.kt 生成：
+//   房间设置 → server/RoomEntryChain.kt 调 SetPlayer(slot = Room.slots[0], ...)（带真实槽位状态）
+//   开局     → handler/room/StartGameReq.kt 调 SetPlayer(slotId = 0, player, isStart = true)
 
 // ---- op 111 空体 (1B): E1(0) —— 开局时的房间 UI 开关通知 ----
 // ⚠️ 历史误标：函数名 PracticeAiLevel / yaml 的 AILevelChange: 111 都沿袭 TW_5 的猜测，
