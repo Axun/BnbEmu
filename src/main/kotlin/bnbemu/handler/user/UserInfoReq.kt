@@ -157,7 +157,13 @@ val UserInfoReq = PKTHandler { c ->
     val userSlot = Room.slots.find {
         it.client === c || (player != null && it.player?.userId == player.userId)
     }
-    if (bomberIds.isNotEmpty() && bomberIds[0] in 0..15) {
+    // ⚠️ 上限 31 与「值没变就不写」都依赖客户端 0x006E50F0 的掩码：
+    //    原版是 `CUDI_bomber & 7`（3 bit），25 会被读成 1 —— 打开名片上报 1，服务端就把 25 洗成 1，
+    //    char 命令在大厅里等于被撤销。已用 tools/patch_char_mask.py 把该字节改成 `&0x1F`
+    //    （CBomberAttr 正好 32 条 = 0..31）。打补丁后上报的是真实 id；进阶角色仍是客户端
+    //    折回的基础 4/7/…，所以 resolveEffectiveBomber 照旧生效。
+    //    未打补丁的客户端只会报 0..7，这里不猜、不兜底。
+    if (bomberIds.isNotEmpty() && bomberIds[0] in 0..31) {
         // 与 op 87 SelectBomberReq 同一约定: 持有 2082 进阶卡时蓝蓝 (4) 走进阶形态 10
         val effective = CharacterRules.resolveEffectiveBomber(bomberIds[0], player)
         if (player != null && player.bomber != effective) {

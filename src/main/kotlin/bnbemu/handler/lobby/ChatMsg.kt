@@ -1,11 +1,20 @@
 package bnbemu.handler.lobby
 
 import bnbemu.debugMode
+import bnbemu.domain.CharacterType
+import bnbemu.netty.ClientSocket
 import bnbemu.netty.Decode1
 import bnbemu.netty.DecodeTokenStr
 import bnbemu.netty.PKTHandler
+import bnbemu.packet.ClientStage
+import bnbemu.packet.ROOM_STAGE_IDS
 import bnbemu.packet.StageNotice
+import bnbemu.packet.room.SlotBomber
+import bnbemu.packet.user.UserDynamicInfo
 import bnbemu.server.Room
+import bnbemu.server.bomber
+import bnbemu.service.PlayerService
+import bnbemu.service.player
 
 /**
  * C→S op 18：大廳聊天發言（EN 客戶端在聊天框送出文字）
@@ -48,6 +57,8 @@ val ChatMsg = PKTHandler { c ->
     //   shield <slot>              -> op146 state=9「护盾」；被撞时客户端会自己破盾并报 op112 0xA0
     //   st   <state> <slot> [x y]  -> 广播任意 state 的 op146，用来试每个 state 的语义
     //   notice <文字>              -> 广播 S→C op22「舞台顶部公告横幅」，10 秒自动消失
+    //   char <id>                  -> 强制设置当前角色（bomber id 0..31）：服务端档案/房间槽位
+    //                                 与客户端 CUDI(op20)/房间头像(op105) 一起改，见 forceSetCurrentBomber
     // 详见 packet/room/SetBomberState.kt 的 state 表。
     if (debugMode) {
         // 前缀无关：剥掉行首所有非字母（! # @ ~ 等，也支持 !! 这种多字符前缀）后按命令名匹配。
@@ -111,6 +122,10 @@ val ChatMsg = PKTHandler { c ->
                 println("[ChatMsg] 下发 op22 公告 \"$msg\" 给 ${maxOf(clients.size, 1)} 条连线")
             }
         }
+
+        // char <id> -> 强制设置当前角色（服务端 + 客户端同时落库，见 forceSetCurrentBomber）
+        val charCmd = DEBUG_CHAR.find(cmd)
+        if (charCmd != null) forceSetCurrentBomber(c, charCmd.groupValues[1].toInt())
     }
 }
 
@@ -121,10 +136,110 @@ private val DEBUG_ST = Regex("^st" + BLANK + "(\\d+)" + BLANK + "(\\d+)(.*)")
 private val DEBUG_TRAP = Regex("^trap" + BLANK + "(\\d+)(.*)")
 private val DEBUG_FREE = Regex("^free" + BLANK + "(\\d+)(.*)")
 private val DEBUG_NOTICE = Regex("^notice" + BLANK + "(.+)$")
+private val DEBUG_CHAR = Regex("^(?:char|bomber)" + BLANK + "(\\d+)")
 private const val BLANK = "\\s+"
 
 /** op 22 公告文本上限：客户端公告控件按单行横幅排版，过长的文本会被截断或溢出 */
 private const val MAX_NOTICE_LEN = 120
+
+/**
+ * 角色 ID 上限。
+ *
+ * 槽位元数据里只有 6 位（`Slot.bomber` = meta[1]，客户端按 `& 0x3F` 取），但客户端真正能用的
+ * 只有 0..31：`CBomberAttr` 的表来自 `Attr/BomberAttr.bin` = 32 条记录，`sub_6B426D(id)`
+ * 开头就是 `if (a2 > 0x1F) return 0`（见 docs/client/character-resource-mapping.md）。
+ * 32..63 塞得进槽位却查不到资源，客户端会退化成默认形象 —— 与其让人以为命令生效了，不如直接拒收。
+ */
+private const val MAX_BOMBER_ID = 31
+
+/** 角色 id → 日志可读名；`CharacterType` 里没有的 id 也照样接受（调试命令不拦），只是标「未定义」 */
+private fun bomberLabel(id: Int): String =
+    CharacterType.entries.firstOrNull { it.value == id }?.let { "$id(${it.name})" } ?: "$id(未定义)"
+
+/**
+ * 调试命令 `char <id>`（别名 `bomber <id>`）：按角色 id 强制设置当前角色，服务端与客户端一起改。
+ *
+ * 「强制」= 不做规则换算、不校验持有：
+ *   - 不走 `CharacterRules.resolveEffectiveBomber`（蓝蓝 4 → 进阶 10 的映射对调试是干扰，
+ *     想要蓝妹妹就直接敲 10）；
+ *   - 不检查玩家是否持有对应角色/进阶卡，id 在 0..31 内一律照写。
+ *
+ * 两端各有**两份互不相干**的存储，少写一份就会出现「服务端是 A、画面还是 B」：
+ *   服务端
+ *     1. `PlayerProfile.bomber` —— 走 [PlayerService.selectBomber]（只写角色 ID），之后
+ *        op 60 (`cat=3` 模型) / op 20 / op 73 都按新角色生效（`cat=15` 角色卡已不再进背包/装备）；
+ *     2. `Room.slots[i].bomber`（meta[1]）—— 开局名册 op 112、回房链 op 105 读的都是它。
+ *   客户端
+ *     3. `CUserDynamicInfo` 当前角色字段（S→C op 20 第 12 栏，CA.exe `CUDI + 3s + 111`）——
+ *        客户端唯一的「当前角色」真相：op 73 上报、名片、进房链全从它取；
+ *     4. 房间槽位头像（S→C op 105，2B = E1(slot)+E1(bomber)）—— 只有它会让房间界面的
+ *        槽位角色**当场**换形象（客户端 `sub_4EFBF6` 读两个 Encode1 后重绘该槽）。
+ *
+ * ⚠️ op 20 是「整包快照」，第 8 栏就是 Lucci（`CUDI + 3s + 12`，与 op 122 同一个 setter），
+ *   所以这里必须把 `player.lucci` 一起带上；发 0 会把金币清零（见 packet/UserDynamicInfo.kt）。
+ * ⚠️ 不补发 op 198 / op 60：op 198 会先清空客户端背包再按 op 60 重建实际装扮；
+ *   房间/对局里的形象只依赖 op 20 与 op 105，等下次进频道握手（op 81）再按新角色发 op 60 即可。
+ * ⚠️ 对局中（stage 13）不发 op 105：bomber 对象在开局 op 112 时已按槽位建好，
+ *   中途改 meta 不会重载模型，只会让房间界面的隐藏槽位状态和服务端不一致。
+ */
+private fun forceSetCurrentBomber(c: ClientSocket, bomber: Int) {
+    if (bomber !in 0..MAX_BOMBER_ID) {
+        println(
+            "[ChatMsg] char: 角色 id 必须在 0..$MAX_BOMBER_ID" +
+                "（客户端 CBomberAttr 只有 32 条记录），收到 $bomber，已忽略"
+        )
+        return
+    }
+    val player = c.player
+    if (player == null) {
+        println("[ChatMsg] char: 当前连线未绑定玩家档案（playerId=${c.playerId}），无法设置角色，已忽略")
+        return
+    }
+
+    val before = player.bomber
+    // 1) 服务端档案：只写 bomber（角色卡已不再作为背包物品下发，见 EquipSlot 注释）
+    PlayerService.selectBomber(player.userId, bomber)
+
+    // 2) 服务端房间槽位：只有真占着槽位才改，大厅期 Room.slots 可能还留着上局的残影
+    val slotIdx = Room.slots.indexOfFirst {
+        it.client === c || it.player?.userId == player.userId
+    }
+    if (slotIdx != -1) Room.slots[slotIdx].bomber = bomber
+
+    // 3) 客户端 CUDI：op 20 第 12 栏（角色）+ 第 8 栏（Lucci，按档案当前值，无需再补 op 122）
+    c.send(
+        UserDynamicInfo(
+            bomber = bomber,
+            level = player.level,
+            lucci = player.lucci,
+            win = player.win,
+            lose = player.lose,
+            draw = player.draw,
+        ),
+    )
+
+    // 4) 客户端房间槽位头像：只在房间类舞台发（对局中模型已建好，见函数头注释）
+    val roomStage = c.stage in ROOM_STAGE_IDS
+    if (slotIdx != -1 && roomStage) {
+        val pkt = SlotBomber(slotIdx, bomber)
+        if (Room.uniqueClients.any()) Room.BC(pkt) else c.send(pkt)
+    }
+
+    val where = when {
+        slotIdx == -1 -> "不在房间槽位（仅档案+CUDI）"
+        roomStage -> "房间槽位 $slotIdx meta[1]=${Room.slots[slotIdx].bomber.toInt()}，已广播 op105"
+        c.stage == ClientStage.Game.value -> "对局中，op105 未下发（模型本局不变）"
+        else -> "舞台 ${c.stage} 非房间，op105 未下发"
+    }
+    println(
+        "[ChatMsg] char 强制设置角色 ${bomberLabel(before)} → ${bomberLabel(bomber)} | " +
+            "服务端 bomber=${player.bomber}（装备槽 ${player.equips.size} 件不变） | " +
+            "客户端 op20 bomber=$bomber lucci=${player.lucci} | $where"
+    )
+    if (CharacterType.entries.none { it.value == bomber }) {
+        println("[ChatMsg]   ⚠️ $bomber 不在 CharacterType 表里，已按原值下发；模型/动作可能缺失")
+    }
+}
 
 /*
   在大厅聊天框发送文字（实测文字 "asf"）由客户端发出 **C→S op 18 (0x12)**

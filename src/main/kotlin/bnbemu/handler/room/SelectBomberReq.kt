@@ -36,7 +36,14 @@ val SelectBomberReq = PKTHandler { c ->
 
     val player = c.player
     val effectiveBomber = CharacterRules.resolveEffectiveBomber(bomberIdx, player)
-    if (player != null && slotIdx == 0) {
+    // ⚠️ 值没变就不写档案：这个包在实际流程里有两种来源——
+    //    ① 玩家点房间里的角色头像（真正的换角，2B = 槽位 + 角色）；
+    //    ② 客户端「刷新本机槽位」时自动重发（CA.exe 0x4EF96A 只在目标是本机槽时发，
+    //       0x4F69E2 是无条件版本），取的是 0x006E50F0 读出的当前角色。
+    //    ② 在**未打补丁**的客户端上取的是 `CUDI_bomber & 7`（25 → 1），
+    //    无条件写就会把 char 命令/进阶卡设出来的角色洗回低位角色；打完
+    //    tools/patch_char_mask.py 的掩码补丁后它报的是真实 id（0..31），这里只做幂等判断。
+    if (player != null && slotIdx == 0 && player.bomber != effectiveBomber) {
         PlayerService.selectBomber(player.userId, effectiveBomber)
     }
     Room.slots.getOrNull(slotIdx)?.bomber = effectiveBomber
