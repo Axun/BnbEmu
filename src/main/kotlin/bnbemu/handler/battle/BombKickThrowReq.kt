@@ -5,6 +5,7 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.PKTHandler
 import bnbemu.server.Room
+import org.tinylog.kotlin.Logger
 
 // C→S (EN op 107 / 0x6B) —— 局内「水泡移动（抛掷/踢出）」上报请求。
 //
@@ -43,7 +44,7 @@ val BombKickThrowReq = PKTHandler { c ->
     val moveDuration = Decode2
 
     if (debugMode) {
-        println("[op107] kind=$kind slot=$slotId bomb=$bombId ($fromX,$fromY)->($toX,$toY) ${moveDuration}ms")
+        Logger.debug("[op107] kind=$kind slot=$slotId bomb=$bombId ($fromX,$fromY)->($toX,$toY) ${moveDuration}ms")
     }
 
     Room.current?.battle?.onBombMove(slotId, kind, bombId, fromX, fromY, toX, toY, moveDuration)

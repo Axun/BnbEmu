@@ -6,6 +6,7 @@ import bnbemu.ACP
 import bnbemu.debugMode
 import bnbemu.showDecValue
 import bnbemu.codec.decodeName
+import org.tinylog.kotlin.Logger
 
 fun interface PKTHandler {
     fun ReceivedPacketBase.handle(c: ClientSocket)
@@ -57,21 +58,21 @@ fun ReceivedPacketBase.DecodeEncryptedStr(key: Int) =
 private fun ReceivedPacketBase.Decode1At(): Int {
     val value = BufferManipulator.Decrypt1(this)
     if (debugMode && showDecValue)
-        println("decrypt value = $value")
+        Logger.debug("decrypt value = $value")
     return value
 }
 
 private fun ReceivedPacketBase.Decode2At(): Int {
     val value = BufferManipulator.Decrypt2(this)
     if (debugMode && showDecValue)
-        println("decrypt value = $value")
+        Logger.debug("decrypt value = $value")
     return value
 }
 
 private fun ReceivedPacketBase.Decode4At(): Int {
     val value = BufferManipulator.Decrypt4(this)
     if (debugMode && showDecValue)
-        println("decrypt value = $value")
+        Logger.debug("decrypt value = $value")
     return value
 }
 
@@ -126,7 +127,7 @@ private fun ReceivedPacketBase.DecodeEncryptedStrAt(key: Int): String {
     val decryptString = readString(length, ACP)
 
     if (debugMode && showDecValue)
-        println("decryptString: $decryptString")
+        Logger.debug("decryptString: $decryptString")
     return decryptString
 }
 

@@ -8,6 +8,7 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.battle.SetBomberEvent
 import bnbemu.packet.battle.bombFlagLaunched
 import bnbemu.server.Room
+import org.tinylog.kotlin.Logger
 
 // 局内角色/AI 放置水泡请求 (C→S op 106)
 // 逆向定位: CA.exe 0x006375A1 / 0x00534CCA -> CBombBag::0x0044C056 -> CGameMsgCache::0x005391AB -> 0x00539A4B (push 0x6a)
@@ -70,7 +71,7 @@ val SetBomberEventReq = PKTHandler { c ->
     val flightRange = if (hasLandingData) Decode2 else 0
 
     if (debugMode && isLaunchedBomb) {
-        println(
+        Logger.debug(
             "[op106] launched bomb: slot=$slotId origin=($originGridX,$originGridY) " +
                 "landing=($landingGridX,$landingGridY) dir=$launchDirection range=$flightRange " +
                 "token=$bombToken flags=0x${bombFlags.toString(16)}"

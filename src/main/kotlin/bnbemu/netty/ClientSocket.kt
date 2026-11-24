@@ -97,9 +97,10 @@ class ClientSocket : SimpleChannelInboundHandler<ByteBuf>() {
 
     override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
         if (debugMode) {
-            println("${cause.message}")
-            if (cause !is IOException) {
-                cause.printStackTrace()
+            if (cause is IOException) {
+                Logger.warn("[ClientSocket] 連線異常 (${ch.remoteAddress()}): ${cause.message}")
+            } else {
+                Logger.error(cause) { cause.message ?: "未預期連線異常" }
             }
         }
         ctx.close()

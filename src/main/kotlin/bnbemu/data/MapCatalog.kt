@@ -1,6 +1,7 @@
 package bnbemu.data
 
 import bnbemu.domain.MAX_SESSION_SLOTS
+import org.tinylog.kotlin.Logger
 import java.io.File
 import java.net.JarURLConnection
 import kotlin.random.Random
@@ -104,7 +105,7 @@ object MapCatalog {
         }
         // 分组表（Attr/MapGroup）不读：真端只在「练习房限定练习图」与「重生玩法标记」
         // 两处消费，先不做。
-        println(
+        Logger.info(
             "[Map] 载入 ${out.size} 张地图模板，" +
                 "${out.values.mapNotNull { it.themeName }.distinct().size} 个主题"
         )

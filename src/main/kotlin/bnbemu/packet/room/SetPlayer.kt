@@ -14,6 +14,7 @@ import bnbemu.server.Slot
 import bnbemu.server.bomber
 import bnbemu.server.color
 import bnbemu.server.state
+import org.tinylog.kotlin.Logger
 
 // ============================================================================
 // S→C op 100: SetPlayer (CSetPlayerOnPreparePacket)
@@ -198,7 +199,7 @@ fun SetPlayer(
 ) = PKT {
     val acc = slotAccessoriesOf(equips)
     if (!acc.isEmpty) {
-        println(
+        Logger.debug(
             "[SetPlayer] 槽 $slotId 装扮: 背景/边框=${acc.decorations.joinToString { "(${it.first},${it.second})" }} " +
                 "特效=${acc.effects.size} 纸娃娃=${acc.avatars.size} 水泡皮肤=${acc.bombSkin}"
         )

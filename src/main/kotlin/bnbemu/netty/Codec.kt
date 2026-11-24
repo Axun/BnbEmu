@@ -36,7 +36,7 @@ class Decoder : ByteToMessageDecoder() {
             // CPacketSocket::CheckCode
             val headerCode = (HEADER_TYPE + HEADER_CODE_MODIFIER) xor (HEADER_CODE_RCV_BASE + rcvSeq)
             if (buf.readByte() != headerCode.toByte()) {
-                println("HeaderCode 錯誤，斷開連接: ${ctx.channel().remoteAddress()}")
+                Logger.warn("HeaderCode 錯誤，斷開連接: ${ctx.channel().remoteAddress()}")
                 buf.clear()
                 ctx.close()
                 return
@@ -60,7 +60,7 @@ class Decoder : ByteToMessageDecoder() {
                 CRC8.UpdateCRC(dwCrcKey = rcvSeq, payload).toByte()
 
             if (!isCrcValid) {
-                println("CRC 錯誤，斷開連接: ${ctx.channel().remoteAddress()}")
+                Logger.warn("CRC 錯誤，斷開連接: ${ctx.channel().remoteAddress()}")
                 payload.release()
                 ctx.close()
                 return

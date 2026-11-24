@@ -5,6 +5,7 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.ChangeStage
 import bnbemu.packet.ClientStage
 import bnbemu.packet.isRoomStage
+import org.tinylog.kotlin.Logger
 
 /**
  * C→S op 97: 舞台状态同步 / 退出当前舞台请求 (StageStateSyncReq)
@@ -37,7 +38,7 @@ val StageStateSyncReq = PKTHandler { c ->
             // 其他(默认大厅 11)       → ChangeStage(11), 客户端自动补发 op 78 回大厅。
             val target = if (isRoomStage(c.shopReturnStage)) c.shopReturnStage else ClientStage.Lobby.value
             c.stage = target
-            println(
+            Logger.info(
                 "StageStateSyncReq -> stageState=0 (退出商城舞台), 来源=${c.shopReturnStage}, " +
                     "回 ChangeStage($target) [${if (target == ClientStage.Lobby.value) "大厅" else "房间"}]"
             )
@@ -46,10 +47,10 @@ val StageStateSyncReq = PKTHandler { c ->
         1 -> {
             // 已进入商城舞台的上报，客户端不等待回应
             c.stage = ClientStage.Shop.value
-            println("StageStateSyncReq -> stageState=1 (仅上报, 无回应)")
+            Logger.debug("StageStateSyncReq -> stageState=1 (仅上报, 无回应)")
         }
         else -> {
-            println("StageStateSyncReq -> stageState=$stageState (未知状态, 仅上报, 无回应)")
+            Logger.warn("StageStateSyncReq -> stageState=$stageState (未知状态, 仅上报, 无回应)")
         }
     }
 }

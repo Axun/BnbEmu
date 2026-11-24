@@ -2,6 +2,7 @@ package bnbemu.handler.shop
 
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
+import org.tinylog.kotlin.Logger
 
 /**
  * C→S op 294 (0x126): 商城购买后的背包/槽位同步上报 (ShopInvenSyncReq)
@@ -25,5 +26,5 @@ import bnbemu.netty.PKTHandler
  */
 val ShopInvenSyncReq = PKTHandler { c ->
     val playerIndex = if (readableBytes() >= 1) Decode1 else -1
-    println("[ShopInvenSyncReq] op294 商城背包同步上报 player=$playerIndex 附加负载=${readableBytes()}B")
+    Logger.debug("[ShopInvenSyncReq] op294 商城背包同步上报 player=$playerIndex 附加负载=${readableBytes()}B")
 }

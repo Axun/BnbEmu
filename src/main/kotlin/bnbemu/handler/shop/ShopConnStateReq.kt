@@ -2,6 +2,7 @@ package bnbemu.handler.shop
 
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
+import org.tinylog.kotlin.Logger
 
 /**
  * C→S op 316 (0x13C): 商城连线状态上报 (ShopConnStateReq)
@@ -16,5 +17,5 @@ import bnbemu.netty.PKTHandler
  */
 val ShopConnStateReq = PKTHandler { c ->
     val state = if (readableBytes() >= 1) Decode1 else -1
-    println("[ShopConnStateReq] op316 商城连线状态上报 state=$state")
+    Logger.debug("[ShopConnStateReq] op316 商城连线状态上报 state=$state")
 }

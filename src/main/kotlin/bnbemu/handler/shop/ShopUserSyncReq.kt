@@ -5,6 +5,7 @@ import bnbemu.netty.Decode4
 import bnbemu.netty.DecodeStr
 import bnbemu.netty.PKTHandler
 import bnbemu.service.PlayerService
+import org.tinylog.kotlin.Logger
 
 /**
  * C->S op 37: 进入商城前人物槽位与装备数据同步 (ShopUserSyncReq)
@@ -31,7 +32,7 @@ val ShopUserSyncReq = PKTHandler { c ->
         if (c.playerId == null && playerId != 0) {
             val profile = PlayerService.bindConnection(playerId, name.ifBlank { "Player" })
             c.playerId = profile.userId
-            println("[ShopUserSyncReq] 商城连线绑定玩家 id=${profile.userId} name='${profile.charName}'")
+            Logger.info("[ShopUserSyncReq] 商城连线绑定玩家 id=${profile.userId} name='${profile.charName}'")
         }
     }
     val param = Decode1

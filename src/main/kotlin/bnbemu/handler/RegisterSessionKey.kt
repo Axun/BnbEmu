@@ -5,6 +5,7 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.netty.readTokenBytes
 import bnbemu.codec.decodeName
+import org.tinylog.kotlin.Logger
 
 /**
  * C→S op 297：登记本端会话密钥（RegisterSessionKey）
@@ -46,7 +47,7 @@ val RegisterSessionKey = PKTHandler { _ ->
     val key = if (token.isEmpty()) "" else decodeName(token)
     val kind = if (readableBytes() >= 1) Decode1 else 0
 
-    if (debugMode) println("[RegisterSessionKey] key=$key(${token.toHex()}) kind=$kind")
+    if (debugMode) Logger.debug("[RegisterSessionKey] key=$key(${token.toHex()}) kind=$kind")
 }
 
 private fun ByteArray.toHex() = joinToString(" ") { "%02X".format(it) }

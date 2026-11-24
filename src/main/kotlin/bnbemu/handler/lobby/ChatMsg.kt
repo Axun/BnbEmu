@@ -15,6 +15,7 @@ import bnbemu.server.Room
 import bnbemu.server.bomber
 import bnbemu.service.PlayerService
 import bnbemu.service.player
+import org.tinylog.kotlin.Logger
 
 /**
  * C→S op 18：大廳聊天發言（EN 客戶端在聊天框送出文字）
@@ -42,7 +43,7 @@ val ChatMsg = PKTHandler { c ->
     val text = DecodeTokenStr
 
     // 目前僅記錄，供後續確定 S→C 顯示 opcode 後接上廣播
-    println("[ChatMsg] 收到聊天 type=$chatType 文字=\"$text\"")
+    Logger.info("[ChatMsg] 收到聊天 type=$chatType 文字=\"$text\"")
 
     // 调试命令（仅 debugMode，聊天框输入；前缀推荐 !，别用 /）：
     // ⚠️ / 开头的整行会被客户端本地吃掉：CA.exe 0x004EB22D 先判首字节 == 47 ('/')，
@@ -111,15 +112,15 @@ val ChatMsg = PKTHandler { c ->
         if (notice != null) {
             val msg = notice.groupValues[1].trim()
             if (msg.isEmpty()) {
-                println("[ChatMsg] notice 命令缺少文本，已忽略")
+                Logger.warn("[ChatMsg] notice 命令缺少文本，已忽略")
             } else if (msg.length > MAX_NOTICE_LEN) {
-                println("[ChatMsg] notice 文本过长 (${msg.length} > $MAX_NOTICE_LEN)，已忽略")
+                Logger.warn("[ChatMsg] notice 文本过长 (${msg.length} > $MAX_NOTICE_LEN)，已忽略")
             } else {
                 val pkt = StageNotice(msg)
                 // 房间里有其他玩家就一起看，否则至少回给自己（单机时 Room.current?.uniqueClients 可能为空）
                 val clients = Room.current?.uniqueClients?.toList().orEmpty()
                 if (clients.isEmpty()) c send pkt else clients.forEach { it send pkt }
-                println("[ChatMsg] 下发 op22 公告 \"$msg\" 给 ${maxOf(clients.size, 1)} 条连线")
+                Logger.info("[ChatMsg] 下发 op22 公告 \"$msg\" 给 ${maxOf(clients.size, 1)} 条连线")
             }
         }
 
@@ -184,7 +185,7 @@ private fun bomberLabel(id: Int): String =
  */
 private fun forceSetCurrentBomber(c: ClientSocket, bomber: Int) {
     if (bomber !in 0..MAX_BOMBER_ID) {
-        println(
+        Logger.warn(
             "[ChatMsg] char: 角色 id 必须在 0..$MAX_BOMBER_ID" +
                 "（客户端 CBomberAttr 只有 32 条记录），收到 $bomber，已忽略"
         )
@@ -192,7 +193,7 @@ private fun forceSetCurrentBomber(c: ClientSocket, bomber: Int) {
     }
     val player = c.player
     if (player == null) {
-        println("[ChatMsg] char: 当前连线未绑定玩家档案（playerId=${c.playerId}），无法设置角色，已忽略")
+        Logger.warn("[ChatMsg] char: 当前连线未绑定玩家档案（playerId=${c.playerId}），无法设置角色，已忽略")
         return
     }
 
@@ -232,13 +233,13 @@ private fun forceSetCurrentBomber(c: ClientSocket, bomber: Int) {
         c.stage == ClientStage.Game.value -> "对局中，op105 未下发（模型本局不变）"
         else -> "舞台 ${c.stage} 非房间，op105 未下发"
     }
-    println(
+    Logger.info(
         "[ChatMsg] char 强制设置角色 ${bomberLabel(before)} → ${bomberLabel(bomber)} | " +
             "服务端 bomber=${player.bomber}（装备槽 ${player.equips.size} 件不变） | " +
             "客户端 op20 bomber=$bomber lucci=${player.lucci} | $where"
     )
     if (CharacterType.entries.none { it.value == bomber }) {
-        println("[ChatMsg]   ⚠️ $bomber 不在 CharacterType 表里，已按原值下发；模型/动作可能缺失")
+        Logger.warn("[ChatMsg]   ⚠️ $bomber 不在 CharacterType 表里，已按原值下发；模型/动作可能缺失")
     }
 }
 

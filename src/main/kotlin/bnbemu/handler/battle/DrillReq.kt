@@ -4,6 +4,7 @@ import bnbemu.debugMode
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
 import bnbemu.server.Room
+import org.tinylog.kotlin.Logger
 
 // C→S DrillReq (EN op 124 / 0x7C) —— 局内「电钻 (Drill) 打掉面前方块」请求。
 //
@@ -45,7 +46,7 @@ val DrillReq = PKTHandler { c ->
     val direction = packed and 0x0F
 
     if (debugMode) {
-        println("[op124] drill: grid=($gridX,$gridY) slot=$slotId dir=$direction")
+        Logger.debug("[op124] drill: grid=($gridX,$gridY) slot=$slotId dir=$direction")
     }
 
     Room.current?.battle?.onDrill(gridX, gridY, slotId, direction)

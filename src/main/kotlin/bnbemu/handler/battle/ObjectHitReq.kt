@@ -5,6 +5,7 @@ import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.PKTHandler
 import bnbemu.server.Room
+import org.tinylog.kotlin.Logger
 
 // C→S (EN op 108 / 0x6C) —— 局内「对象命中 / 延时事件」上报请求。
 //
@@ -57,7 +58,7 @@ val ObjectHitReq = PKTHandler { c ->
     val estimatedRangeGrids = estimatedRangePx / 40
 
     if (debugMode) {
-        println(
+        Logger.debug(
             "[op108] hit: objId=$targetObjectId grid=($gridX,$gridY) delay=${delayMs}ms " +
                 "~range=${estimatedRangePx}px/${estimatedRangeGrids}grid"
         )

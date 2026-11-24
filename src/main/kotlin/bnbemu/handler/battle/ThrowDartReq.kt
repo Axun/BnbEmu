@@ -4,6 +4,7 @@ import bnbemu.debugMode
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.PKTHandler
+import org.tinylog.kotlin.Logger
 
 // C→S (EN op 121 / 0x79) —— 局内「发射飞镖 (CGODart / Item/ThrownDart)」上报请求。
 //
@@ -45,7 +46,7 @@ val ThrowDartReq = PKTHandler { c ->
     val rangeGrids = rangePx / 40
 
     if (debugMode) {
-        println(
+        Logger.debug(
             "[op121] dart: reserved=$reserved start=($startPixelX,$startPixelY)px " +
                 "~grid($startGridX,$startGridY) dir=$direction range=${rangePx}px/${rangeGrids}grid"
         )

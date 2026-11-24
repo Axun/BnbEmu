@@ -24,6 +24,7 @@ import bnbemu.packet.user.inventoryEntries
 import bnbemu.packet.user.UserInventoryInfo
 import bnbemu.service.PlayerService
 import bnbemu.service.player
+import org.tinylog.kotlin.Logger
 
 // C→S op 81 進頻道自動空包 —— ⚠️ 不是「進房」請求
 // =================================================
@@ -69,15 +70,15 @@ val JoinSessionReq = PKTHandler { c ->
     val inventory = inventoryEntries(rawInventory)
     val bag = player?.items.orEmpty()
     val equips = player?.equips.orEmpty()
-    println(
+    Logger.info(
         "[JoinSessionReq] op 198 清单: 库存 ${rawInventory.size} 条 (背包 ${bag.size} 件" +
             " + 装备 ${equips.size} 件) → 下发 ${inventory.size} 条"
     )
     if (bag.isNotEmpty()) {
-        println("[JoinSessionReq] op 198 携带背包物品: ${bag.map { it.itemId }}")
+        Logger.debug("[JoinSessionReq] op 198 携带背包物品: ${bag.map { it.itemId }}")
     }
     if (equips.isNotEmpty()) {
-        println(
+        Logger.debug(
             "[JoinSessionReq] op 198 携带装备: " + equips.entries.joinToString { (slot, itemId) ->
                 "0x${slot.toString(16).uppercase()}(大类${slot / 24}/子槽${slot % 24})=$itemId"
             }

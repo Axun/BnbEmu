@@ -24,6 +24,7 @@ import bnbemu.packet.battle.WINNER_TEAM_DRAW
 import bnbemu.packet.battle.WINNER_TEAM_HUMAN
 import io.netty.channel.EventLoop
 import io.netty.util.concurrent.ScheduledFuture
+import org.tinylog.kotlin.Logger
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
@@ -356,17 +357,17 @@ class BattleSession(
     fun onDrill(gridX: Int, gridY: Int, slotId: Int, action: Int): Boolean {
         if (isDestroyed) return false
         if (slotId !in slotStates.indices) {
-            if (debugMode) println("[BattleSession] op124 电钻: 非法槽位 slot=$slotId, 丢弃")
+            if (debugMode) Logger.debug("[BattleSession] op124 电钻: 非法槽位 slot=$slotId, 丢弃")
             return false
         }
         if (gridX !in 0..12 || gridY !in 0..14) {
-            if (debugMode) println("[BattleSession] op124 电钻: 坐标越界 ($gridX,$gridY), 丢弃")
+            if (debugMode) Logger.debug("[BattleSession] op124 电钻: 坐标越界 ($gridX,$gridY), 丢弃")
             return false
         }
 
         broadcast(DrillResult(gridX, gridY, slotId, action))
         if (debugMode) {
-            println(
+            Logger.debug(
                 "[BattleSession] 电钻 slot=$slotId grid=($gridX,$gridY) dir=$action" +
                     " | 已广播 S→C op156"
             )
@@ -464,7 +465,7 @@ class BattleSession(
                 val known = synchronized(bombs) {
                     bombs.joinToString { "id=${it.id}@(${it.gridX},${it.gridY})" }
                 }
-                println(
+                Logger.debug(
                     "[BattleSession] op108 hit -> no bomb at ($gridX,$gridY) objId=$targetObjectId " +
                         "delay=${delayMs}ms bombs=[$known]"
                 )
@@ -479,7 +480,7 @@ class BattleSession(
         )
 
         if (debugMode) {
-            println(
+            Logger.debug(
                 "[BattleSession] op108 hit -> detonate bomb=${bomb.id} grid=($gridX,$gridY) " +
                     "objId=$targetObjectId delay=${delay}ms includeSender=$includeSender"
             )
@@ -553,7 +554,7 @@ class BattleSession(
         //   会让整个包被跳过（连 0x2A 都不播）。用本次名单里第一个槽——判空发生在摘除之前。
         broadcast(BomberDie(slotId))
         broadcast(BomberDeathList(listOf(slotId), headerSlot = slotId))
-        println(
+        Logger.info(
             "[BattleSession] BomberDie slot=$slotId (" +
                 (if (slot.isHuman) "人类" else if (slot.isAI) "AI" else "空槽") +
                 ") | 存活人类=${slotStates.indices.filter { slotStates[it].isHuman && slotStates[it].isAlive }} " +
@@ -670,7 +671,7 @@ class BattleSession(
             } else if (pendingTrigger == MatchEndTrigger.DEATH_REPORT && outcome == MatchOutcome.DRAW) {
                 // 在 gameOverDelayMs 动画缓冲期内另一阵营也全灭（同炸弹/同帧双灭），由单方胜负升级为平局
                 pendingOutcome = MatchOutcome.DRAW
-                println("[BattleSession] 双方同时全灭，结算结果升级为平局 | 存活人类=$humanAlive 存活AI=$enemyAlive")
+                Logger.info("[BattleSession] 双方同时全灭，结算结果升级为平局 | 存活人类=$humanAlive 存活AI=$enemyAlive")
             }
         }
     }
@@ -700,7 +701,7 @@ class BattleSession(
             MatchOutcome.AI_WIN -> "AI 胜"
             MatchOutcome.DRAW -> "平局"
         }
-        println(
+        Logger.info(
             "[BattleSession] 对局结束: $outcomeLabel" +
                 " | winnerSlot=$winnerSlot" + (if (detail.isEmpty()) "" else " | $detail")
         )
@@ -768,7 +769,7 @@ class BattleSession(
      */
     fun debugBroadcastBomberDie(slotId: Int) {
         if (isDestroyed || slotId !in slotStates.indices) return
-        println("[BattleSession][debug] 手动广播 BomberDie slot=$slotId")
+        Logger.debug("[BattleSession][debug] 手动广播 BomberDie slot=$slotId")
         broadcast(BomberDie(slotId))
     }
 
@@ -789,7 +790,7 @@ class BattleSession(
         if (isDestroyed || slotId !in slotStates.indices) return
         if (!slotStates[slotId].hasSeat) return
         broadcast(SetBomberState(slotId, state, x, y, saverSlot))
-        println("[BattleSession] SetBomberState slot=$slotId state=$state x=$x y=$y" + if (saverSlot >= 0) " saver=$saverSlot" else "")
+        Logger.debug("[BattleSession] SetBomberState slot=$slotId state=$state x=$x y=$y" + if (saverSlot >= 0) " saver=$saverSlot" else "")
     }
 
     /**
@@ -812,11 +813,11 @@ class BattleSession(
         val slot = slotStates[slotId]
         if (!slot.hasSeat) return false
         if (x < 0 || y < 0) {
-            println("[BattleSession] 无法困住 slot=$slotId: 没有坐标")
+            Logger.warn("[BattleSession] 无法困住 slot=$slotId: 没有坐标")
             return false
         }
         broadcast(SetBomberState(slotId, BOMBER_STATE_TRAPPED, x, y))
-        println("[BattleSession] 困住 slot=$slotId: state=2 x=$x y=$y")
+        Logger.debug("[BattleSession] 困住 slot=$slotId: state=2 x=$x y=$y")
         return true
     }
 
@@ -836,17 +837,17 @@ class BattleSession(
             // 12 = 脱掉气泡但**不改坐标**（角色留在原地）—— 实测最安全。
             // 不要顺手发 state 10：那是"破盾"，会把 target 的护盾（如果有）一起打掉并播 0x87。
             broadcast(SetBomberState(slotId, BOMBER_STATE_FREE))
-            println("[BattleSession] 脱困 slot=$slotId: state=12")
+            Logger.debug("[BattleSession] 脱困 slot=$slotId: state=12")
             return true
         }
 
         if (x < 0 || y < 0) {
-            println("[BattleSession] 无法用 state 3 救下 slot=$slotId: 没有坐标, 退回 state 12")
+            Logger.warn("[BattleSession] 无法用 state 3 救下 slot=$slotId: 没有坐标, 退回 state 12")
             broadcast(SetBomberState(slotId, BOMBER_STATE_FREE))
             return true
         }
         broadcast(SetBomberState(slotId, BOMBER_STATE_SAVED, x, y, saverSlot))
-        println("[BattleSession] SetBomberState slot=$slotId state=${BOMBER_STATE_SAVED}(被救) x=$x y=$y saver=$saverSlot")
+        Logger.debug("[BattleSession] SetBomberState slot=$slotId state=${BOMBER_STATE_SAVED}(被救) x=$x y=$y saver=$saverSlot")
         return true
     }
 
@@ -861,7 +862,7 @@ class BattleSession(
         if (valid.isEmpty()) return
         // 通用头指向名单第一个槽：客户端判空在 case5 摘除之前，此刻它一定还在。
         broadcast(BomberDeathList(valid, headerSlot = valid.first()))
-        println("[BattleSession] BomberDeathList slots=$valid" + (if (debug) " (debug)" else ""))
+        Logger.debug("[BattleSession] BomberDeathList slots=$valid" + (if (debug) " (debug)" else ""))
     }
 
     /**
@@ -888,7 +889,7 @@ class BattleSession(
             slot.matchState = SlotMatchState.ALIVE
         }
         broadcast(ReviveBomber(slotId))
-        println("[BattleSession] ReviveBomber slot=$slotId")
+        Logger.info("[BattleSession] ReviveBomber slot=$slotId")
         return true
     }
 
@@ -919,7 +920,7 @@ class BattleSession(
         }
         if (!stillAlive) {
             if (debugMode) {
-                println("[BattleSession] launched bomb $bombId 已被提前引爆, 跳过落地激活")
+                Logger.debug("[BattleSession] launched bomb $bombId 已被提前引爆, 跳过落地激活")
             }
             return false
         }

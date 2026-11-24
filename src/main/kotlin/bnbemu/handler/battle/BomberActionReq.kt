@@ -6,6 +6,7 @@ import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
 import bnbemu.server.Room
+import org.tinylog.kotlin.Logger
 
 // 局内角色操作/碰撞交互请求 (C→S op 112 / 0x70)
 // 逆向定位:
@@ -36,7 +37,7 @@ val BomberActionReq = PKTHandler { c ->
     val posX = Decode2
     val posY = Decode2
 
-    if (debugMode) println("[op112] slot=$slotId action=0x${action.toString(16)} x=$posX y=$posY 剩余=${readableBytes()}B")
+    if (debugMode) Logger.debug("[op112] slot=$slotId action=0x${action.toString(16)} x=$posX y=$posY 剩余=${readableBytes()}B")
 
     when (action) {
         // "只剩一支队伍" 上报 → 结算。slotId 是存活方, 决定玩家胜还是 AI 胜。
@@ -59,7 +60,7 @@ val BomberActionReq = PKTHandler { c ->
                     hits += "bomb#$bombId@($gridX,$gridY)"
                 }
             }
-            if (debugMode) println("[op112] slot=$slotId 碰到水泡 param=$param count=$count ${hits.joinToString(" ")}")
+            if (debugMode) Logger.debug("[op112] slot=$slotId 碰到水泡 param=$param count=$count ${hits.joinToString(" ")}")
         }
 
         // 13 字节变体: E1(action|slot) + E2 x + E2 y + E4 + E4（两个 32 位 id，语义未定，
@@ -67,7 +68,7 @@ val BomberActionReq = PKTHandler { c ->
         0x20 -> if (readableBytes() >= 8) {
             val id1 = Decode4
             val id2 = Decode4
-            if (debugMode) println("[op112] slot=$slotId action=0x20 id1=$id1 id2=$id2")
+            if (debugMode) Logger.debug("[op112] slot=$slotId action=0x20 id1=$id1 id2=$id2")
         }
     }
     // 消费所有剩余字节，防止未预期的扩展导致越界

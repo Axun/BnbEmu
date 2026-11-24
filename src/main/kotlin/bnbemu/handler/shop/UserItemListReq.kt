@@ -5,6 +5,7 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.user.UserInventory
 import bnbemu.packet.user.inventoryEntries
 import bnbemu.service.player
+import org.tinylog.kotlin.Logger
 
 // C→S 264 背包資料查詢 (CLobbyStage 0x00513226 構造空包)
 //
@@ -18,7 +19,7 @@ val UserItemListReq = PKTHandler { c ->
     val rawInventory = player?.inventory ?: StarterKit.defaultInventory()
     val inventory = inventoryEntries(rawInventory)
     if (player != null) {
-        println(
+        Logger.info(
             "[UserItemListReq] op 198 清单: 背包 ${player.items.size} 件 + 装备 ${player.equips.size} 件" +
                 " → 共 ${inventory.size} 条"
         )

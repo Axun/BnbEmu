@@ -63,7 +63,7 @@ val ShopToRoomReq = PKTHandler { c ->
     val bomber = player?.bomber ?: 0
 
     c.stage = if (isRoomStage(c.shopReturnStage)) c.shopReturnStage else ClientStage.Room.value
-    println("[ShopToRoomReq] op80 客户端已切回房间舞台 stage=${c.stage} | sessionShort=$sessionShort sessionId=$sessionId")
+    Logger.info("[ShopToRoomReq] op80 客户端已切回房间舞台 stage=${c.stage} | sessionShort=$sessionShort sessionId=$sessionId")
     val room = Room.current
     if (room != null) {
         sendRoomEntryChain(c, room, init = false)

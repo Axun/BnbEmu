@@ -16,6 +16,7 @@ import bnbemu.packet.UserSimpleInfoResult
 import bnbemu.server.Room
 import bnbemu.service.PlayerService
 import bnbemu.service.player
+import org.tinylog.kotlin.Logger
 
 /**
  * C→S 阶段就绪 / 任务配置请求 (Opcode 78, C→S)
@@ -39,7 +40,7 @@ val StageInitReq = PKTHandler { c ->
     val session = encodeName(player.charName)
     val bomber = player.bomber
     val model = CharacterRules.bomberModelName(bomber)
-    println("[StageInitReq] op 60 物品定义表: bomber=$bomber ($model), cat=3 模型同步")
+    Logger.info("[StageInitReq] op 60 物品定义表: bomber=$bomber ($model), cat=3 模型同步")
     c.send(
         Unk293(), QuestConfigTable(),
         UserSimpleInfoResult(),

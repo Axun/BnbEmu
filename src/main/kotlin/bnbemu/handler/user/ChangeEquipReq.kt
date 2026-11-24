@@ -13,6 +13,7 @@ import bnbemu.packet.room.SetPlayer
 import bnbemu.server.Room
 import bnbemu.service.PlayerService
 import bnbemu.service.player
+import org.tinylog.kotlin.Logger
 
 /**
  * C->S op 273: 玩家换装/装备穿戴变更同步请求 (ChangeEquipReq)
@@ -104,7 +105,7 @@ private fun groupOfItem(itemId: Int): Int = InventoryRules.groupOfItem(itemId)
 val ChangeEquipReq = PKTHandler { c ->
     val total = readableBytes()
     if (total < 2) {
-        println("[ChangeEquipReq] 包体过短 (${total}B), 忽略")
+        Logger.warn("[ChangeEquipReq] 包体过短 (${total}B), 忽略")
         return@PKTHandler
     }
 
@@ -121,7 +122,7 @@ val ChangeEquipReq = PKTHandler { c ->
     val tail = ArrayList<Int>()
     while (readableBytes() > 0) tail += Decode1
 
-    println(
+    Logger.debug(
         "[ChangeEquipReq] action=$action player=$playerIndex count=$count " +
             "解析=${items.size} tail=$tail (payload ${total}B) " +
             items.joinToString { "slot=0x${it.equipSlot.toString(16)} item=${it.itemId}" }
@@ -131,13 +132,13 @@ val ChangeEquipReq = PKTHandler { c ->
 
     for (it in items) {
         if (it.itemId == 0) {
-            println("[ChangeEquipReq]   slot=0x${it.equipSlot.toString(16)} item=0 → 忽略 (客户端跳过空记录)")
+            Logger.debug("[ChangeEquipReq]   slot=0x${it.equipSlot.toString(16)} item=0 → 忽略 (客户端跳过空记录)")
             continue
         }
         if (it.equipSlot == NON_EQUIP_SLOT && ItemDefCatalog.find(it.itemId)?.category == 14) {
             // 水泡皮肤只有在真实装备槽 (大类 10 → 0xF0~0xF8) 里才会被 op 100 的
             // f32 字段下发; 0xFF 只代表"买到了 / 在背包里", 对局内仍是默认水泡。
-            println(
+            Logger.debug(
                 "[ChangeEquipReq]   ⚠️ 水泡皮肤 item=${it.itemId} 只进背包 (0xFF), " +
                     "未占装备槽 → op 100 的 f32 保持 0, 对局内仍是默认水泡"
             )
@@ -150,7 +151,7 @@ val ChangeEquipReq = PKTHandler { c ->
     )
 
     for ((unequippedSlot, unequippedItem) in result.unequippedSlots) {
-        println(
+        Logger.info(
             "[ChangeEquipReq]   slot=${describeSlot(unequippedSlot)} → 卸下 item=$unequippedItem (上报为 0xFF 退回背包)"
         )
     }
@@ -158,9 +159,9 @@ val ChangeEquipReq = PKTHandler { c ->
         if (it.itemId == 0) continue
         if (it.equipSlot == NON_EQUIP_SLOT) {
             if (it.itemId in result.addedToBag) {
-                println("[ChangeEquipReq]   slot=0xFF item=${it.itemId} → 背包 (新入包)")
+                Logger.debug("[ChangeEquipReq]   slot=0xFF item=${it.itemId} → 背包 (新入包)")
             } else {
-                println("[ChangeEquipReq]   slot=0xFF item=${it.itemId} → 背包 (已存在, 跳过)")
+                Logger.debug("[ChangeEquipReq]   slot=0xFF item=${it.itemId} → 背包 (已存在, 跳过)")
             }
         } else {
             val wantGroup = it.equipSlot / EQUIP_SLOTS_PER_GROUP
@@ -172,7 +173,7 @@ val ChangeEquipReq = PKTHandler { c ->
                     "  ⚠️ 大类不符(item category→$gotGroup, 槽位→$wantGroup)"
                 else -> ""
             }
-            println(
+            Logger.info(
                 "[ChangeEquipReq]   slot=${describeSlot(it.equipSlot)} → 装备 item=${it.itemId}" +
                     " (${ItemDefCatalog.find(it.itemId)?.name ?: "无定义"})" +
                     (if (it.itemId in result.removedFromBag) " [从背包移到装备]" else "") + mismatch
@@ -181,10 +182,10 @@ val ChangeEquipReq = PKTHandler { c ->
     }
 
     if (result.bagChanged) {
-        println("[ChangeEquipReq] 服务端背包: ${player.items.map { it.itemId }}")
+        Logger.debug("[ChangeEquipReq] 服务端背包: ${player.items.map { it.itemId }}")
     }
     if (result.equipChanged) {
-        println(
+        Logger.debug(
             "[ChangeEquipReq] 服务端装备槽: " +
                 (player.equips.entries.joinToString { (s, id) -> "0x${s.toString(16)}=$id" }
                     .ifEmpty { "(空)" })
@@ -199,7 +200,7 @@ val ChangeEquipReq = PKTHandler { c ->
         } ?: -1
         if (room != null && roomSlotIdx != -1) {
             room.BC(SetPlayer(roomSlotIdx, room.slots[roomSlotIdx], player))
-            println("[ChangeEquipReq] 房间槽位 $roomSlotIdx 外观已通过 SetPlayer (op 100) 广播刷新")
+            Logger.debug("[ChangeEquipReq] 房间槽位 $roomSlotIdx 外观已通过 SetPlayer (op 100) 广播刷新")
         }
     }
 }

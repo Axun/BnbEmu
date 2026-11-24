@@ -6,6 +6,7 @@ import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
 import bnbemu.server.Room
+import org.tinylog.kotlin.Logger
 
 // C→S BoxItemSpawnReport (EN op 154 / 0x9A)
 // 逆向定位:
@@ -31,7 +32,7 @@ val BoxItemSpawnReport = PKTHandler { c ->
     val action = Decode2
     // 诊断用: 阵亡音效 / 被困音效都依赖这里的 action (见 docs/agents-notes-battle.md)。
     // 目前实战只见过 1 / 4 / 0; 2(被困) 3(被救) 5(阵亡) 对 AI 一律不发, 打日志便于验证。
-    if (debugMode) println("[op154] slot=$first action=$action 剩余=${readableBytes()}B")
+    if (debugMode) Logger.debug("[op154] slot=$first action=$action 剩余=${readableBytes()}B")
     when (action) {
         5 -> {
             // 角色死亡上报: first 为 slotId

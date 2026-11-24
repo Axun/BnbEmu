@@ -14,7 +14,7 @@ val SelectMapReq = PKTHandler { c ->
     if (readableBytes() >= 6) {
         val themeId = Decode2
         val mapId = Decode4
-        println("SelectMapReq -> themeId: $themeId, mapId: $mapId")
+        Logger.info("SelectMapReq -> themeId: $themeId, mapId: $mapId")
         val room = Room.current ?: return@PKTHandler
         room.themeId = themeId
         room.mapId = mapId
@@ -26,7 +26,7 @@ val SelectMapReq = PKTHandler { c ->
         room.applyMapPlayerLimit(mapId)
     } else if (readableBytes() >= 2) {
         val map = Decode2
-        println("SelectMapReq (legacy 2B) -> mapId: $map")
+        Logger.info("SelectMapReq (legacy 2B) -> mapId: $map")
         val room = Room.current ?: return@PKTHandler
         room.mapId = map
         room BC SelectMap(result = 0, themeId = 0, mapId = map)

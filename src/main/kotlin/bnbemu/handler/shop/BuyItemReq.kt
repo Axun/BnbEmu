@@ -15,6 +15,7 @@ import bnbemu.service.PlayerService
 import bnbemu.service.PurchaseStatus
 import bnbemu.service.lucci
 import bnbemu.service.player
+import org.tinylog.kotlin.Logger
 
 /**
  * C→S op 267: 商城购买请求 (BuyItemReq)
@@ -44,7 +45,7 @@ val BuyItemReq = PKTHandler { c ->
     val flag = if (readableBytes() >= 1) Decode1 else 0
 
     val entry = ShopCatalogData.findByProdId(prodId)
-    println(
+    Logger.info(
         "[BuyItemReq] prodId=$prodId arg=$arg flag=$flag -> " +
             (entry?.let {
                 "itemId=${it.itemId} cat=${it.category} name='${it.name}' count=${it.count} " +
@@ -65,7 +66,7 @@ val BuyItemReq = PKTHandler { c ->
             PurchaseStatus.ALREADY_OWNED -> BUY_RESULT_ALREADY_HAVE
             else -> BUY_RESULT_ERROR
         }
-        println(
+        Logger.warn(
             "[BuyItemReq] 购买失败: status=${result.status} errCode=$errCode " +
                 "lucci=${result.lucci} cash=${result.cash}"
         )
@@ -79,7 +80,7 @@ val BuyItemReq = PKTHandler { c ->
 
     // 购买结果：type=0（普通购买），到期时间 0 = 永久
     c send BuyItemResult(type = BUY_RESULT_SUCCESS, expire = 0L)
-    println(
+    Logger.info(
         "[BuyItemReq] 购买成功: itemId=${entry.itemId} newCount=${result.itemCount} " +
             "lucci=${result.lucci} cash=${result.cash}, 当前背包=${player.items.map { "${it.itemId}x${it.count}" }}"
     )

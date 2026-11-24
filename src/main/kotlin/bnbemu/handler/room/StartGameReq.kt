@@ -74,11 +74,11 @@ val StartGameReq = PKTHandler { c ->
     val room = Room.current ?: return@PKTHandler
 
     if (mapId != room.mapId || themeId != room.themeId) {
-        println("mapId or themeId mismatch")
+        Logger.warn("[StartGame] mapId or themeId mismatch (req=$mapId/$themeId, room=${room.mapId}/${room.themeId})")
     }
 
     val mapName = MapCatalog.ref(mapId)?.name ?: FALLBACK_MAP_NAME
-    println("StartGame. mapId: $mapId, mapName: $mapName")
+    Logger.info("StartGame. mapId: $mapId, mapName: $mapName")
 
     val mapLimit = MapCatalog.maxPlayerOf(mapId)
     if (room.activeSlotCount > mapLimit) {
@@ -93,7 +93,7 @@ val StartGameReq = PKTHandler { c ->
     // 避免給客戶端發 slotCount=0 導致對局載入失敗。
     val activeSlots = room.slots.indices.filter { i -> room.slots[i].isHuman || room.slots[i].isAI }
         .ifEmpty { (0..7).toList() }
-    println("StartGame. activeSlots=$activeSlots (AI=${activeSlots.count { room.slots[it].isAI }})")
+    Logger.info("StartGame. activeSlots=$activeSlots (AI=${activeSlots.count { room.slots[it].isAI }})")
 
     val spawnPositions = assignSpawnPositions(mapId, activeSlots)
     val slotConfigs = activeSlots.map { i ->

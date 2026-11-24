@@ -16,6 +16,7 @@ import bnbemu.server.Room
 import bnbemu.server.bomber
 import bnbemu.service.PlayerService
 import bnbemu.service.player
+import org.tinylog.kotlin.Logger
 
 private val LAST_USER_INFO_SEND_TIME = AttributeKey.valueOf<Long>("LAST_USER_INFO_SEND_TIME")
 
@@ -59,7 +60,7 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
     val inventory = player?.inventory ?: StarterKit.defaultInventory()
     val equips = buildEquipEntries(inventory)
     if (equips.isNotEmpty()) {
-        println("[UserInfoReq] op 73 装备槽: ${equips.joinToString { "${it.itemId}@${it.slot}" }}")
+        Logger.debug("[UserInfoReq] op 73 装备槽: ${equips.joinToString { "${it.itemId}@${it.slot}" }}")
     }
 
     c send UserInfoResult(
@@ -167,7 +168,7 @@ val UserInfoReq = PKTHandler { c ->
         // 与 op 87 SelectBomberReq 同一约定: 持有 2082 进阶卡时蓝蓝 (4) 走进阶形态 10
         val effective = CharacterRules.resolveEffectiveBomber(bomberIds[0], player)
         if (player != null && player.bomber != effective) {
-            println("[UserInfoReq] 角色同步: bomber ${player.bomber} → $effective (上报 ${bomberIds[0]})")
+            Logger.info("[UserInfoReq] 角色同步: bomber ${player.bomber} → $effective (上报 ${bomberIds[0]})")
             PlayerService.selectBomber(player.userId, effective)
         }
         userSlot?.bomber = effective.toByte()
