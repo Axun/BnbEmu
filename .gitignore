@@ -25,4 +25,4 @@ tools/*.bin
 
 ### 单机运行时生成的日志与存档 ###
 logs/
-save/
+bnb.db

@@ -5,7 +5,7 @@ debugMode: true
 # 是否打印每一个 Decode1/2/4/Str 解出的底层字段值
 showDecValue: false
 
-# 本地存档数据库配置（预留给后续 SQLite 持久化）
+# 本地 SQLite 存档数据库配置
 database:
   path: "./bnb.db"
 
