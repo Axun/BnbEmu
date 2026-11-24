@@ -22,3 +22,7 @@ __pycache__/
 /reference/
 dispatch_tables.txt
 tools/*.bin
+
+### 单机运行时生成的日志与存档 ###
+logs/
+save/

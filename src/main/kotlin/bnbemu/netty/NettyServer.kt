@@ -6,10 +6,6 @@ import io.netty.buffer.ByteBuf
 import io.netty.buffer.ByteBufUtil
 import io.netty.buffer.PooledByteBufAllocator
 import io.netty.channel.*
-import io.netty.channel.epoll.Epoll
-import io.netty.channel.epoll.EpollDatagramChannel
-import io.netty.channel.epoll.EpollIoHandler
-import io.netty.channel.epoll.EpollServerSocketChannel
 import io.netty.channel.group.ChannelGroup
 import io.netty.channel.group.ChannelMatchers
 import io.netty.channel.nio.NioIoHandler
@@ -20,21 +16,25 @@ import io.netty.channel.socket.nio.NioServerSocketChannel
 import bnbemu.*
 import bnbemu.codec.CRC8
 import bnbemu.packet.ConnEstablished
+import bnbemu.server.Room
+import bnbemu.service.PlayerService
 import org.tinylog.kotlin.Logger
 import java.net.InetSocketAddress
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 object NettyServer {
-    private val useEpoll = Epoll.isAvailable() // 檢查是否為 Linux 環境且 Epoll 可用
-    private val factory = when {
-        useEpoll -> EpollIoHandler.newFactory()
-        else -> NioIoHandler.newFactory()
-    }
+    private val factory = NioIoHandler.newFactory()
 
     private val bossGroup = MultiThreadIoEventLoopGroup(1, factory)
-    val workerGroup = MultiThreadIoEventLoopGroup(factory)
+    // 单机版统一收敛为单线程 workerGroup：协议处理、Passport、UDP 与 BattleSession 定时器均在同一 EventLoop 上串行执行
+    val workerGroup = MultiThreadIoEventLoopGroup(1, factory)
 
-    private val TCP_PORTS = listOf(3838, 4848, 4849)
+    private val TCP_PORTS = listOf(3838)
     private val UDP_PORTS = listOf(3839, 4849)
+    private val boundChannels = CopyOnWriteArrayList<Channel>()
+    private val shutdownOnce = AtomicBoolean(false)
 
     fun start() {
         startTcpServers()
@@ -50,10 +50,10 @@ object NettyServer {
             group(bossGroup, workerGroup)
 
             channelFactory(ChannelFactory<ServerChannel> {
-                if (useEpoll) EpollServerSocketChannel() else NioServerSocketChannel()
+                NioServerSocketChannel()
             })
 
-            option(ChannelOption.SO_BACKLOG, 1024)
+            option(ChannelOption.SO_BACKLOG, 64)
             childOption(ChannelOption.TCP_NODELAY, true)
             childOption(ChannelOption.SO_KEEPALIVE, true)
             childOption(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
@@ -72,13 +72,14 @@ object NettyServer {
         }
 
         TCP_PORTS.forEach { port ->
-            tcpBoot.bind(port).addListener { future ->
+            tcpBoot.bind(port).addListener(ChannelFutureListener { future ->
                 if (future.isSuccess) {
+                    boundChannels += future.channel()
                     Logger.info("Bind to TCP port: $port")
                 } else {
-                    Logger.error("Failed to bind TCP port: $port")
+                    Logger.error(future.cause()) { "Failed to bind TCP port: $port" }
                 }
-            }
+            })
         }
     }
 
@@ -87,19 +88,40 @@ object NettyServer {
             group(workerGroup)
 
             channelFactory(ChannelFactory<Channel> {
-                if (useEpoll) EpollDatagramChannel() else NioDatagramChannel()
+                NioDatagramChannel()
             })
 
             option(ChannelOption.SO_BROADCAST, true)
             option(ChannelOption.ALLOCATOR, PooledByteBufAllocator.DEFAULT)
             handler(handler)
-        }.bind(port).addListener { future ->
+        }.bind(port).addListener(ChannelFutureListener { future ->
             if (future.isSuccess) {
+                boundChannels += future.channel()
                 Logger.info("Bind to UDP port: $port")
             } else {
-                Logger.error("Failed to bind UDP port: $port")
+                Logger.error(future.cause()) { "Failed to bind UDP port: $port" }
             }
+        })
+    }
+
+    /** 优雅停机：销毁活跃房间/战斗、关闭监听端口、停止 Netty 线程组并刷新关闭存档仓储。 */
+    fun shutdown() {
+        if (!shutdownOnce.compareAndSet(false, true)) return
+        runCatching { Room.leave() }
+            .onFailure { println("[NettyServer] 清理房间失败: ${it.message}") }
+        runCatching { PassportServer.stop() }
+            .onFailure { println("[NettyServer] 停止 PassportServer 失败: ${it.message}") }
+        boundChannels.forEach { ch ->
+            runCatching { ch.close().syncUninterruptibly() }
         }
+        boundChannels.clear()
+        runCatching {
+            bossGroup.shutdownGracefully(100, 1000, TimeUnit.MILLISECONDS).syncUninterruptibly()
+        }
+        runCatching {
+            workerGroup.shutdownGracefully(100, 1000, TimeUnit.MILLISECONDS).syncUninterruptibly()
+        }
+        PlayerService.shutdown()
     }
 }
 
@@ -135,7 +157,7 @@ object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
                 val hex = ByteBufUtil.hexDump(buf, buf.readerIndex(), dumpLen).uppercase().chunked(2).joinToString(" ")
                 if (payloadLen > MAX_DUMP_LEN) "$hex ..." else hex
             } else ""
-            println("$opcode | $hexOp | UDP Recv from $sender: $payloadHex")
+            Logger.debug("$opcode | $hexOp | UDP Recv from $sender: $payloadHex")
         }
 
         // CUDPPacketDispatcher::OnUDPPacket
@@ -190,14 +212,14 @@ object HandlerRouterUDP : SimpleChannelInboundHandler<DatagramPacket>() {
                     val hex = ByteBufUtil.hexDump(buf, payloadStart, dumpLen).uppercase().chunked(2).joinToString(" ")
                     if (payloadLen > MAX_DUMP_LEN) "$hex ..." else hex
                 } else ""
-                println("$opcode | $hexOp | UDP Send to $target: $payloadHex")
+                Logger.debug("$opcode | $hexOp | UDP Send to $target: $payloadHex")
             }
 
             buf.writeByte(CRC8.UpdateCRC(dwCrcKey = 0, buf, Size = buf.readableBytes()))
 
             writeAndFlush(DatagramPacket(buf, target))
         } catch (e: Exception) {
-            if (debugMode) println("[UDP] Send to $target error: ${e.message}")
+            if (debugMode) Logger.warn("[UDP] Send to $target error: ${e.message}")
             buf.release()
         }
     }

@@ -1,5 +1,6 @@
 package bnbemu.repository
 
+import bnbemu.ServerConfig
 import bnbemu.domain.PlayerProfile
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -45,10 +46,14 @@ class InMemoryPlayerRepository : PlayerRepository {
             while (byUserId.containsKey(id)) {
                 id = nextUserId.getAndIncrement()
             }
+            val defaults = ServerConfig.current.player
             val created = PlayerProfile(
                 userId = id,
                 username = username,
                 charName = username,
+                level = defaults.defaultLevel,
+                lucci = defaults.defaultLucci,
+                cash = defaults.defaultCash,
             )
             save(created)
             return created
@@ -60,10 +65,14 @@ class InMemoryPlayerRepository : PlayerRepository {
         synchronized(this) {
             byUserId[userId]?.let { return it }
             val resolvedName = defaultCharName.ifBlank { "Player" }
+            val defaults = ServerConfig.current.player
             val created = PlayerProfile(
                 userId = userId,
                 username = "user_$userId",
                 charName = resolvedName,
+                level = defaults.defaultLevel,
+                lucci = defaults.defaultLucci,
+                cash = defaults.defaultCash,
             )
             save(created)
             return created

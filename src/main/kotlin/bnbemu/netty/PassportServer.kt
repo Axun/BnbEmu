@@ -4,7 +4,9 @@ import io.netty.bootstrap.ServerBootstrap
 import io.netty.buffer.ByteBuf
 import io.netty.buffer.PooledByteBufAllocator
 import io.netty.buffer.Unpooled
+import io.netty.channel.Channel
 import io.netty.channel.ChannelFactory
+import io.netty.channel.ChannelFutureListener
 import io.netty.channel.ChannelHandler
 import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.ChannelInitializer
@@ -345,6 +347,9 @@ object PassportServer {
     /** 解析 C→S 0x000D (Logout 請求) -> passportId ("NGP" + username) */
     fun parseLogoutReq(buf: ByteBuf): String? = parseSingleStringReq(buf)
 
+    @Volatile
+    private var serverChannel: Channel? = null
+
     fun start() {
         ServerBootstrap().apply {
             group(NettyServer.workerGroup, NettyServer.workerGroup)
@@ -357,13 +362,19 @@ object PassportServer {
                     ch.pipeline().addLast(PassportDecoder(), PassportHandler)
                 }
             })
-        }.bind(PORT).addListener { future ->
+        }.bind(PORT).addListener(ChannelFutureListener { future ->
             if (future.isSuccess) {
+                serverChannel = future.channel()
                 Logger.info("Bind to TCP port: $PORT (passport)")
             } else {
-                Logger.error("Failed to bind TCP port: $PORT (passport)")
+                Logger.error(future.cause()) { "Failed to bind TCP port: $PORT (passport)" }
             }
-        }
+        })
+    }
+
+    fun stop() {
+        serverChannel?.close()?.syncUninterruptibly()
+        serverChannel = null
     }
 }
 
@@ -399,7 +410,7 @@ internal object PassportHandler : SimpleChannelInboundHandler<PassportFrame>() {
                 val req = PassportServer.parseLoginReq(frame.payload)
                 val username = req?.username?.takeIf { it.isNotBlank() } ?: "kcworms1"
                 val password = req?.password ?: ""
-                println("[Passport] 登入驗證: 帳號=$username, 密碼=$password")
+                Logger.info("[Passport] 登入驗證: 帳號=$username, 密碼=$password")
 
                 // 註冊/查詢帳號 (收編進 PlayerRepository / PlayerService)
                 val profile = PlayerService.loginOrRegister(username)
@@ -419,10 +430,10 @@ internal object PassportHandler : SimpleChannelInboundHandler<PassportFrame>() {
             0x002D -> {
                 val target = PassportServer.parseSessionQueryReq(frame.payload) ?: ""
                 val username = target.removePrefix("NGP")
-                println("[Passport] 會話查詢: 目標=$target (帳號=$username)")
+                Logger.info("[Passport] 會話查詢: 目標=$target (帳號=$username)")
 
                 val profile = PlayerService.findByUsername(username) ?: PlayerService.activeProfile
-                println("[Passport] 會話返回: 角色名=${profile.charName}, 帳號數值=${profile.userId}")
+                Logger.info("[Passport] 會話返回: 角色名=${profile.charName}, 帳號數值=${profile.userId}")
 
                 PassportServer.buildReply2E(
                     returnCode = 0,
@@ -434,24 +445,24 @@ internal object PassportHandler : SimpleChannelInboundHandler<PassportFrame>() {
                 val target = PassportServer.parseLogoutReq(frame.payload) ?: ""
                 val closed = PassportServer.closeSession(target)
                 if (closed != null) {
-                    println("[Passport] 使用者登出: 帳號=${closed.account.username}, 角色=${closed.account.charName}, 剩餘線上=${PassportServer.SESSIONS.size}")
+                    Logger.info("[Passport] 使用者登出: 帳號=${closed.account.username}, 角色=${closed.account.charName}, 剩餘線上=${PassportServer.SESSIONS.size}")
                 } else {
-                    println("[Passport] 使用者登出: 目標=$target (無對應線上會話，仍回成功; 目前線上=${PassportServer.SESSIONS.keys})")
+                    Logger.info("[Passport] 使用者登出: 目標=$target (無對應線上會話，仍回成功; 目前線上=${PassportServer.SESSIONS.keys})")
                 }
                 PassportServer.buildReply0E(0)
             }
             else -> {
-                if (debugMode) println("[Passport] $hexOp 未知命令, 忽略")
+                if (debugMode) Logger.debug("[Passport] $hexOp 未知命令, 忽略")
                 null
             }
         } ?: return
 
-        if (debugMode) println("[Passport] $hexOp | 回應 ${reply.size}B")
+        if (debugMode) Logger.debug("[Passport] $hexOp | 回應 ${reply.size}B")
         ctx.writeAndFlush(Unpooled.wrappedBuffer(reply))
     }
 
     override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
-        if (debugMode) println("[Passport] ${cause.message}")
+        if (debugMode) Logger.warn("[Passport] ${cause.message}")
         ctx.close()
     }
 }

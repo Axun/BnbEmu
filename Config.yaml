@@ -1,0 +1,35 @@
+# BnBEmu 单机版配置文件（按工作目录加载，缺省项自动回落代码默认值）
+
+# 调试开关：开启后会记录协议收发包与局内详细调试日志
+debugMode: true
+# 是否打印每一个 Decode1/2/4/Str 解出的底层字段值
+showDecValue: false
+
+# 本地存档数据库配置（预留给后续 SQLite 持久化）
+database:
+  path: "./bnb.db"
+
+# 新建单机存档的默认玩家数值
+player:
+  defaultLucci: 1234567
+  defaultCash: 0
+  defaultLevel: 5
+
+# 单局战斗与结算参数
+battle:
+  tickIntervalMs: 200
+  matchTimeoutMs: 180000
+  gameOverDelayMs: 1000
+  resultReturnDelayMs: 7000
+  reenterRoomAfterBack: true
+  launchedBombActivationDelayMs: 500
+  movableBoxDedupeWindowMs: 400
+  bombMoveDedupeWindowMs: 400
+  dartDetonationMaxDelayMs: 500
+  # 结算经验千分比（1000 = 100.0%）与金币奖励
+  winExpAfter: 60
+  loseExpAfter: 20
+  drawExpAfter: 30
+  winLucci: 120
+  loseLucci: 40
+  drawLucci: 60

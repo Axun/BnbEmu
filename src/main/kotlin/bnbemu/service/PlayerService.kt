@@ -17,6 +17,7 @@ import bnbemu.netty.ClientSocket
 import bnbemu.repository.InMemoryPlayerRepository
 import bnbemu.repository.PlayerRepository
 import bnbemu.server.Slot
+import org.tinylog.kotlin.Logger
 
 enum class PurchaseStatus {
     SUCCESS,
@@ -316,6 +317,14 @@ object PlayerService {
             }
             return profile
         }
+    }
+
+    /** 优雅停机：刷盘并关闭玩家档案仓储。 */
+    fun shutdown() {
+        runCatching { repository.flush() }
+            .onFailure { Logger.error(it) { "[PlayerService] 刷新档案仓储失败: ${it.message}" } }
+        runCatching { repository.close() }
+            .onFailure { Logger.error(it) { "[PlayerService] 关闭档案仓储失败: ${it.message}" } }
     }
 }
 

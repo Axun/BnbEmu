@@ -1,5 +1,6 @@
 package bnbemu.server
 
+import bnbemu.ServerConfig
 import bnbemu.domain.MAX_SESSION_SLOTS
 import bnbemu.data.MapCatalog
 import bnbemu.domain.CharacterRules
@@ -30,7 +31,7 @@ class Room {
     var themeId = 0
 
     /** 默认战斗配置；每次开局创建 [BattleSession] 时传入快照。 */
-    val battleConfig = BattleConfig()
+    val battleConfig = ServerConfig.current.battle.copy()
 
     /** 当前活跃的战斗会话；仅在进入战斗（[startGame]）时创建，回到房间（[backToRoom]）或销毁房间（[destroy]）时销毁并置 null。 */
     @Volatile
