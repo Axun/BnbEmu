@@ -7,6 +7,7 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.SimpleChannelInboundHandler
 import bnbemu.debugMode
 import bnbemu.packet.ClientStage
+import bnbemu.server.Room
 import org.tinylog.kotlin.Logger
 import java.io.IOException
 
@@ -47,6 +48,11 @@ class ClientSocket : SimpleChannelInboundHandler<ByteBuf>() {
     override fun handlerAdded(ctx: ChannelHandlerContext) {
         this.ctx = ctx
         this.ch = ctx.channel()
+    }
+
+    override fun channelInactive(ctx: ChannelHandlerContext) {
+        Room.leaveIfMember(this)
+        super.channelInactive(ctx)
     }
 
     override fun channelRead0(ctx: ChannelHandlerContext, buf: ByteBuf) {

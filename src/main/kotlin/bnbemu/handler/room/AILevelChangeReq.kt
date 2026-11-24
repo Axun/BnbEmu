@@ -34,14 +34,15 @@ val AILevelChangeReq = PKTHandler { c ->
     val aiLevel = Decode1       // AI 难度档 0..4
     val level = aiLevel.coerceIn(0, 4)
 
-    val slot = Room.slots.getOrNull(slotIdx)
-    if (Room.isAIBattle) {  // 激战模式可以设置电脑的角色类型
+    val room = Room.current ?: return@PKTHandler
+    val slot = room.slots.getOrNull(slotIdx)
+    if (room.isAIBattle) {  // 激战模式可以设置电脑的角色类型
         if (slotIdx !in 4..7 || slot == null) {
             Logger.warn("[AILevelChangeReq] 激战模式忽略越界/真人槽 slot=$slotIdx")
             return@PKTHandler
         }
-        val refSlot = chiefSlot.takeIf { it in 0..3 && Room.slots[it].isHuman }
-            ?: Room.chiefSlotIndex()
+        val refSlot = chiefSlot.takeIf { it in 0..3 && room.slots[it].isHuman }
+            ?: room.chiefSlotIndex()
         slot.isAI = true
         slot.clearHuman()
         slot.aILevel = level
@@ -53,8 +54,8 @@ val AILevelChangeReq = PKTHandler { c ->
 
         val pktBomber = SlotBomber(slotIdx, effectiveBomber)
         val pktAi = PracticeSetSlotAI(slot = slotIdx, isAI = true, refSlot = refSlot, aiLevel = level)
-        if (Room.uniqueClients.any()) {
-            Room.BC(pktBomber, pktAi)
+        if (room.uniqueClients.any()) {
+            room.BC(pktBomber, pktAi)
         } else {
             c.send(pktBomber, pktAi)
         }
@@ -68,8 +69,8 @@ val AILevelChangeReq = PKTHandler { c ->
     Logger.info("设置AI槽位${slotIdx}等级到${level}")
 
     val pkt = PracticeSetSlotAI(slot = slotIdx, isAI = true, refSlot = slotIdx, aiLevel = level)
-    if (Room.uniqueClients.any()) {
-        Room BC pkt
+    if (room.uniqueClients.any()) {
+        room BC pkt
     } else {
         c send pkt
     }

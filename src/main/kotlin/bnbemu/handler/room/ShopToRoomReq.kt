@@ -6,9 +6,11 @@ import bnbemu.netty.PKTHandler
 import bnbemu.packet.ClientStage
 import bnbemu.packet.user.UserDynamicInfo
 import bnbemu.packet.isRoomStage
+import bnbemu.server.Room
 import bnbemu.server.sendRoomEntryChain
 import bnbemu.service.lucci
 import bnbemu.service.player
+import org.tinylog.kotlin.Logger
 
 /**
  * C→S op 80: 客户端「切回房间舞台」时的会话回报 (ShopToRoomReq)
@@ -62,7 +64,12 @@ val ShopToRoomReq = PKTHandler { c ->
 
     c.stage = if (isRoomStage(c.shopReturnStage)) c.shopReturnStage else ClientStage.Room.value
     println("[ShopToRoomReq] op80 客户端已切回房间舞台 stage=${c.stage} | sessionShort=$sessionShort sessionId=$sessionId")
-    sendRoomEntryChain(c, init = false)
+    val room = Room.current
+    if (room != null) {
+        sendRoomEntryChain(c, room, init = false)
+    } else {
+        Logger.warn("[ShopToRoomReq] op80 切回房间舞台时 Room.current 为空，跳过补推房间链")
+    }
 
     // 按服务端权威角色回灌客户端 CUserDynamicInfo：第 12 项 = 角色（决定下一次 C→S op 73
     // 的上报值），第 8 项 = Lucci（同一 setter，和 op 122 等价），一并带上即可。

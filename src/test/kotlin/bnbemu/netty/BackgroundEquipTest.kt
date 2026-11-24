@@ -201,11 +201,10 @@ class BackgroundEquipTest {
         cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
-        val previousPlayerId = Room.slots[0].playerId
-        val previousClient = Room.slots[0].client
+        val room = Room.enter(Room())
         try {
-            Room.slots[0].assignHuman(user.userId, cs)
-            Room.slots[0].state = 0x01 // FLAG_CHIEF
+            room.slots[0].assignHuman(user.userId, cs)
+            room.slots[0].state = 0x01 // FLAG_CHIEF
 
             // 1. 在房间内穿上背景
             sendChangeEquip(cs, changeEquipPayload(5, listOf(backgroundSlot to backgroundItemId)))
@@ -220,7 +219,7 @@ class BackgroundEquipTest {
             assertEquals(100, OpcodeManager.getSendOp(pkt2!!::class.java), "广播包 opcode 必须为 100")
             assertNull(user.equips[backgroundSlot], "装备槽中的背景必须已被脱下")
         } finally {
-            Room.slots[0].assignHuman(previousPlayerId, previousClient)
+            Room.leave()
             ch.finishAndReleaseAll()
         }
     }

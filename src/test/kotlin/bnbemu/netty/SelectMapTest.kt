@@ -68,12 +68,16 @@ class SelectMapTest {
         )
         val inBuf = Unpooled.wrappedBuffer(raw)
         val client = ClientSocket()
+        val room = Room.enter(Room())
+        try {
+            with(SelectMapReq) {
+                inBuf.handle(client)
+            }
 
-        with(SelectMapReq) {
-            inBuf.handle(client)
+            assertEquals(28, room.themeId, "room.themeId should be updated to 28")
+            assertEquals(175, room.mapId, "room.mapId should be updated to 175")
+        } finally {
+            Room.leave()
         }
-
-        assertEquals(28, Room.themeId, "Room.themeId should be updated to 28")
-        assertEquals(175, Room.mapId, "Room.mapId should be updated to 175")
     }
 }

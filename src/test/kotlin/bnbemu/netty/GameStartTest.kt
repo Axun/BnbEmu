@@ -30,16 +30,16 @@ class GameStartTest {
     /** 頭部字節數: 4×E4 + E1(tick) + E4(ip) + E2(port) + E1(timeout)，不含 2B opcode。 */
     private val headerBytes = 4 + 4 + 4 + 4 + 1 + 4 + 2 + 1
 
-    private lateinit var savedAI: List<Boolean>
+    private lateinit var room: Room
 
     @BeforeEach
     fun setUp() {
-        savedAI = Room.slots.map { it.isAI }
+        room = Room.enter(Room())
     }
 
     @AfterEach
     fun tearDown() {
-        Room.slots.forEachIndexed { i, slot -> slot.isAI = savedAI[i] }
+        Room.leave()
     }
 
     private fun encodeBody(pkt: PKT): ByteArray {
@@ -147,7 +147,7 @@ class GameStartTest {
     @Test
     fun testStartGameReqSendsGameStartRoster() {
         // 走一次真的 op 92: 回覆鏈第 4 包必須是 op 136, 且名冊與 op 112 的參戰槽一致
-        Room.slots.forEachIndexed { i, slot -> slot.isAI = i <= 5 }
+        room.slots.forEachIndexed { i, slot -> slot.isAI = i <= 5 }
         val active = listOf(0, 1, 2, 3, 4, 5)
         val mapId = 176
 

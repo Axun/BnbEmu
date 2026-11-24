@@ -87,7 +87,7 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
  */
 fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
     // 优先从房间槽位玩家或档案仓储中查找
-    val targetSlot = Room.slots.find { it.player?.charName.equals(targetCharName, ignoreCase = true) }
+    val targetSlot = Room.current?.slots?.find { it.player?.charName.equals(targetCharName, ignoreCase = true) }
     val targetPlayer = targetSlot?.player ?: PlayerService.findByCharName(targetCharName)
 
     val equips = buildEquipEntries(targetPlayer?.inventory ?: StarterKit.defaultInventory())
@@ -154,7 +154,7 @@ val UserInfoReq = PKTHandler { c ->
     //    于是 user.bomber 永远停在旧值, 下一次 op 20/op 60 仍用旧角色,
     //    表现就是「商城换角色 → 返回大厅变回默认角色」(反过来大厅用的是 op 87, 所以正常)。
     val player = c.player
-    val userSlot = Room.slots.find {
+    val userSlot = Room.current?.slots?.find {
         it.client === c || (player != null && it.playerId == player.userId)
     }
     // ⚠️ 上限 31 与「值没变就不写」都依赖客户端 0x006E50F0 的掩码：

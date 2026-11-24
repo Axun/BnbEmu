@@ -19,16 +19,18 @@ import org.junit.jupiter.api.Test
 
 class PushMovableBoxTest {
 
+    private lateinit var room: Room
     private lateinit var battle: BattleSession
 
     @BeforeEach
     fun setUp() {
-        battle = Room.startGame()
+        room = Room.enter(Room())
+        battle = room.startGame()
     }
 
     @AfterEach
     fun tearDown() {
-        Room.reset()
+        Room.leave()
     }
 
     @Test
@@ -91,12 +93,10 @@ class PushMovableBoxTest {
         // 端到端: C→S op 109 → BattleSession.onMovableBoxPush → BC → 客户端 ctx 真的收到 S→C op 142
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
-        val previousPlayerId = Room.slots[0].playerId
-        val previousClient = Room.slots[0].client
         try {
             val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
-            Room.slots[0].assignHuman(tester.userId, cs)
-            val activeBattle = Room.startGame()
+            room.slots[0].assignHuman(tester.userId, cs)
+            val activeBattle = room.startGame()
             ch.outboundMessages().clear()
 
             assertTrue(activeBattle.onMovableBoxPush(1, 1, 3, 1, 4, 0), "首次推动必须广播")
@@ -120,8 +120,6 @@ class PushMovableBoxTest {
             assertFalse(activeBattle.onMovableBoxPush(1, 1, 3, 1, 4, 0))
             assertEquals(1, ch.outboundMessages().size, "重复上报不得再次下发")
         } finally {
-            Room.slots[0].assignHuman(previousPlayerId, previousClient)
-            Room.reset()
             ch.finish()
         }
     }
@@ -173,18 +171,13 @@ class PushMovableBoxTest {
     fun testDuplicateRebroadcastAfterWindow() {
         // 去重必须有时间窗: 某端漏包导致箱子没动时, 玩家再推一次要能重播自愈,
         // 否则那个箱子会永久卡死 (客户端 0x565CE0 校验 src 失败后不会再自行纠正)。
-        val window = Room.battleConfig.movableBoxDedupeWindowMs
-        try {
-            Room.battleConfig.movableBoxDedupeWindowMs = 0
-            val activeBattle = Room.startGame()
-            assertTrue(activeBattle.onMovableBoxPush(11, 4, 4, 4, 5, 1))
-            assertTrue(
-                activeBattle.onMovableBoxPush(11, 4, 4, 4, 5, 1),
-                "窗口过后同一动作必须能再次广播"
-            )
-        } finally {
-            Room.battleConfig.movableBoxDedupeWindowMs = window
-        }
+        room.battleConfig.movableBoxDedupeWindowMs = 0
+        val activeBattle = room.startGame()
+        assertTrue(activeBattle.onMovableBoxPush(11, 4, 4, 4, 5, 1))
+        assertTrue(
+            activeBattle.onMovableBoxPush(11, 4, 4, 4, 5, 1),
+            "窗口过后同一动作必须能再次广播"
+        )
     }
 
     @Test

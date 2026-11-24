@@ -26,15 +26,16 @@ val SetPlayerReadyReq = PKTHandler { c ->
     if (readableBytes() >= 4) Decode4
     if (readableBytes() > 0) skipBytes(readableBytes())
 
+    val room = Room.current ?: return@PKTHandler
     val player = c.player
     val slotIdx = if (player != null) {
-        Room.slots.indexOfFirst { it.client === c || it.playerId == player.userId }
+        room.slots.indexOfFirst { it.client === c || it.playerId == player.userId }
             .takeIf { it >= 0 } ?: 0
     } else {
         0
     }
 
-    val slot = Room.slots[slotIdx]
+    val slot = room.slots[slotIdx]
     val prevState = slot.state.toInt() and 0xFF
     // 房主位 (FLAG_CHIEF) 在客户端 sub_524EA0 约定下绝不保持 FLAG_READY (0x04)
     slot.state = if (ready && (prevState and FLAG_CHIEF) == 0) {
@@ -44,8 +45,8 @@ val SetPlayerReadyReq = PKTHandler { c ->
     }
 
     val pkt = SetPlayerReadyResult(slotId = slotIdx, slot = slot)
-    if (Room.uniqueClients.any()) {
-        Room.BC(pkt)
+    if (room.uniqueClients.any()) {
+        room.BC(pkt)
     } else {
         c.send(pkt)
     }

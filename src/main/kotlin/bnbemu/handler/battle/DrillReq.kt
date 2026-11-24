@@ -48,7 +48,7 @@ val DrillReq = PKTHandler { c ->
         println("[op124] drill: grid=($gridX,$gridY) slot=$slotId dir=$direction")
     }
 
-    Room.battle?.onDrill(gridX, gridY, slotId, direction)
+    Room.current?.battle?.onDrill(gridX, gridY, slotId, direction)
 
     // 防御式消费: 若将来客户端追加字段, 不让残留字节影响下一包解析
     if (readableBytes() > 0) {

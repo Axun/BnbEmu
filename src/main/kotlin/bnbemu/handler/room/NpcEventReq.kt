@@ -23,20 +23,22 @@ val NpcEventReq = PKTHandler { c ->
     val event = Decode2
     val parameter = Decode2
 
-    if (!Room.isAIBattle) {
+    val room = Room.current ?: return@PKTHandler
+
+    if (!room.isAIBattle) {
         Logger.info("[NpcEventReq] 非激战模式忽略 slot=$slotIdx event=$event param=$parameter")
         return@PKTHandler
     }
 
-    val slot = Room.slots.getOrNull(slotIdx)
+    val slot = room.slots.getOrNull(slotIdx)
     if (slotIdx !in 4..7 || slot == null || !slot.isAI) {
         Logger.warn("[NpcEventReq] 非活跃 AI 槽位 slot=$slotIdx event=$event param=$parameter")
         return@PKTHandler
     }
 
     val pkt = NpcEvent(slot = slotIdx, event = event, parameter = parameter)
-    if (Room.uniqueClients.any()) {
-        Room BC pkt
+    if (room.uniqueClients.any()) {
+        room BC pkt
     } else {
         c send pkt
     }

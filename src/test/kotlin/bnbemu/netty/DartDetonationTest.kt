@@ -15,16 +15,18 @@ import org.junit.jupiter.api.Test
 
 class DartDetonationTest {
 
+    private lateinit var room: Room
     private lateinit var battle: BattleSession
 
     @BeforeEach
     fun setUp() {
-        battle = Room.startGame()
+        room = Room.enter(Room())
+        battle = room.startGame()
     }
 
     @AfterEach
     fun tearDown() {
-        Room.reset()
+        Room.leave()
     }
 
     private fun addBomb(id: Int, x: Int, y: Int) {

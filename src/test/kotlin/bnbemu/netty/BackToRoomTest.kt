@@ -34,44 +34,26 @@ class BackToRoomTest {
 
     private lateinit var ch: EmbeddedChannel
     private lateinit var cs: ClientSocket
-    private var savedGameOverDelay = 0L
-    private var savedReturnDelay = 0L
-    private var savedChain = true
+    private lateinit var room: Room
 
     @BeforeEach
     fun setUp() {
         cs = ClientSocket()
         ch = EmbeddedChannel(cs)
-        savedGameOverDelay = Room.battleConfig.gameOverDelayMs
-        savedReturnDelay = Room.battleConfig.resultReturnDelayMs
-        savedChain = Room.battleConfig.reenterRoomAfterBack
-        Room.battleConfig.gameOverDelayMs = 0
-        Room.battleConfig.resultReturnDelayMs = 0
-        Room.battleConfig.reenterRoomAfterBack = false // 默认只验 155，房间链单独测
+        room = Room.enter(Room())
+        room.battleConfig.gameOverDelayMs = 0
+        room.battleConfig.resultReturnDelayMs = 0
+        room.battleConfig.reenterRoomAfterBack = false // 默认只验 155，房间链单独测
 
-        Room.slots.forEach { slot ->
-            slot.clearHuman()
-            slot.isAI = false
-            slot.state = 0
-        }
         val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
-        Room.slots[0].assignHuman(tester.userId, cs)
-        Room.slots[0].state = FLAG_CHIEF
-        for (i in 1..7) Room.slots[i].isAI = true
-        Room.reset()
+        room.slots[0].assignHuman(tester.userId, cs)
+        room.slots[0].state = FLAG_CHIEF
+        for (i in 1..7) room.slots[i].isAI = true
     }
 
     @AfterEach
     fun tearDown() {
-        Room.battleConfig.gameOverDelayMs = savedGameOverDelay
-        Room.battleConfig.resultReturnDelayMs = savedReturnDelay
-        Room.battleConfig.reenterRoomAfterBack = savedChain
-        Room.slots.forEach { slot ->
-            slot.clearHuman()
-            slot.isAI = false
-            slot.state = 0
-        }
-        Room.reset()
+        Room.leave()
         ch.finish()
     }
 
@@ -139,19 +121,19 @@ class BackToRoomTest {
 
     @Test
     fun testSlotStatesComeFromRoomSlots() {
-        Room.slots[1].state = 0x04 // 准备位
-        assertTrue(Room.backToRoom(force = true))
+        room.slots[1].state = 0x04 // 准备位
+        assertTrue(room.backToRoom(force = true))
         val body = bodyOf(drain().first { opcodeOf(it) == 155 })
         assertEquals(FLAG_CHIEF, dec1(body[2]), "槽 0 房主位")
-        assertEquals(0x04, dec1(body[6]), "槽 1 应回显 Room.slots[1].state")
+        assertEquals(0x04, dec1(body[6]), "槽 1 应回显 room.slots[1].state")
     }
 
     // ---- 对局结束链路 ----
 
     @Test
     fun testMatchEndSendsBackToRoomAfterResult() {
-        val battle = Room.startGame()
-        assertNotNull(Room.battle)
+        val battle = room.startGame()
+        assertNotNull(room.battle)
         drain()
 
         // 逐个击杀 AI，最后一人阵亡即触发结算
@@ -166,33 +148,33 @@ class BackToRoomTest {
             ops.indexOf(155) > ops.indexOf(150),
             "op 155 必须在 op 150 之后（先让结果窗弹出来）, ops=$ops"
         )
-        assertNull(Room.battle, "自动回房后必须销毁 BattleSession")
+        assertNull(room.battle, "自动回房后必须销毁 BattleSession")
         assertTrue(battle.isDestroyed, "BattleSession 必须标记为已销毁")
     }
 
     @Test
     fun testBackToRoomCanBeTriggeredManually() {
-        assertTrue(Room.backToRoom(force = true), "手动触发应真的发出包")
+        assertTrue(room.backToRoom(force = true), "手动触发应真的发出包")
         val ops = drain().map(::opcodeOf)
         assertEquals(1, ops.count { it == 155 }, "手动触发只发一条 op 155, ops=$ops")
     }
 
     @Test
     fun testBackToRoomDedupesPerMatch() {
-        val battle = Room.startGame()
-        assertTrue(Room.backToRoom(), "首次下发")
-        assertNull(Room.battle, "回到房间后必须销毁 BattleSession")
+        val battle = room.startGame()
+        assertTrue(room.backToRoom(), "首次下发")
+        assertNull(room.battle, "回到房间后必须销毁 BattleSession")
         assertTrue(battle.isDestroyed)
-        assertFalse(Room.backToRoom(), "同一局第二次调用应被去重")
+        assertFalse(room.backToRoom(), "同一局第二次调用应被去重")
         assertEquals(1, drain().count { opcodeOf(it) == 155 })
-        assertTrue(Room.backToRoom(force = true), "force 可绕过去重（调试重试用）")
+        assertTrue(room.backToRoom(force = true), "force 可绕过去重（调试重试用）")
         assertEquals(2, drain().count { opcodeOf(it) == 155 })
     }
 
     @Test
     fun testRoomChainFollowsBackToRoom() {
-        Room.battleConfig.reenterRoomAfterBack = true
-        Room.backToRoom(force = true)
+        room.battleConfig.reenterRoomAfterBack = true
+        room.backToRoom(force = true)
         // 房间链第一条是 op 87 RoomList
         val sent = waitFor(87)
         val ops = sent.map(::opcodeOf)
@@ -203,7 +185,7 @@ class BackToRoomTest {
 
     @Test
     fun testBackToRoomIsNotSentWithoutMatchEnd() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         drain()
         battle.onBomberDie(1) // 还有 AI 存活，不结算
         Thread.sleep(120)

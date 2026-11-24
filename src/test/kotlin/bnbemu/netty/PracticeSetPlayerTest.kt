@@ -18,50 +18,44 @@ class PracticeSetPlayerTest {
 
     @Test
     fun testPracticeSetPlayerDynamicBomber() {
-        val savedBomber = Room.slots[0].bomber
-        try {
-            // 1. 验证皮蛋 (bomber = 0)
-            val pkt0 = PracticeSetPlayer(slot = 0, bomber = 0)
-            val buf0 = Unpooled.buffer()
-            pkt0.encode(SendPacketBase(buf0))
-            assertEquals(0, buf0.Decode1, "Slot index must be 0")
-            assertEquals(0, buf0.Decode1, "PracticeSetPlayer must return 0 (Dao)")
+        // 1. 验证皮蛋 (bomber = 0)
+        val pkt0 = PracticeSetPlayer(slot = 0, bomber = 0)
+        val buf0 = Unpooled.buffer()
+        pkt0.encode(SendPacketBase(buf0))
+        assertEquals(0, buf0.Decode1, "Slot index must be 0")
+        assertEquals(0, buf0.Decode1, "PracticeSetPlayer must return 0 (Dao)")
 
-            // 2. 验证宝宝 (bomber = 5)
-            val pkt5 = PracticeSetPlayer(slot = 0, bomber = 5)
-            val buf5 = Unpooled.buffer()
-            pkt5.encode(SendPacketBase(buf5))
-            assertEquals(0, buf5.Decode1)
-            assertEquals(5, buf5.Decode1, "PracticeSetPlayer must return 5 (Bazzi)")
+        // 2. 验证宝宝 (bomber = 5)
+        val pkt5 = PracticeSetPlayer(slot = 0, bomber = 5)
+        val buf5 = Unpooled.buffer()
+        pkt5.encode(SendPacketBase(buf5))
+        assertEquals(0, buf5.Decode1)
+        assertEquals(5, buf5.Decode1, "PracticeSetPlayer must return 5 (Bazzi)")
 
-            // 3. 验证蓝妹妹 (bomber = 10)
-            val pkt10 = PracticeSetPlayer(slot = 0, bomber = 10)
-            val buf10 = Unpooled.buffer()
-            pkt10.encode(SendPacketBase(buf10))
-            assertEquals(0, buf10.Decode1)
-            assertEquals(10, buf10.Decode1, "PracticeSetPlayer must return 10 (LuxuryMarid)")
+        // 3. 验证蓝妹妹 (bomber = 10)
+        val pkt10 = PracticeSetPlayer(slot = 0, bomber = 10)
+        val buf10 = Unpooled.buffer()
+        pkt10.encode(SendPacketBase(buf10))
+        assertEquals(0, buf10.Decode1)
+        assertEquals(10, buf10.Decode1, "PracticeSetPlayer must return 10 (LuxuryMarid)")
 
-            // 4. 显式传参 override
-            val pktOverride = PracticeSetPlayer(slot = 0, bomber = 6)
-            val bufOverride = Unpooled.buffer()
-            pktOverride.encode(SendPacketBase(bufOverride))
-            assertEquals(0, bufOverride.Decode1)
-            assertEquals(6, bufOverride.Decode1, "Explicit bomber parameter must be respected")
+        // 4. 显式传参 override
+        val pktOverride = PracticeSetPlayer(slot = 0, bomber = 6)
+        val bufOverride = Unpooled.buffer()
+        pktOverride.encode(SendPacketBase(bufOverride))
+        assertEquals(0, bufOverride.Decode1)
+        assertEquals(6, bufOverride.Decode1, "Explicit bomber parameter must be respected")
 
-            // 5. AI 槽位 (slot 1..7) 传 5（抓包样本行为，但已无默认值）
-            val pktAi = PracticeSetPlayer(slot = 1, bomber = 5)
-            val bufAi = Unpooled.buffer()
-            pktAi.encode(SendPacketBase(bufAi))
-            assertEquals(1, bufAi.Decode1)
-            assertEquals(5, bufAi.Decode1, "AI slot 传 5 时必须原样编码")
-        } finally {
-            Room.slots[0].bomber = savedBomber
-        }
+        // 5. AI 槽位 (slot 1..7) 传 5（抓包样本行为，但已无默认值）
+        val pktAi = PracticeSetPlayer(slot = 1, bomber = 5)
+        val bufAi = Unpooled.buffer()
+        pktAi.encode(SendPacketBase(bufAi))
+        assertEquals(1, bufAi.Decode1)
+        assertEquals(5, bufAi.Decode1, "AI slot 传 5 时必须原样编码")
     }
 
     @Test
     fun testCreateSessionReqWithDao() {
-        val savedBomber = Room.slots[0].bomber
         val ch = EmbeddedChannel()
         val client = ClientSocket()
         val user = PlayerService.registerProfile(PlayerProfile(9501, "practice_t1", "ffdf", bomber = 0))
@@ -85,7 +79,8 @@ class PracticeSetPlayerTest {
                 buf.handle(client)
             }
 
-            assertEquals(0, Room.slots[0].bomber.toInt(), "Room.slots[0].bomber must be updated to 0 (Dao)")
+            val room = Room.current!!
+            assertEquals(0, room.slots[0].bomber.toInt(), "room.slots[0].bomber must be updated to 0 (Dao)")
             assertEquals(0, user.bomber, "User.bomber must be updated to 0 (Dao)")
 
             // 收集所有下发的包
@@ -111,7 +106,7 @@ class PracticeSetPlayerTest {
             assertEquals(1, slot1Buf.Decode1, "Slot 1 index")
             assertEquals(5, slot1Buf.Decode1, "AI bomber must remain 5")
         } finally {
-            Room.slots[0].bomber = savedBomber
+            Room.leave()
             ch.finishAndReleaseAll()
         }
     }
@@ -143,40 +138,21 @@ class PracticeSetPlayerTest {
         client.playerId = profile.userId
         ch.pipeline().addLast(client)
 
-        val savedName = Room.name
-        val savedPw = Room.password
-        val savedMode = Room.sessionMode
-        val savedType = Room.sessionType
-        val savedRule = Room.ruleId
-        val savedBombers = Room.localBombers
-        val savedSlotPlayerId = Room.slots[0].playerId
-        val savedSlotClient = Room.slots[0].client
-        val savedSlotBomber = Room.slots[0].bomber
-        val savedThemeId = Room.themeId
-        val savedMapId = Room.mapId
         try {
             val buf = Unpooled.wrappedBuffer(body)
             with(CreateSessionReq) { buf.handle(client) }
 
-            assertEquals("Come quick~", Room.name, "房名必须用 DecodeCipherStr 解出")
-            assertEquals("", Room.password, "密码为空串")
-            assertEquals(1, Room.sessionMode, "a4 = 1 → 普通房")
-            assertEquals(0, Room.sessionType, "a5 = 0 → 普通房, 合法值")
-            assertEquals(0, Room.ruleId, "规则 id = 0, 合法值")
-            assertEquals(listOf(0), Room.localBombers, "玩家数 1 → 只读 1 个 bomber id")
+            val room = Room.current!!
+            assertEquals("Come quick~", room.name, "房名必须用 DecodeCipherStr 解出")
+            assertEquals("", room.password, "密码为空串")
+            assertEquals(1, room.sessionMode, "a4 = 1 → 普通房")
+            assertEquals(0, room.sessionType, "a5 = 0 → 普通房, 合法值")
+            assertEquals(0, room.ruleId, "规则 id = 0, 合法值")
+            assertEquals(listOf(0), room.localBombers, "玩家数 1 → 只读 1 个 bomber id")
             assertEquals(0, buf.readableBytes(), "整段 23B 必须被完整消费, 不能错位")
             while (ch.readOutbound<PKT>() != null) { /* 排空响应, 避免泄漏 */ }
         } finally {
-            Room.name = savedName
-            Room.password = savedPw
-            Room.sessionMode = savedMode
-            Room.sessionType = savedType
-            Room.ruleId = savedRule
-            Room.localBombers = savedBombers
-            Room.slots[0].assignHuman(savedSlotPlayerId, savedSlotClient)
-            Room.slots[0].bomber = savedSlotBomber
-            Room.themeId = savedThemeId
-            Room.mapId = savedMapId
+            Room.leave()
             ch.finishAndReleaseAll()
         }
     }

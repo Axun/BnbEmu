@@ -13,13 +13,14 @@ import bnbemu.packet.Unk293
 import bnbemu.packet.lobby.UserMarketItemList
 import bnbemu.packet.lobby.UserMarketMyItemList
 import bnbemu.packet.UserSimpleInfoResult
+import bnbemu.server.Room
 import bnbemu.service.PlayerService
 import bnbemu.service.player
 
 /**
  * C→S 阶段就绪 / 任务配置请求 (Opcode 78, C→S)
  *
- * 逆向确认 (CA.exe, 2026-11-01):
+ * 逆向确认:
  * 1. 客户端在切换至频道/大厅阶段 (State 11) 时，于 CMainSystem::RequestStageInit (0x0068D80F) 发出此包。
  * 2. 发包前调用 CFxContext::Clear() (0x0068919D) 重置上下文，发包内容为空载荷。
  * 3. 进频道批次中由各请求分别触发回包:
@@ -30,8 +31,9 @@ import bnbemu.service.player
  */
 val StageInitReq = PKTHandler { c ->
     // 客户端只在 SetStage(11) 之后自动补发 op 78 (ChangeStage.kt 注释 / 0x0068D80F),
-    // 所以收到它就说明已经在大厅了 —— 清除房间舞台状态, 避免下次进商城误回房间。
+    // 所以收到它就说明已经在大厅了 —— 清除房间舞台状态并销毁残留房间, 避免下次进商城误回房间。
     c.stage = ClientStage.Lobby.value
+    Room.leaveIfMember(c, allowUnbound = true)
     // op 60 先按当前角色生成 (更新所有 cat=3 模型名与 skinId),
     val player = c.player ?: PlayerService.activeProfile
     val session = encodeName(player.charName)

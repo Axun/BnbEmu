@@ -48,7 +48,7 @@ val PushMovableBoxReq = PKTHandler { c ->
     val targetY = Decode1
     val slotId = Decode1
 
-    Room.battle?.onMovableBoxPush(boxSeq, gridX, gridY, targetX, targetY, slotId)
+    Room.current?.battle?.onMovableBoxPush(boxSeq, gridX, gridY, targetX, targetY, slotId)
 
     // 防御式消费: 若未来客户端追加字段，不让残留字节影响下一包解析
     if (readableBytes() > 0) {

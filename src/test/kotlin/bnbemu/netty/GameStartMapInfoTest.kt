@@ -24,22 +24,22 @@ import kotlin.random.Random
 
 class GameStartMapInfoTest {
 
-    private lateinit var savedBombers: List<Number>
+    private lateinit var room: Room
 
     /**
      * op112 已无默认名册，所有用例显式传 [CaptureFixtures.OP112_SLOT_CONFIGS]（抓包里 8 个槽位角色都是 5）。
      * 这里仍把 Room 槽位角色铺成 5：走 C→S op 92 [StartGameReq] 的用例依然从 Room 取角色，
-     * 固定输入才能保证断言稳定；用例结束后还原。
+     * 固定输入才能保证断言稳定；用例结束后清理。
      */
     @BeforeEach
     fun setUp() {
-        savedBombers = Room.slots.map { it.bomber }
-        Room.slots.forEach { it.bomber = 5 }
+        room = Room.enter(Room())
+        room.slots.forEach { it.bomber = 5 }
     }
 
     @AfterEach
     fun tearDown() {
-        Room.slots.forEachIndexed { i, slot -> slot.bomber = savedBombers[i] }
+        Room.leave()
     }
 
     @Test
@@ -330,44 +330,39 @@ class GameStartMapInfoTest {
 
     @Test
     fun testStartGameReqUsesRoomSlotsAsRoster() {
-        // op 92 開局時的名冊要跟著 Room.slots 走, 不能寫死 8 槽。
-        val saved = Room.slots.map { it.isAI }
-        try {
-            Room.slots.forEachIndexed { i, slot -> slot.isAI = i <= 5 }
-            val ch = EmbeddedChannel()
-            val client = ClientSocket()
-            ch.pipeline().addLast(client)
+        // op 92 開局時的名冊要跟著 room.slots 走, 不能寫死 8 槽。
+        room.slots.forEachIndexed { i, slot -> slot.isAI = i <= 5 }
+        val ch = EmbeddedChannel()
+        val client = ClientSocket()
+        ch.pipeline().addLast(client)
 
-            val buf = Unpooled.buffer()
-            val sendPkt = SendPacketBase(buf)
-            sendPkt.Encode4(176)
-            sendPkt.Encode2(29)
-            sendPkt.Encode1(0)
-            sendPkt.Encode4(176)
-            sendPkt.Encode1(0)
-            sendPkt.Encode1(1)
-            sendPkt.Encode4(0)
-            with(StartGameReq) { buf.handle(client) }
+        val buf = Unpooled.buffer()
+        val sendPkt = SendPacketBase(buf)
+        sendPkt.Encode4(176)
+        sendPkt.Encode2(29)
+        sendPkt.Encode1(0)
+        sendPkt.Encode4(176)
+        sendPkt.Encode1(0)
+        sendPkt.Encode1(1)
+        sendPkt.Encode4(0)
+        with(StartGameReq) { buf.handle(client) }
 
-            ch.readOutbound<PKT>() // StartGameResult
-            val pkt112 = ch.readOutbound<PKT>() ?: error("缺少 op112 GameStartMapInfo")
-            val encBuf = Unpooled.buffer()
-            pkt112.encode(SendPacketBase(encBuf))
-            encBuf.Decode4; encBuf.Decode2; encBuf.DecodeCipherStr; encBuf.Decode4
-            encBuf.Decode1; encBuf.Decode1
-            assertEquals(6, encBuf.Decode1, "只有 6 個參戰槽位時 slotCount 必須是 6")
+        ch.readOutbound<PKT>() // StartGameResult
+        val pkt112 = ch.readOutbound<PKT>() ?: error("缺少 op112 GameStartMapInfo")
+        val encBuf = Unpooled.buffer()
+        pkt112.encode(SendPacketBase(encBuf))
+        encBuf.Decode4; encBuf.Decode2; encBuf.DecodeCipherStr; encBuf.Decode4
+        encBuf.Decode1; encBuf.Decode1
+        assertEquals(6, encBuf.Decode1, "只有 6 個參戰槽位時 slotCount 必須是 6")
 
-            for (i in 0 until 6) {
-                assertEquals(i, encBuf.Decode1)
-                encBuf.Decode1; encBuf.Decode1; encBuf.Decode1; encBuf.Decode1
-                encBuf.Decode4; encBuf.Decode4; encBuf.Decode4
-            }
-            repeat(4) { encBuf.Decode1 }
-            assertEquals(0, encBuf.readableBytes())
-            ch.finishAndReleaseAll()
-        } finally {
-            Room.slots.forEachIndexed { i, slot -> slot.isAI = saved[i] }
+        for (i in 0 until 6) {
+            assertEquals(i, encBuf.Decode1)
+            encBuf.Decode1; encBuf.Decode1; encBuf.Decode1; encBuf.Decode1
+            encBuf.Decode4; encBuf.Decode4; encBuf.Decode4
         }
+        repeat(4) { encBuf.Decode1 }
+        assertEquals(0, encBuf.readableBytes())
+        ch.finishAndReleaseAll()
     }
 
     // ======================================================================
@@ -413,10 +408,9 @@ class GameStartMapInfoTest {
     @Test
     fun testStartGameReqRollsSpawnPositionsEachRound() {
         val savedRandom = spawnRandom
-        val savedAI = Room.slots.map { it.isAI }
         try {
             spawnRandom = Random(112)
-            Room.slots.forEach { it.isAI = true } // 固定 8 槽參戰, 方便逐槽比對
+            room.slots.forEach { it.isAI = true } // 固定 8 槽參戰, 方便逐槽比對
 
             val draws = List(6) { startGameSpawnPositions() }
             draws.forEach { spawns ->
@@ -425,7 +419,6 @@ class GameStartMapInfoTest {
             }
             assertTrue(draws.distinct().size > 1, "op 92 每次開局都要重新洗牌出生點")
         } finally {
-            Room.slots.forEachIndexed { i, slot -> slot.isAI = savedAI[i] }
             spawnRandom = savedRandom
         }
     }

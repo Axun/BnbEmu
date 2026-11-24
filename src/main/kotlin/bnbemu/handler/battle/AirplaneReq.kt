@@ -7,7 +7,7 @@ import bnbemu.server.Room
 
 // CGameSession::OnRequestAirplane
 val AirplaneReq = PKTHandler { c ->
-    val battle = Room.battle
+    val battle = Room.current?.battle
     if (battle == null) {
         if (readableBytes() > 0) skipBytes(readableBytes())
         return@PKTHandler

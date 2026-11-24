@@ -1,5 +1,6 @@
 package bnbemu.handler.lobby
 
+import bnbemu.domain.MAX_SESSION_SLOTS
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
 import bnbemu.netty.PKTHandler
@@ -46,9 +47,9 @@ val RoomDetailInfoReq = PKTHandler { c ->
     val selfName = self?.charName?.ifEmpty { PlayerService.activeProfile.charName }
         ?: PlayerService.activeProfile.charName
 
-    // 房內名單以 Room.slots 為準: 只列真人, AI/空槽發 E1(0) 讓客戶端留白
+    // 房內名單以 Room.current?.slots 為準: 只列真人, AI/空槽發 E1(0) 讓客戶端留白
     // (真端 CGameSession::m_rgPlayer 也只放真人; 練習房的 AI 屬 slotState, 不在名單裡)。
-    val slots = Room.slots.map { slot ->
+    val slots: MutableList<RoomDetailSlot?> = Room.current?.slots?.map { slot ->
         val player = slot.player ?: return@map null
         RoomDetailSlot(
             name = if (slot.client === c) selfName.ifEmpty { player.charName } else player.charName,
@@ -56,7 +57,7 @@ val RoomDetailInfoReq = PKTHandler { c ->
             playState = 0,                 // 未開局
             chief = if ((slot.state.toInt() and FLAG_CHIEF) != 0) 1 else 0,
         )
-    }.toMutableList()
+    }?.toMutableList() ?: MutableList(MAX_SESSION_SLOTS) { null }
 
     // 玩家還在大廳、尚未建房時 Room 是全空的。這時房間列表顯示的 rd 房 (1/1)
     // 至少要有房主, 否則詳情對話框 8 個槽全白, 看不出回包有沒有生效。

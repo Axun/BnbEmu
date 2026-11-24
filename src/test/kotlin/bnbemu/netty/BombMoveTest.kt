@@ -20,16 +20,18 @@ import org.junit.jupiter.api.Test
 
 class BombMoveTest {
 
+    private lateinit var room: Room
     private lateinit var battle: BattleSession
 
     @BeforeEach
     fun setUp() {
-        battle = Room.startGame()
+        room = Room.enter(Room())
+        battle = room.startGame()
     }
 
     @AfterEach
     fun tearDown() {
-        Room.reset()
+        Room.leave()
     }
 
     @Test
@@ -144,12 +146,10 @@ class BombMoveTest {
         // 端到端: C→S op 107 → BattleSession.onBombMove → BC → 客户端 ctx 真的收到 S→C op 141
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
-        val previousPlayerId = Room.slots[0].playerId
-        val previousClient = Room.slots[0].client
         try {
             val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
-            Room.slots[0].assignHuman(tester.userId, cs)
-            val activeBattle = Room.startGame()
+            room.slots[0].assignHuman(tester.userId, cs)
+            val activeBattle = room.startGame()
             ch.outboundMessages().clear()
 
             assertTrue(activeBattle.onBombMove(0, 6, 20, 2, 3, 2, 4, 1000), "首次踢泡必须广播")
@@ -169,34 +169,28 @@ class BombMoveTest {
                 "广播包体必须等于 op107 实测 body 前 7 字节 (3A A5 7D 58 59 58 5E)"
             )
         } finally {
-            Room.slots[0].assignHuman(previousPlayerId, previousClient)
-            Room.reset()
             ch.finish()
         }
     }
 
     @Test
     fun testBombStateUpdatedOnMove() {
-        try {
-            val activeBattle = Room.startGame()
-            synchronized(activeBattle.bombs) {
-                activeBattle.bombs += Bomb(id = 20, ownerSlotId = 0, pos = 0, bombAttr = 0, isSpecial = false).apply {
-                    gridX = 2
-                    gridY = 3
-                }
+        val activeBattle = room.startGame()
+        synchronized(activeBattle.bombs) {
+            activeBattle.bombs += Bomb(id = 20, ownerSlotId = 0, pos = 0, bombAttr = 0, isSpecial = false).apply {
+                gridX = 2
+                gridY = 3
             }
-
-            activeBattle.onBombMove(0, 6, 20, 2, 3, 2, 4, 1000)
-
-            val bomb = activeBattle.getBomb(20)
-            assertNotNull(bomb)
-            bomb!!
-            assertEquals(2, bomb.gridX, "服务端水泡位置必须跟进到目标格")
-            assertEquals(4, bomb.gridY)
-            assertTrue(bomb.isMoving, "滑行期间 isMoving=true, 到点由 Bomb.updateState 续时再引爆")
-        } finally {
-            Room.reset()
         }
+
+        activeBattle.onBombMove(0, 6, 20, 2, 3, 2, 4, 1000)
+
+        val bomb = activeBattle.getBomb(20)
+        assertNotNull(bomb)
+        bomb!!
+        assertEquals(2, bomb.gridX, "服务端水泡位置必须跟进到目标格")
+        assertEquals(4, bomb.gridY)
+        assertTrue(bomb.isMoving, "滑行期间 isMoving=true, 到点由 Bomb.updateState 续时再引爆")
     }
 
     @Test
@@ -211,17 +205,12 @@ class BombMoveTest {
 
     @Test
     fun testDuplicateRebroadcastAfterWindow() {
-        val window = Room.battleConfig.bombMoveDedupeWindowMs
-        try {
-            Room.battleConfig.bombMoveDedupeWindowMs = 0
-            val activeBattle = Room.startGame()
-            assertTrue(activeBattle.onBombMove(1, 4, 31, 5, 5, 5, 3, 1000))
-            assertTrue(
-                activeBattle.onBombMove(1, 4, 31, 5, 5, 5, 3, 1000),
-                "窗口过后同一动作必须能再次广播 (漏包自愈)"
-            )
-        } finally {
-            Room.battleConfig.bombMoveDedupeWindowMs = window
-        }
+        room.battleConfig.bombMoveDedupeWindowMs = 0
+        val activeBattle = room.startGame()
+        assertTrue(activeBattle.onBombMove(1, 4, 31, 5, 5, 5, 3, 1000))
+        assertTrue(
+            activeBattle.onBombMove(1, 4, 31, 5, 5, 5, 3, 1000),
+            "窗口过后同一动作必须能再次广播 (漏包自愈)"
+        )
     }
 }

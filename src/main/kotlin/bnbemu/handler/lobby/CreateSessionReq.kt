@@ -59,15 +59,16 @@ val CreateSessionReq = PKTHandler { c ->
     val ruleId = Decode4
 
     val isPractice = mode == 0
-    Room.reset()
-    Room.sessionMode = mode
-    Room.sessionType = sessionType
-    Room.ruleId = ruleId
-    Room.name = roomName
-    Room.password = password
-    Room.localBombers = bombers
-    Room.themeId = 0
-    Room.mapId = 253
+    val room = Room.enter(Room()).apply {
+        sessionMode = mode
+        this.sessionType = sessionType
+        this.ruleId = ruleId
+        name = roomName
+        this.password = password
+        localBombers = bombers
+        themeId = 0
+        mapId = 253
+    }
 
     Logger.info(
         "[CreateSession] mode=$mode (${if (isPractice) "practice" else "normal"}) " +
@@ -84,14 +85,14 @@ val CreateSessionReq = PKTHandler { c ->
     //    两者必须一起改; 等普通房 S→C 抓包钉死线序后再在 isPractice 处分叉。
     val player = c.player
     if (sessionType == SESSION_TYPE_BATTLE) {
-        Room.setupAiBattleSlots(player, c, bombers)
+        room.setupAiBattleSlots(player, c, bombers)
     } else if (player != null) {
         val requestedBomber = bombers.firstOrNull() ?: player.bomber
         val chosenBomber = if (requestedBomber in 0..15) requestedBomber else player.bomber
         val effectiveBomber = CharacterRules.resolveEffectiveBomber(chosenBomber, player)
         PlayerService.selectBomber(player.userId, effectiveBomber)
 
-        Room.slots[0].apply {
+        room.slots[0].apply {
             assignHuman(player.userId, c)
             this.isAI = false
             state = FLAG_CHIEF
@@ -99,14 +100,10 @@ val CreateSessionReq = PKTHandler { c ->
             color = 0
         }
         for (i in 1..7) {
-            Room.slots[i].apply {
+            room.slots[i].apply {
                 clearHuman()
                 isAI = true
-                // 新房一律从「开放」起算。Room 是单例，不重置就会继承上一间房被踢槽位的
-                // FLAG_CLOSED，导致进房链自相矛盾：106 发 state=1 封闭、103 又发 isAI=true。
                 state = 0
-                // 新建房是本局设置的起点：难度档回到默认，避免全局 Room 单例
-                // 把上一次房间设置的 aILevel 带进新房 (sendRoomEntryChain 现按 slots 回灌)。
                 aILevel = DEFAULT_AI_LEVEL
                 bomber = CharacterType.Boz.value
                 color = 7
@@ -114,7 +111,7 @@ val CreateSessionReq = PKTHandler { c ->
         }
     }
 
-    sendRoomEntryChain(c)
+    sendRoomEntryChain(c, room)
     // op 83 EnterSessionResult 会让客户端 SetStage(12) 进入房间舞台。
     // 记下来: 之后在房间内点商城, 退出时服务端要回 ChangeStage(12) 而不是回大厅。
     c.stage = ClientStage.Room.value

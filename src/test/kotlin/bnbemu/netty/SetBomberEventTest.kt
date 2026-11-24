@@ -83,14 +83,12 @@ class SetBomberEventTest {
     ) {
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
-        val previousPlayerId = Room.slots[0].playerId
-        val previousClient = Room.slots[0].client
-        val previousDelay = Room.battleConfig.launchedBombActivationDelayMs
+        val room = Room.enter(Room())
         try {
             val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
-            Room.slots[0].assignHuman(tester.userId, cs)
-            Room.battleConfig.launchedBombActivationDelayMs = 60_000L
-            val battle = Room.startGame()
+            room.slots[0].assignHuman(tester.userId, cs)
+            room.battleConfig.launchedBombActivationDelayMs = 60_000L
+            val battle = room.startGame()
             ch.outboundMessages().clear()
 
             val buf = Unpooled.wrappedBuffer(body)
@@ -103,9 +101,7 @@ class SetBomberEventTest {
             val sent = ch.outboundMessages().toList()
             assertions(battle, sent.map { encode(it as PKT) })
         } finally {
-            Room.slots[0].assignHuman(previousPlayerId, previousClient)
-            Room.battleConfig.launchedBombActivationDelayMs = previousDelay
-            Room.reset()
+            Room.leave()
             ch.finish()
         }
     }
@@ -209,12 +205,10 @@ class SetBomberEventTest {
     fun testTruncatedBodyIsSkippedWithoutBroadcast() {
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
-        val previousPlayerId = Room.slots[0].playerId
-        val previousClient = Room.slots[0].client
+        val room = Room.enter(Room())
         try {
             val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
-            Room.slots[0].assignHuman(tester.userId, cs)
-            Room.reset()
+            room.slots[0].assignHuman(tester.userId, cs)
             ch.outboundMessages().clear()
 
             val buf = Unpooled.wrappedBuffer("A5 69 5A 96 CA".toBA())
@@ -223,8 +217,7 @@ class SetBomberEventTest {
             assertEquals(0, buf.readableBytes(), "残包必须被跳过, 不能抛异常断线")
             assertEquals(0, ch.outboundMessages().size, "残包不得回包")
         } finally {
-            Room.slots[0].assignHuman(previousPlayerId, previousClient)
-            Room.reset()
+            Room.leave()
             ch.finish()
         }
     }

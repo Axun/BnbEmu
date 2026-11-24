@@ -16,11 +16,12 @@ val SelectColorReq = PKTHandler { c ->
     val slotIdx = (data shr 4) and 0x0F
     val colorIdx = data and 0x0F
 
-    if (slotIdx in Room.slots.indices) {
-        Room.slots[slotIdx].color = colorIdx
+    val room = Room.current ?: return@PKTHandler
+    if (slotIdx in room.slots.indices) {
+        room.slots[slotIdx].color = colorIdx
         // 广播给房内所有人 (含请求者, 请求者的等待锁靠本包解除)。
         // 练习房/AI 房走 CSlotStage, 1B 包体与 cap/practice_s2c_op104_3B_*.bin 一致;
         // 若日后接入 CPrepareStage 普通房, 改为 SelectColor(slotIdx, colorIdx, extended = true)。
-        Room BC SelectColor(slot = slotIdx, color = colorIdx)
+        room BC SelectColor(slot = slotIdx, color = colorIdx)
     }
 }

@@ -33,14 +33,15 @@ val OpenCloseSlotReq = PKTHandler { c ->
     val action = raw and 0x0F
     val isClosing = (action and 1) != 0
 
-    val slot = Room.slots.getOrNull(slotIdx)
+    val room = Room.current ?: return@PKTHandler
+    val slot = room.slots.getOrNull(slotIdx)
     if (slot != null) {
-        if (Room.isAIBattle && slotIdx in 0..3) {
+        if (room.isAIBattle && slotIdx in 0..3) {
             // 激战模式 0..3 是真人玩家槽位（支持房主开放等待其他玩家加入或关闭，但绝不自动填 AI）。
             // 必须回 S→C op 106 才能清掉 CPrepareStage[+3038]==2 的等待锁，否则客户端会卡死。
             if (slot.isHuman) {
                 val pkt106 = PracticeSlotReady(slot = slotIdx, state = 2)
-                if (Room.uniqueClients.any()) Room.BC(pkt106) else c.send(pkt106)
+                if (room.uniqueClients.any()) room.BC(pkt106) else c.send(pkt106)
                 return@PKTHandler
             }
 
@@ -48,8 +49,8 @@ val OpenCloseSlotReq = PKTHandler { c ->
             slot.clearHuman()
             slot.state = if (isClosing) FLAG_CLOSED else 0
             val pkt106 = PracticeSlotReady(slot = slotIdx, state = if (isClosing) 1 else 2)
-            if (Room.uniqueClients.any()) {
-                Room BC pkt106
+            if (room.uniqueClients.any()) {
+                room BC pkt106
             } else {
                 c send pkt106
             }
@@ -64,8 +65,8 @@ val OpenCloseSlotReq = PKTHandler { c ->
             val pkt106 = PracticeSlotReady(slot = slotIdx, state = 1)
             val pkt103 = PracticeSetSlotAI(slot = slotIdx, isAI = false, refSlot = 0, aiLevel = 0)
 
-            if (Room.uniqueClients.any()) {
-                Room.BC(pkt106, pkt103)
+            if (room.uniqueClients.any()) {
+                room.BC(pkt106, pkt103)
             } else {
                 c.send(pkt106, pkt103)
             }
@@ -73,7 +74,7 @@ val OpenCloseSlotReq = PKTHandler { c ->
             // 开放槽位 / 自动加入电脑敌人 (FLAG_CLOSED = 0)
             slot.isAI = true
             slot.clearHuman()
-            val bomberId = if (Room.isAIBattle) {
+            val bomberId = if (room.isAIBattle) {
                 val prev = slot.bomber.toInt()
                 if (Room.isBattleNpcBomber(prev)) prev else Room.npcDefaultBomberForSlot(slotIdx)
             } else {
@@ -87,15 +88,15 @@ val OpenCloseSlotReq = PKTHandler { c ->
             }
             slot.state = 0
 
-            val refSlot = if (Room.isAIBattle) Room.chiefSlotIndex() else slotIdx
+            val refSlot = if (room.isAIBattle) room.chiefSlotIndex() else slotIdx
             val pkt106 = PracticeSlotReady(slot = slotIdx, state = 2)
             val pkt114 = SetSlotFanfare(slot = slotIdx, bomber = bomberId)
             val pkt104 = SetSlotColor(slot = slotIdx)
             val pkt105 = PracticeSetPlayer(slot = slotIdx, bomber = bomberId)
             val pkt103 = PracticeSetSlotAI(slot = slotIdx, isAI = true, refSlot = refSlot, aiLevel = slot.aILevel)
 
-            if (Room.uniqueClients.any()) {
-                Room.BC(pkt106, pkt114, pkt104, pkt105, pkt103)
+            if (room.uniqueClients.any()) {
+                room.BC(pkt106, pkt114, pkt104, pkt105, pkt103)
             } else {
                 c.send(pkt106, pkt114, pkt104, pkt105, pkt103)
             }

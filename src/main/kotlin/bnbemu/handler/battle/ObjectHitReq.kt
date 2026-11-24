@@ -65,7 +65,7 @@ val ObjectHitReq = PKTHandler { c ->
 
     // 命中格有水泡 → BattleSession 延时 delayMs 广播 S→C op138 state=0 引爆 (含发射者本人);
     // 命中箱子/角色/重复上报 → 内部跳过。objId 只用于日志诊断, 不参与查泡。
-    Room.battle?.onObjectHit(targetObjectId, gridX, gridY, delayMs, sender = c)
+    Room.current?.battle?.onObjectHit(targetObjectId, gridX, gridY, delayMs, sender = c)
 
     // 防御式消费: 未来客户端追加字段时不影响下一包解析。
     if (readableBytes() > 0) {

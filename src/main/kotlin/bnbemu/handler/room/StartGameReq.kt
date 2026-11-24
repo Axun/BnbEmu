@@ -71,7 +71,9 @@ val StartGameReq = PKTHandler { c ->
     val eventParam = if (readableBytes() >= 4) Decode4 else 0
     if (readableBytes() > 0) skipBytes(readableBytes())
 
-    if (mapId != Room.mapId || themeId != Room.themeId) {
+    val room = Room.current ?: return@PKTHandler
+
+    if (mapId != room.mapId || themeId != room.themeId) {
         println("mapId or themeId mismatch")
     }
 
@@ -79,7 +81,7 @@ val StartGameReq = PKTHandler { c ->
     println("StartGame. mapId: $mapId, mapName: $mapName")
 
     val mapLimit = MapCatalog.maxPlayerOf(mapId)
-    if (Room.activeSlotCount > mapLimit) {
+    if (room.activeSlotCount > mapLimit) {
         // 应该不会发生，客户端有检查
         Logger.warn("[StartGame] mapId=$mapId 人数上限 $mapLimit, 房间人数超限")
     }
@@ -89,13 +91,13 @@ val StartGameReq = PKTHandler { c ->
     // 「服務端按 6 個 AI 判勝負、客戶端卻照 op112 的 8 槽名冊生成 7 個 AI」的錯位。
     // 異常防護: 若房間槽位尚未初始化 (例如非練習房流程), 退回舊的 8 槽名冊,
     // 避免給客戶端發 slotCount=0 導致對局載入失敗。
-    val activeSlots = Room.slots.indices.filter { i -> Room.slots[i].isHuman || Room.slots[i].isAI }
+    val activeSlots = room.slots.indices.filter { i -> room.slots[i].isHuman || room.slots[i].isAI }
         .ifEmpty { (0..7).toList() }
-    println("StartGame. activeSlots=$activeSlots (AI=${activeSlots.count { Room.slots[it].isAI }})")
+    println("StartGame. activeSlots=$activeSlots (AI=${activeSlots.count { room.slots[it].isAI }})")
 
     val spawnPositions = assignSpawnPositions(mapId, activeSlots)
     val slotConfigs = activeSlots.map { i ->
-        val slot = Room.slots.getOrNull(i)
+        val slot = room.slots.getOrNull(i)
         val rawBomber = slot?.bomber?.toInt()
         val bomberId = when {
             rawBomber == RANDOM_CHARACTER_ID -> CharacterType.Lucy.value
@@ -116,7 +118,7 @@ val StartGameReq = PKTHandler { c ->
             mapId = mapId,
             themeId = themeId,
             mapName = mapName,
-            gameOptions = if (Room.isAIBattle) SESSION_TYPE_BATTLE else SESSION_TYPE_PRACTICE,
+            gameOptions = if (room.isAIBattle) SESSION_TYPE_BATTLE else SESSION_TYPE_PRACTICE,
             // 名冊唯一入口: 誰參戰 / 出生點 / 角色 / 隊伍全部在這裡定死 (見 GameStartSlotConfig)。
             // 出生點數量由地圖決定（4 人图只有 0..3），按参战槽顺序分配，见 assignSpawnPositions
             slotConfigs = slotConfigs,
@@ -140,5 +142,5 @@ val StartGameReq = PKTHandler { c ->
     )
 
     // 啟動對局主循環 (onTick: 水泡倒计时与 op 138 爆炸状态同步)
-    Room.startGame()
+    room.startGame()
 }

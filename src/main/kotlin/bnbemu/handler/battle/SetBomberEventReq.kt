@@ -80,7 +80,7 @@ val SetBomberEventReq = PKTHandler { c ->
     // 防御式消费: 客户端未来追加字段时不影响下一包解析。
     if (readableBytes() > 0) skipBytes(readableBytes())
 
-    val battle = Room.battle ?: return@PKTHandler
+    val battle = Room.current?.battle ?: return@PKTHandler
 
     if (slotId in 0..7) {
         battle.updateSlotGrid(slotId, originGridX, originGridY)

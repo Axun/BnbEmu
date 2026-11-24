@@ -18,5 +18,5 @@ val EventItemReq = PKTHandler { c ->
     val action = Decode1
     val param = Decode4
 
-    Room.battle?.onEventItem(slotId, token, action, param)
+    Room.current?.battle?.onEventItem(slotId, token, action, param)
 }

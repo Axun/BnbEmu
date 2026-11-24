@@ -422,6 +422,7 @@ class ShopTest {
 
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
+        Room.enter(Room())
         try {
             cs.stage = ClientStage.Shop.value
             cs.shopReturnStage = ClientStage.Room.value
@@ -436,6 +437,7 @@ class ShopTest {
             assertNotNull(firstPkt, "切回房间后必须补推房间链 sendRoomEntryChain")
             assertTrue(pkts.any { OpcodeManager.getSendOp(it::class.java) == 83 }, "房间链必须包含 EnterSessionResult(83)")
         } finally {
+            Room.leave()
             ch.finishAndReleaseAll()
         }
     }
@@ -446,6 +448,7 @@ class ShopTest {
         // 即使 shopReturnStage 还停留在 11, 只要客户端已到达房间舞台, 服务端状态也要同步成 12。
         val cs = ClientSocket()
         val ch = EmbeddedChannel(cs)
+        Room.enter(Room())
         try {
             cs.stage = ClientStage.Shop.value
             cs.shopReturnStage = ClientStage.Lobby.value
@@ -456,6 +459,7 @@ class ShopTest {
             assertEquals(ClientStage.Room.value, cs.stage)
             assertNotNull(ch.readOutbound<PKT>(), "op 80 同样补推房间链 sendRoomEntryChain")
         } finally {
+            Room.leave()
             ch.finishAndReleaseAll()
         }
     }
@@ -500,9 +504,6 @@ class ShopTest {
         val ch = EmbeddedChannel(cs)
         val userId = 9310
         val chosen = 7 // Plunk, 既不是默认皮蛋(0) 也不是抓包基准的宝宝(5)
-        val prevPlayerId = Room.slots[0].playerId
-        val prevClient = Room.slots[0].client
-        val prevBomber = Room.slots[0].bomber.toInt()
 
         fun bodyOf(pkt: PKT): ByteArray {
             val out = Unpooled.buffer()
@@ -514,8 +515,9 @@ class ShopTest {
         val user = PlayerService.registerProfile(PlayerProfile(userId, "shop_ret_tester", "tester"))
         cs.playerId = user.userId
         PlayerService.selectBomber(user.userId, chosen)
-        Room.slots[0].assignHuman(user.userId, cs)
-        Room.slots[0].bomber = chosen
+        val room = Room.enter(Room())
+        room.slots[0].assignHuman(user.userId, cs)
+        room.slots[0].bomber = chosen
 
         try {
             // 模拟客户端 CUserDynamicInfo 里残留的商城角色值 (宝宝 5)，与服务端权威角色不一致
@@ -545,7 +547,7 @@ class ShopTest {
             // op 20 必须把客户端 CUserDynamicInfo 的当前角色恢复为服务端权威值 chosen
             assertEquals(chosen, clientCudiBomber, "返回房间时 S→C op 20 必须把 CUDI 恢复为 Plunk ($chosen)")
             assertEquals(chosen, user.bomber, "服务端档案角色必须保持为 Plunk ($chosen)")
-            assertEquals(chosen, Room.slots[0].bomber.toInt(), "房间槽位角色必须保持为 Plunk ($chosen)")
+            assertEquals(chosen, room.slots[0].bomber.toInt(), "房间槽位角色必须保持为 Plunk ($chosen)")
 
             val profile = generateSequence { ch.readOutbound<PKT>() }
                 .firstOrNull { OpcodeManager.getSendOp(it::class.java) == 73 }
@@ -554,8 +556,7 @@ class ShopTest {
             val hex = bodyOf(profile!!).joinToString("") { "%02x".format(it) }
             assertFalse(hex.contains("%08x".format(5 xor 0x96CA5395.toInt()) + "55"))
         } finally {
-            Room.slots[0].assignHuman(prevPlayerId, prevClient)
-            Room.slots[0].bomber = prevBomber
+            Room.leave()
             ch.finishAndReleaseAll()
         }
     }

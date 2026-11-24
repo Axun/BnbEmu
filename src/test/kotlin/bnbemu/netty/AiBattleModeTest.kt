@@ -45,43 +45,16 @@ import org.junit.jupiter.api.Test
 
 class AiBattleModeTest {
 
-    private var savedMode = 0
-    private var savedType = SESSION_TYPE_PRACTICE
-    private var savedRuleId = 66
-    private var savedName = ""
-    private var savedPassword = ""
-    private var savedMapId = 89
-    private var savedThemeId = 0
+    private lateinit var room: Room
 
     @BeforeEach
     fun setUp() {
-        savedMode = Room.sessionMode
-        savedType = Room.sessionType
-        savedRuleId = Room.ruleId
-        savedName = Room.name
-        savedPassword = Room.password
-        savedMapId = Room.mapId
-        savedThemeId = Room.themeId
+        room = Room.enter(Room())
     }
 
     @AfterEach
     fun tearDown() {
-        Room.reset()
-        Room.sessionMode = savedMode
-        Room.sessionType = savedType
-        Room.ruleId = savedRuleId
-        Room.name = savedName
-        Room.password = savedPassword
-        Room.mapId = savedMapId
-        Room.themeId = savedThemeId
-        Room.slots.forEach {
-            it.clearHuman()
-            it.isAI = false
-            it.state = 0
-            it.aILevel = 2
-            it.bomber = 0
-            it.color = 0
-        }
+        Room.leave()
     }
 
     private fun newClient(bomber: Int = 0): Pair<EmbeddedChannel, ClientSocket> {
@@ -184,8 +157,9 @@ class AiBattleModeTest {
         val ops = packets.map { it.first }
         assertTrue(83 in ops)
         assertTrue(271 in ops)
-        assertEquals(SESSION_TYPE_BATTLE, Room.sessionType)
-        assertEquals(1, Room.slots[0].bomber.toInt())
+        val createdRoom = Room.current!!
+        assertEquals(SESSION_TYPE_BATTLE, createdRoom.sessionType)
+        assertEquals(1, createdRoom.slots[0].bomber.toInt())
 
         // PracticeSetSlotAI (103) must only target NPC slots 4..7 and reference slot 0
         val aiPackets = packets.filter { it.first == 103 }
@@ -199,15 +173,15 @@ class AiBattleModeTest {
             assertEquals(4 + idx, slot)
             assertTrue(isAI)
             assertEquals(0, refSlot)
-            assertEquals(Room.slots[slot].aILevel, aiLevel)
+            assertEquals(createdRoom.slots[slot].aILevel, aiLevel)
         }
     }
 
     @Test
     fun `test AILevelChangeReq and OpenCloseSlotReq in AI battle`() {
         val (ch, client) = newClient(bomber = 0)
-        Room.sessionType = SESSION_TYPE_BATTLE
-        Room.setupAiBattleSlots(client.player, client)
+        room.sessionType = SESSION_TYPE_BATTLE
+        room.setupAiBattleSlots(client.player, client)
 
         // Change slot 5 to NPC 23 and difficulty 4
         val changeReq = encodePacket {
@@ -225,8 +199,8 @@ class AiBattleModeTest {
         assertTrue(changed[1].second.Decode1 != 0)
         assertEquals(0, changed[1].second.Decode2) // refSlot = chief (0)
         assertEquals(4, changed[1].second.Decode2) // aiLevel = 4
-        assertEquals(23, Room.slots[5].bomber.toInt())
-        assertEquals(4, Room.slots[5].aILevel)
+        assertEquals(23, room.slots[5].bomber.toInt())
+        assertEquals(4, room.slots[5].aILevel)
 
         // Human slot 2 in mode 16 can be opened (waiting for human player, NO AI) and closed via op 89
         val humanOpen = encodePacket { Encode1((2 shl 4) or 0) }
@@ -234,32 +208,32 @@ class AiBattleModeTest {
         val openedHumanPkts = drainOutbound(ch)
         assertEquals(listOf(106), openedHumanPkts.map { it.first })
         assertEquals((2 shl 4) or 2, openedHumanPkts[0].second.Decode1)
-        assertFalse(Room.slots[2].isAI)
-        assertEquals(0, Room.slots[2].state.toInt())
+        assertFalse(room.slots[2].isAI)
+        assertEquals(0, room.slots[2].state.toInt())
 
         val humanClose = encodePacket { Encode1((2 shl 4) or 1) }
         with(OpenCloseSlotReq) { humanClose.handle(client) }
         val closedHumanPkts = drainOutbound(ch)
         assertEquals(listOf(106), closedHumanPkts.map { it.first })
         assertEquals((2 shl 4) or 1, closedHumanPkts[0].second.Decode1)
-        assertFalse(Room.slots[2].isAI)
-        assertEquals(FLAG_CLOSED, Room.slots[2].state.toInt())
+        assertFalse(room.slots[2].isAI)
+        assertEquals(FLAG_CLOSED, room.slots[2].state.toInt())
 
         // Close NPC slot 5, then reopen it: keeps NPC bomber 23 and difficulty 4
         val closeSlot5 = encodePacket { Encode1((5 shl 4) or 1) }
         with(OpenCloseSlotReq) { closeSlot5.handle(client) }
         val closedPkts = drainOutbound(ch)
         assertEquals(listOf(106, 103), closedPkts.map { it.first })
-        assertFalse(Room.slots[5].isAI)
-        assertEquals(FLAG_CLOSED, Room.slots[5].state.toInt())
+        assertFalse(room.slots[5].isAI)
+        assertEquals(FLAG_CLOSED, room.slots[5].state.toInt())
 
         val reopenSlot5 = encodePacket { Encode1((5 shl 4) or 0) }
         with(OpenCloseSlotReq) { reopenSlot5.handle(client) }
         val reopenedPkts = drainOutbound(ch)
         assertEquals(listOf(106, 114, 104, 105, 103), reopenedPkts.map { it.first })
-        assertTrue(Room.slots[5].isAI)
-        assertEquals(23, Room.slots[5].bomber.toInt())
-        assertEquals(4, Room.slots[5].aILevel)
+        assertTrue(room.slots[5].isAI)
+        assertEquals(23, room.slots[5].bomber.toInt())
+        assertEquals(4, room.slots[5].aILevel)
         assertEquals(5, reopenedPkts[3].second.Decode1)
         assertEquals(23, reopenedPkts[3].second.Decode1)
     }
@@ -267,8 +241,8 @@ class AiBattleModeTest {
     @Test
     fun `test NpcEventReq echoes NpcEvent and ignores malformed payloads`() {
         val (ch, client) = newClient(bomber = 0)
-        Room.sessionType = SESSION_TYPE_BATTLE
-        Room.setupAiBattleSlots(client.player, client)
+        room.sessionType = SESSION_TYPE_BATTLE
+        room.setupAiBattleSlots(client.player, client)
 
         val firstEvt = encodePacket {
             Encode2(4)
@@ -305,10 +279,10 @@ class AiBattleModeTest {
     @Test
     fun `test StartGameReq and backToRoom ShopToRoomReq round trip for AI battle`() {
         val (ch, client) = newClient(bomber = 0)
-        Room.sessionType = SESSION_TYPE_BATTLE
-        Room.setupAiBattleSlots(client.player, client)
-        Room.slots[4].bomber = 21
-        Room.slots[4].aILevel = 3
+        room.sessionType = SESSION_TYPE_BATTLE
+        room.setupAiBattleSlots(client.player, client)
+        room.slots[4].bomber = 21
+        room.slots[4].aILevel = 3
 
         // 激战模式 (sessionType=16) CA.exe sub_531A09 不写 fileCheckType，载荷为 16B:
         // mapId(4) + themeId(2) + subType(1) + roomSelectedMapId(4) + isCustomMap(1) + eventParam(4)
@@ -364,21 +338,21 @@ class AiBattleModeTest {
         assertEquals(0, rawBuf.readableBytes())
 
         // backToRoom + ShopToRoomReq preserve AI Battle state & NpcAvailability
-        Room.backToRoom(force = true)
-        assertNull(Room.battle, "backToRoom 必须销毁 BattleSession")
+        room.backToRoom(force = true)
+        assertNull(room.battle, "backToRoom 必须销毁 BattleSession")
         val backOps = drainOutbound(ch).map { it.first }
         assertTrue(155 in backOps)
         assertTrue(271 in backOps)
 
         val shopReturnReq = encodePacket {
-            Encode2(Room.sessionId)
-            Encode4(Room.sessionId)
+            Encode2(room.sessionId)
+            Encode4(room.sessionId)
         }
         with(ShopToRoomReq) { shopReturnReq.handle(client) }
         val shopOps = drainOutbound(ch).map { it.first }
         assertTrue(271 in shopOps)
-        assertEquals(21, Room.slots[4].bomber.toInt())
-        assertEquals(3, Room.slots[4].aILevel)
-        assertEquals(FLAG_CLOSED, Room.slots[1].state.toInt())
+        assertEquals(21, room.slots[4].bomber.toInt())
+        assertEquals(3, room.slots[4].aILevel)
+        assertEquals(FLAG_CLOSED, room.slots[1].state.toInt())
     }
 }

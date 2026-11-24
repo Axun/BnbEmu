@@ -3,6 +3,7 @@ package bnbemu.netty
 import bnbemu.handler.battle.ObjectHitReq
 import bnbemu.server.Room
 import io.netty.buffer.Unpooled
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertSame
@@ -14,7 +15,12 @@ class ObjectHitReqTest {
     @BeforeEach
     fun clearBombs() {
         // 确保未处于残留战斗中，隔离其它测试留下的状态
-        Room.reset()
+        Room.leave()
+    }
+
+    @AfterEach
+    fun tearDown() {
+        Room.leave()
     }
 
     @Test

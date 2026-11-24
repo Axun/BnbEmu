@@ -36,40 +36,28 @@ class BattleSessionLifecycleTest {
 
     private lateinit var ch: EmbeddedChannel
     private lateinit var cs: ClientSocket
-    private var savedReenter = true
+    private lateinit var room: Room
 
     @BeforeEach
     fun setUp() {
         cs = ClientSocket()
         ch = EmbeddedChannel(cs)
-        savedReenter = Room.battleConfig.reenterRoomAfterBack
-        Room.battleConfig.reenterRoomAfterBack = false
-        Room.slots.forEach {
-            it.clearHuman()
-            it.isAI = false
-            it.state = 0
-        }
+        room = Room.enter(Room())
+        room.battleConfig.reenterRoomAfterBack = false
         val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
-        Room.slots[0].assignHuman(tester.userId, cs)
-        Room.slots[1].isAI = true
-        Room.reset()
+        room.slots[0].assignHuman(tester.userId, cs)
+        room.slots[1].isAI = true
     }
 
     @AfterEach
     fun tearDown() {
-        Room.battleConfig.reenterRoomAfterBack = savedReenter
-        Room.slots.forEach {
-            it.clearHuman()
-            it.isAI = false
-            it.state = 0
-        }
-        Room.reset()
+        Room.leave()
         ch.finish()
     }
 
     @Test
     fun `handlers safely ignore packets when not in battle`() {
-        assertNull(Room.battle)
+        assertNull(room.battle)
         ch.outboundMessages().clear()
 
         // 1. op 106 放泡
@@ -112,26 +100,26 @@ class BattleSessionLifecycleTest {
 
     @Test
     fun `battle is created on startGame and destroyed on backToRoom`() {
-        assertNull(Room.battle)
+        assertNull(room.battle)
 
-        val battle = Room.startGame()
-        assertNotNull(Room.battle)
+        val battle = room.startGame()
+        assertNotNull(room.battle)
         assertEquals(BattleSession.Phase.RUNNING, battle.phase)
         assertFalse(battle.isDestroyed)
 
-        assertTrue(Room.backToRoom())
-        assertNull(Room.battle, "回到房间后 Room.battle 必须置空")
+        assertTrue(room.backToRoom())
+        assertNull(room.battle, "回到房间后 room.battle 必须置空")
         assertTrue(battle.isDestroyed, "回到房间后 BattleSession 必须被销毁")
         assertEquals(BattleSession.Phase.DESTROYED, battle.phase)
     }
 
     @Test
     fun `starting new game destroys previous battle and isolates state`() {
-        val first = Room.startGame()
+        val first = room.startGame()
         first.onMovableBoxPush(boxSeq = 1, gridX = 1, gridY = 2, targetX = 1, targetY = 3, slotId = 0)
         assertNotNull(first.movableBoxState(1))
 
-        val second = Room.startGame()
+        val second = room.startGame()
         assertNotSame(first, second)
         assertTrue(first.isDestroyed, "开新局时旧战斗必须被销毁")
         assertFalse(second.isDestroyed)
@@ -140,28 +128,23 @@ class BattleSessionLifecycleTest {
 
     @Test
     fun `destroyed battle cancels pending scheduled tasks without leaking packets`() {
-        val savedDelay = Room.battleConfig.launchedBombActivationDelayMs
-        try {
-            Room.battleConfig.launchedBombActivationDelayMs = 80L
-            val battle = Room.startGame()
-            synchronized(battle.bombs) {
-                battle.bombs += Bomb(40, 0, 0, 0, true).apply {
-                    gridX = 5
-                    gridY = 5
-                }
+        room.battleConfig.launchedBombActivationDelayMs = 80L
+        val battle = room.startGame()
+        synchronized(battle.bombs) {
+            battle.bombs += Bomb(40, 0, 0, 0, true).apply {
+                gridX = 5
+                gridY = 5
             }
-            battle.scheduleLaunchedBombActivation(40)
-            battle.onObjectHit(targetObjectId = 999, gridX = 5, gridY = 5, delayMs = 80, broadcast = true)
-            assertTrue(battle.launchedBombActivationPending(40))
-
-            ch.outboundMessages().clear()
-            Room.backToRoom()
-            ch.outboundMessages().clear()
-
-            Thread.sleep(160)
-            assertTrue(ch.outboundMessages().isEmpty(), "销毁战斗后延时任务不得再向客户端发包")
-        } finally {
-            Room.battleConfig.launchedBombActivationDelayMs = savedDelay
         }
+        battle.scheduleLaunchedBombActivation(40)
+        battle.onObjectHit(targetObjectId = 999, gridX = 5, gridY = 5, delayMs = 80, broadcast = true)
+        assertTrue(battle.launchedBombActivationPending(40))
+
+        ch.outboundMessages().clear()
+        room.backToRoom()
+        ch.outboundMessages().clear()
+
+        Thread.sleep(160)
+        assertTrue(ch.outboundMessages().isEmpty(), "销毁战斗后延时任务不得再向客户端发包")
     }
 }

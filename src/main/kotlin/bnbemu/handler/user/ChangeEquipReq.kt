@@ -193,11 +193,12 @@ val ChangeEquipReq = PKTHandler { c ->
         // 客户端在房间内 (CSlotStage / CPrepareStage) 关闭背包或换装时, 本地 CSlotView 不会自动重绘,
         // 必须由服务端下发 S→C op 100 SetPlayer (CSetPlayerOnPreparePacket) 触发 sub_4F7022 -> sub_4F6E89,
         // 重新按 CSlotAccessoryPacket 三段清单 (背景/边框/特效/纸娃娃) 刷新槽位 UI 并清理脱下的装扮。
-        val roomSlotIdx = Room.slots.indexOfFirst {
+        val room = Room.current
+        val roomSlotIdx = room?.slots?.indexOfFirst {
             it.client === c || it.playerId == player.userId
-        }
-        if (roomSlotIdx != -1) {
-            Room.BC(SetPlayer(roomSlotIdx, Room.slots[roomSlotIdx], player))
+        } ?: -1
+        if (room != null && roomSlotIdx != -1) {
+            room.BC(SetPlayer(roomSlotIdx, room.slots[roomSlotIdx], player))
             println("[ChangeEquipReq] 房间槽位 $roomSlotIdx 外观已通过 SetPlayer (op 100) 广播刷新")
         }
     }

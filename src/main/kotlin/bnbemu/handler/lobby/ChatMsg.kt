@@ -65,7 +65,7 @@ val ChatMsg = PKTHandler { c ->
         // ⚠️ 副作用：不带前缀的纯 "die 3" 也会命中，普通聊天可能误触发；建议一律带前缀。
         val cmd = text.trim().dropWhile { !it.isLetter() }
 
-        val battle = Room.battle
+        val battle = Room.current?.battle
 
         val die = DEBUG_DIE.find(cmd)
         if (die != null) battle?.debugBroadcastBomberDie(die.groupValues[1].toInt())
@@ -116,8 +116,8 @@ val ChatMsg = PKTHandler { c ->
                 println("[ChatMsg] notice 文本过长 (${msg.length} > $MAX_NOTICE_LEN)，已忽略")
             } else {
                 val pkt = StageNotice(msg)
-                // 房间里有其他玩家就一起看，否则至少回给自己（单机时 Room.uniqueClients 可能为空）
-                val clients = Room.uniqueClients.toList()
+                // 房间里有其他玩家就一起看，否则至少回给自己（单机时 Room.current?.uniqueClients 可能为空）
+                val clients = Room.current?.uniqueClients?.toList().orEmpty()
                 if (clients.isEmpty()) c send pkt else clients.forEach { it send pkt }
                 println("[ChatMsg] 下发 op22 公告 \"$msg\" 给 ${maxOf(clients.size, 1)} 条连线")
             }
@@ -200,11 +200,12 @@ private fun forceSetCurrentBomber(c: ClientSocket, bomber: Int) {
     // 1) 服务端档案：只写 bomber（角色卡已不再作为背包物品下发，见 EquipSlot 注释）
     PlayerService.selectBomber(player.userId, bomber)
 
-    // 2) 服务端房间槽位：只有真占着槽位才改，大厅期 Room.slots 可能还留着上局的残影
-    val slotIdx = Room.slots.indexOfFirst {
+    // 2) 服务端房间槽位：只有真占着槽位才改，大厅期 Room.current 为 null
+    val room = Room.current
+    val slotIdx = room?.slots?.indexOfFirst {
         it.client === c || it.playerId == player.userId
-    }
-    if (slotIdx != -1) Room.slots[slotIdx].bomber = bomber
+    } ?: -1
+    if (room != null && slotIdx != -1) room.slots[slotIdx].bomber = bomber
 
     // 3) 客户端 CUDI：op 20 第 12 栏（角色）+ 第 8 栏（Lucci，按档案当前值，无需再补 op 122）
     c.send(
@@ -220,14 +221,14 @@ private fun forceSetCurrentBomber(c: ClientSocket, bomber: Int) {
 
     // 4) 客户端房间槽位头像：只在房间类舞台发（对局中模型已建好，见函数头注释）
     val roomStage = c.stage in ROOM_STAGE_IDS
-    if (slotIdx != -1 && roomStage) {
+    if (room != null && slotIdx != -1 && roomStage) {
         val pkt = SlotBomber(slotIdx, bomber)
-        if (Room.uniqueClients.any()) Room.BC(pkt) else c.send(pkt)
+        if (room.uniqueClients.any()) room.BC(pkt) else c.send(pkt)
     }
 
     val where = when {
-        slotIdx == -1 -> "不在房间槽位（仅档案+CUDI）"
-        roomStage -> "房间槽位 $slotIdx meta[1]=${Room.slots[slotIdx].bomber.toInt()}，已广播 op105"
+        room == null || slotIdx == -1 -> "不在房间槽位（仅档案+CUDI）"
+        roomStage -> "房间槽位 $slotIdx meta[1]=${room.slots[slotIdx].bomber.toInt()}，已广播 op105"
         c.stage == ClientStage.Game.value -> "对局中，op105 未下发（模型本局不变）"
         else -> "舞台 ${c.stage} 非房间，op105 未下发"
     }

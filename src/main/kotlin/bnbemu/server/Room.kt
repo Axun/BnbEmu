@@ -21,9 +21,8 @@ import bnbemu.service.player
 import io.netty.channel.EventLoop
 import org.tinylog.kotlin.Logger
 
-// 之後改用class
-object Room {
-    private val executor: EventLoop = workerGroup.next()
+/* 创建销毁和进入退出房间同步，但是依然只有一个实例，单机版简化处理。*/
+class Room {
     private val battleLock = Any()
 
     val slots = Array(8) { Slot() }
@@ -33,7 +32,7 @@ object Room {
     /** 默认战斗配置；每次开局创建 [BattleSession] 时传入快照。 */
     val battleConfig = BattleConfig()
 
-    /** 当前活跃的战斗会话；仅在进入战斗（[startGame]）时创建，回到房间（[backToRoom] / [reset]）时销毁并置 null。 */
+    /** 当前活跃的战斗会话；仅在进入战斗（[startGame]）时创建，回到房间（[backToRoom]）或销毁房间（[destroy]）时销毁并置 null。 */
     @Volatile
     var battle: BattleSession? = null
         private set
@@ -49,7 +48,6 @@ object Room {
      * 保持与抓包逐字节一致 (replay_test 的 practice 用例对 op 83 载荷做逐字节断言)。
      */
     var sessionId = DEFAULT_SESSION_ID
-    const val DEFAULT_SESSION_ID = 75
 
     // ---- C→S op 75 会话请求快照 (2026-11-08) ----
     // EN 客户端的练习房 / 普通房 / 快速建房等 8 个发包点共用 op 75, 靠这几个值区分。
@@ -73,11 +71,6 @@ object Room {
 
     val isAIBattle: Boolean
         get() = sessionType == SESSION_TYPE_BATTLE
-
-    fun npcDefaultBomberForSlot(slotIdx: Int): Int = 20 + (slotIdx - 4).coerceAtLeast(0)
-
-    /* 激战模式的特殊NPC */
-    fun isBattleNpcBomber(bomber: Int): Boolean = bomber in 20..25
 
     fun chiefSlotIndex(): Int =
         slots.indexOfFirst { it.isHuman && (it.state.toInt() and FLAG_CHIEF) != 0 }
@@ -274,7 +267,7 @@ object Room {
 
         if (sendRoomChain) {
             uniqueClients.forEach {
-                sendRoomEntryChain(it, init = false)
+                sendRoomEntryChain(it, this, init = false)
                 val lucci = it.player?.lucci
                 if (lucci != null) {
                     it.send(UserDynamicInfoValue(0, lucci))
@@ -363,11 +356,59 @@ object Room {
 
     private fun Slot.hasSeat(): Boolean = isHuman || isAI
 
-    /** 销毁当前战斗会话（建新房或测试清理时调用）。 */
-    fun reset() {
+    /** 销毁当前房间：终止活跃战斗会话并清空槽位客户端/玩家引用。 */
+    fun destroy() {
         synchronized(battleLock) {
             battle?.destroy()
             battle = null
         }
+        slots.forEach { it.clearHuman() }
+    }
+
+    companion object {
+        const val DEFAULT_SESSION_ID = 75
+
+        private val executor: EventLoop = workerGroup.next()
+        private val lifecycleLock = Any()
+
+        @Volatile
+        var current: Room? = null
+            private set
+
+        /** 进入新房间（先销毁可能残留的旧房间实例），并返回新实例。 */
+        fun enter(room: Room = Room()): Room = synchronized(lifecycleLock) {
+            val prev = current
+            if (prev !== room) {
+                prev?.destroy()
+                current = room
+            }
+            room
+        }
+
+        /** 离开并销毁当前房间（若存在）。 */
+        fun leave(): Unit = synchronized(lifecycleLock) {
+            current?.destroy()
+            current = null
+        }
+
+        /**
+         * 仅当 [client] 属于当前房间槽位时销毁房间（用于连接断开，避免登录短连线或无关连接断开误伤活跃房间）。
+         * 当 [allowUnbound] 为 true 且房间未绑定任何客户端连接时也会清理（用于切回大厅的测试或兜底路径）。
+         */
+        fun leaveIfMember(client: ClientSocket, allowUnbound: Boolean = false): Boolean =
+            synchronized(lifecycleLock) {
+                val room = current ?: return false
+                val matchesClient = room.slots.any { it.client === client }
+                val unboundRoom = allowUnbound && room.slots.none { it.client != null }
+                if (!matchesClient && !unboundRoom) return false
+                room.destroy()
+                current = null
+                true
+            }
+
+        fun npcDefaultBomberForSlot(slotIdx: Int): Int = 20 + (slotIdx - 4).coerceAtLeast(0)
+
+        /* 激战模式的特殊NPC */
+        fun isBattleNpcBomber(bomber: Int): Boolean = bomber in 20..25
     }
 }

@@ -165,26 +165,22 @@ class RoomListTest {
         val user = PlayerService.registerProfile(PlayerProfile(7215, "kcworms1", "ffdf", bomber = 0))
         cs.playerId = user.userId
 
-        val savedName = Room.name
-        val savedPw = Room.password
-        val savedType = Room.sessionType
-        val savedMapId = Room.mapId
-        val savedSlots = Room.slots.map { listOf(it.playerId, it.client, it.isAI, it.state) }
-        try {
-            Room.name = "MyTestRoom!"
-            Room.password = "secret"
-            Room.sessionType = SESSION_TYPE_NORMAL
-            Room.mapId = 176
-            Room.slots[0].apply { assignHuman(user.userId, cs); isAI = false; state = FLAG_CHIEF }
-            for (i in 1..5) Room.slots[i].apply { clearHuman(); isAI = true; state = 0 }
-            for (i in 6..7) Room.slots[i].apply { clearHuman(); isAI = false; state = FLAG_CLOSED }
+        val room = Room()
+        room.name = "MyTestRoom!"
+        room.password = "secret"
+        room.sessionType = SESSION_TYPE_NORMAL
+        room.mapId = 176
+        room.slots[0].apply { assignHuman(user.userId, cs); isAI = false; state = FLAG_CHIEF }
+        for (i in 1..5) room.slots[i].apply { clearHuman(); isAI = true; state = 0 }
+        for (i in 6..7) room.slots[i].apply { clearHuman(); isAI = false; state = FLAG_CLOSED }
 
-            sendRoomEntryChain(cs, init = false)
+        try {
+            sendRoomEntryChain(cs, room, init = false)
             val pkts = generateSequence { ch.readOutbound<PKT>() }.toList()
             val roomListPkt = pkts.first { OpcodeManager.getSendOp(it::class.java) == 87 }
             val parsed = decode(encode(roomListPkt)).single()
 
-            assertEquals(Room.sessionId, parsed.roomId, "必须与 op 83 的 sessionId 一致以命中客户端房间缓存")
+            assertEquals(room.sessionId, parsed.roomId, "必须与 op 83 的 sessionId 一致以命中客户端房间缓存")
             assertEquals(7215, parsed.handle)
             assertEquals("MyTestRoom!", parsed.name)
             assertEquals(true, parsed.hasPassword)
@@ -194,15 +190,6 @@ class RoomListTest {
             assertEquals(3, parsed.curPlusClosed, "1 真人 + 2 封闭槽 = 3，显示 1/6")
             assertEquals(8, parsed.maxPlusClosed)
         } finally {
-            Room.name = savedName
-            Room.password = savedPw
-            Room.sessionType = savedType
-            Room.mapId = savedMapId
-            Room.slots.forEachIndexed { idx, slot ->
-                slot.assignHuman(savedSlots[idx][0] as Int?, savedSlots[idx][1] as ClientSocket?)
-                slot.isAI = savedSlots[idx][2] as Boolean
-                slot.state = savedSlots[idx][3] as Byte
-            }
             ch.finishAndReleaseAll()
         }
     }

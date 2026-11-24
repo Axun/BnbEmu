@@ -52,18 +52,14 @@ class SetPlayerReadyTest {
         cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
-        val prevPlayerId = Room.slots[0].playerId
-        val prevClient = Room.slots[0].client
-        val prevState = Room.slots[0].state
-        val prevBomber = Room.slots[0].bomber
-        val prevColor = Room.slots[0].color
+        val room = Room()
         try {
-            Room.slots[0].assignHuman(user.userId, cs)
-            Room.slots[0].state = FLAG_CHIEF
-            Room.slots[0].bomber = 5
-            Room.slots[0].color = 0
+            room.slots[0].assignHuman(user.userId, cs)
+            room.slots[0].state = FLAG_CHIEF
+            room.slots[0].bomber = 5
+            room.slots[0].color = 0
 
-            sendRoomEntryChain(cs, init = true)
+            sendRoomEntryChain(cs, room, init = true)
 
             val packets = generateSequence { ch.readOutbound<PKT>() }.toList()
             val setPlayer = packets.firstOrNull { OpcodeManager.getSendOp(it::class.java) == 100 }
@@ -76,10 +72,6 @@ class SetPlayerReadyTest {
             assertEquals(5, meta[1].toInt() and 0xFF)
             assertEquals(0, meta[2].toInt() and 0xFF)
         } finally {
-            Room.slots[0].assignHuman(prevPlayerId, prevClient)
-            Room.slots[0].state = prevState
-            Room.slots[0].bomber = prevBomber
-            Room.slots[0].color = prevColor
             ch.finishAndReleaseAll()
         }
     }
@@ -92,23 +84,19 @@ class SetPlayerReadyTest {
         cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
-        val prevPlayerId = Room.slots[0].playerId
-        val prevClient = Room.slots[0].client
-        val prevState = Room.slots[0].state
-        val prevBomber = Room.slots[0].bomber
-        val prevColor = Room.slots[0].color
+        val room = Room.enter(Room())
         try {
-            Room.slots[0].assignHuman(user.userId, cs)
-            Room.slots[0].state = FLAG_CHIEF or FLAG_READY
-            Room.slots[0].bomber = 5
-            Room.slots[0].color = 0
+            room.slots[0].assignHuman(user.userId, cs)
+            room.slots[0].state = FLAG_CHIEF or FLAG_READY
+            room.slots[0].bomber = 5
+            room.slots[0].color = 0
 
             // 用户实测日志中的真实 C→S op 84 载荷: 5A 96 CA 53 95 (ready=0, u32=0)
             val payload = "5A 96 CA 53 95".toBA()
             val buf = Unpooled.wrappedBuffer(payload)
             with(SetPlayerReadyReq) { buf.handle(cs) }
             assertEquals(0, buf.readableBytes(), "op 84 5B 载荷必须被完整消费")
-            assertEquals(FLAG_CHIEF, Room.slots[0].state.toInt() and 0xFF, "取消准备必须清掉 FLAG_READY 且保留 FLAG_CHIEF")
+            assertEquals(FLAG_CHIEF, room.slots[0].state.toInt() and 0xFF, "取消准备必须清掉 FLAG_READY 且保留 FLAG_CHIEF")
 
             val reply = ch.readOutbound<PKT>()
             assertNotNull(reply, "收到 op 84 必须回发 S→C op 102 解锁客户端等待锁 4")
@@ -120,10 +108,7 @@ class SetPlayerReadyTest {
             assertArrayEquals(byteArrayOf(FLAG_CHIEF.toByte(), 5, 0), decodeMeta3(replyBody.copyOfRange(1, 4)))
             assertEquals(0, (replyBody[4].toInt() and 0xFF) xor 0x5A)
         } finally {
-            Room.slots[0].assignHuman(prevPlayerId, prevClient)
-            Room.slots[0].state = prevState
-            Room.slots[0].bomber = prevBomber
-            Room.slots[0].color = prevColor
+            Room.leave()
             ch.finishAndReleaseAll()
         }
     }
@@ -136,25 +121,18 @@ class SetPlayerReadyTest {
         cs.playerId = user.userId
         ch.pipeline().addLast(cs)
 
-        val prevPlayer0Id = Room.slots[0].playerId
-        val prevClient0 = Room.slots[0].client
-        val prevPlayerId = Room.slots[1].playerId
-        val prevClient = Room.slots[1].client
-        val prevState = Room.slots[1].state
-        val prevBomber = Room.slots[1].bomber
-        val prevColor = Room.slots[1].color
+        val room = Room.enter(Room())
         try {
-            Room.slots[0].clearHuman()
-            Room.slots[1].assignHuman(user.userId, cs)
-            Room.slots[1].state = 0
-            Room.slots[1].bomber = 3
-            Room.slots[1].color = 2
+            room.slots[1].assignHuman(user.userId, cs)
+            room.slots[1].state = 0
+            room.slots[1].bomber = 3
+            room.slots[1].color = 2
 
             // CSlotStage 只发 1B: E1(1)
             val buf = Unpooled.wrappedBuffer(byteArrayOf((1 xor 0x5A).toByte()))
             with(SetPlayerReadyReq) { buf.handle(cs) }
             assertEquals(0, buf.readableBytes())
-            assertEquals(FLAG_READY, Room.slots[1].state.toInt() and 0xFF)
+            assertEquals(FLAG_READY, room.slots[1].state.toInt() and 0xFF)
 
             val reply = ch.readOutbound<PKT>()
             assertNotNull(reply, "成员位发 op 84 后必须收到 S→C op 102 广播")
@@ -162,11 +140,7 @@ class SetPlayerReadyTest {
             assertEquals(1, (replyBody[0].toInt() and 0xFF) xor 0x5A)
             assertArrayEquals(byteArrayOf(FLAG_READY.toByte(), 3, 2), decodeMeta3(replyBody.copyOfRange(1, 4)))
         } finally {
-            Room.slots[0].assignHuman(prevPlayer0Id, prevClient0)
-            Room.slots[1].assignHuman(prevPlayerId, prevClient)
-            Room.slots[1].state = prevState
-            Room.slots[1].bomber = prevBomber
-            Room.slots[1].color = prevColor
+            Room.leave()
             ch.finishAndReleaseAll()
         }
     }

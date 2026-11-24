@@ -41,7 +41,7 @@ val BomberActionReq = PKTHandler { c ->
     when (action) {
         // "只剩一支队伍" 上报 → 结算。slotId 是存活方, 决定玩家胜还是 AI 胜。
         // 客户端每帧重发, BattleSession 内部用 gameOverSent 去重。
-        0x60 -> Room.battle?.onLastTeamStanding(slotId)
+        0x60 -> Room.current?.battle?.onLastTeamStanding(slotId)
 
         0x40 -> if (readableBytes() >= 2) {
             // E1(param) + E1(count) + count × [E1 gridY, E1 gridX, E2 bombId]

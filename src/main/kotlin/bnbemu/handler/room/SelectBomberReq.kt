@@ -46,11 +46,12 @@ val SelectBomberReq = PKTHandler { c ->
     if (player != null && slotIdx == 0 && player.bomber != effectiveBomber) {
         PlayerService.selectBomber(player.userId, effectiveBomber)
     }
-    Room.slots.getOrNull(slotIdx)?.bomber = effectiveBomber
+    val room = Room.current
+    room?.slots?.getOrNull(slotIdx)?.bomber = effectiveBomber
 
     val pkt = SlotBomber(slotIdx, effectiveBomber)
-    if (Room.uniqueClients.any()) {
-        Room.BC(pkt)
+    if (room != null && room.uniqueClients.any()) {
+        room.BC(pkt)
     } else {
         c.send(pkt)
     }

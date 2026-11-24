@@ -38,46 +38,28 @@ class GameOverTest {
 
     private lateinit var ch: EmbeddedChannel
     private lateinit var cs: ClientSocket
-    private var savedDelay = 0L
-    private var savedReturnDelay = 0L
-    private var savedMatchTimeout = 0L
-    private var savedTickInterval = 0L
+    private lateinit var room: Room
 
     @BeforeEach
     fun setUp() {
         cs = ClientSocket()
         ch = EmbeddedChannel(cs)
-        savedDelay = Room.battleConfig.gameOverDelayMs
-        savedReturnDelay = Room.battleConfig.resultReturnDelayMs
-        savedMatchTimeout = Room.battleConfig.matchTimeoutMs
-        savedTickInterval = Room.battleConfig.tickIntervalMs
-        Room.battleConfig.gameOverDelayMs = 0
-        Room.battleConfig.resultReturnDelayMs = -1 // 避免前序用例调度的 BackToRoom 污染后续用例 (回房单测见 BackToRoomTest)
+        room = Room.enter(Room())
+        room.battleConfig.gameOverDelayMs = 0
+        room.battleConfig.resultReturnDelayMs = -1 // 避免前序用例调度的 BackToRoom 污染后续用例 (回房单测见 BackToRoomTest)
 
         // 练习房布局: slot 0 = 玩家, slot 1..7 = AI (见 CreateSessionReq)
-        Room.slots.forEach { slot ->
-            slot.clearHuman()
-            slot.isAI = false
-            slot.aILevel = 1 // 难度档回到抓包默认，避免单例 Room 被前序用例污染
-        }
         val tester = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester"))
-        Room.slots[0].assignHuman(tester.userId, cs)
-        for (i in 1..7) Room.slots[i].isAI = true
-        Room.reset()
+        room.slots[0].assignHuman(tester.userId, cs)
+        for (i in 1..7) {
+            room.slots[i].isAI = true
+            room.slots[i].aILevel = 1 // 难度档回到抓包默认
+        }
     }
 
     @AfterEach
     fun tearDown() {
-        Room.battleConfig.gameOverDelayMs = savedDelay
-        Room.battleConfig.resultReturnDelayMs = savedReturnDelay
-        Room.battleConfig.matchTimeoutMs = savedMatchTimeout
-        Room.battleConfig.tickIntervalMs = savedTickInterval
-        Room.slots.forEach { slot ->
-            slot.clearHuman()
-            slot.isAI = false
-            slot.aILevel = 1
-        }
-        Room.reset()
+        Room.leave()
         ch.finish()
     }
 
@@ -136,7 +118,7 @@ class GameOverTest {
 
     @Test
     fun testKillAllEnemiesEndsMatchWithPlayerWin() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         // 逐个击杀 AI 1..7
@@ -159,7 +141,7 @@ class GameOverTest {
 
     @Test
     fun testPlayerDeathStillEndsMatchWithAiWin() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         battle.onBomberDie(0)
@@ -173,7 +155,7 @@ class GameOverTest {
 
     @Test
     fun testMatchContinuesWhileBothSidesHaveSurvivors() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         battle.onBomberDie(1)
@@ -188,7 +170,7 @@ class GameOverTest {
 
     @Test
     fun testDuplicateDeathReportIsIgnored() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         battle.onBomberDie(3)
@@ -201,7 +183,7 @@ class GameOverTest {
 
     @Test
     fun testResultIsSentOnlyOnce() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         battle.onBomberDie(0)
@@ -217,13 +199,13 @@ class GameOverTest {
 
     @Test
     fun testAliveStateIsResetOnNextMatch() {
-        val battle1 = Room.startGame()
+        val battle1 = room.startGame()
         for (slot in 1..7) battle1.onBomberDie(slot)
         collectSent()
         assertTrue(battle1.gameOverSent, "第一局应当已结算")
 
         // 第二局: 创建全新的 BattleSession, 所有参战槽位重新复活, 计数与结算标志都要复位
-        val battle2 = Room.startGame()
+        val battle2 = room.startGame()
         assertFalse(battle2.gameOverSent, "新一局必须清空结算标志")
         assertTrue(battle2.slotState(1)!!.isAlive && battle2.slotState(7)!!.isAlive, "新一局所有 AI 必须复活")
         assertTrue(battle2.slotState(0)!!.isAlive, "新一局玩家必须复活")
@@ -238,7 +220,7 @@ class GameOverTest {
 
     @Test
     fun testUnknownSlotIsDropped() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
         battle.onBomberDie(8)
         battle.onBomberDie(-1)
@@ -249,8 +231,8 @@ class GameOverTest {
     @Test
     fun testEmptySlotIsAlwaysOutOfMatch() {
         // slot 5 没座位
-        Room.slots[5].isAI = false
-        val battle = Room.startGame()
+        room.slots[5].isAI = false
+        val battle = room.startGame()
         assertEquals(SlotMatchState.OUT_OF_MATCH, battle.slotState(5)!!.matchState)
         assertEquals(SlotMatchState.ALIVE, battle.slotState(6)!!.matchState, "AI 槽必须是 ALIVE")
         assertFalse(battle.slotState(5)!!.isAlive)
@@ -265,7 +247,7 @@ class GameOverTest {
 
     @Test
     fun testDeathOnlyTransitionsFromAlive() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         battle.onBomberDie(2)
@@ -278,10 +260,10 @@ class GameOverTest {
     @Test
     fun testPureHumanRoomDoesNotEndOnFirstDeath() {
         // 将来若开纯人类 PvP 房 (无 AI), 死一个人不能被误判成"AI 全灭"而立刻结算
-        for (i in 1..7) Room.slots[i].isAI = false
+        for (i in 1..7) room.slots[i].isAI = false
         val tester2 = PlayerService.registerProfile(PlayerProfile(userId = 2, username = "tester2", charName = "tester2"))
-        Room.slots[1].assignHuman(tester2.userId, cs)
-        val battle = Room.startGame()
+        room.slots[1].assignHuman(tester2.userId, cs)
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         battle.onBomberDie(0)
@@ -308,7 +290,7 @@ class GameOverTest {
      */
     @Test
     fun testCapturedAction60BodyEndsMatchWithPlayerWin() {
-        Room.startGame()
+        room.startGame()
         ch.outboundMessages().clear()
 
         val raw = byteArrayOf(0x3A, 0xA5.toByte(), 0x39, 0xA7.toByte(), 0x6E)
@@ -326,7 +308,7 @@ class GameOverTest {
 
     @Test
     fun testAction60DoesNotReplayDeathAnimation() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         battle.onLastTeamStanding(0)
@@ -340,7 +322,7 @@ class GameOverTest {
 
     @Test
     fun testRepeatedAction60EndsMatchOnlyOnce() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         // 客户端每帧重发, 实测一秒能来几百条
@@ -355,7 +337,7 @@ class GameOverTest {
 
     @Test
     fun testAction60FromAiSlotGivesAiWin() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         // 玩家先阵亡 (op154 action=5 只对真人成立, 这条路径仍然有效),
@@ -374,8 +356,8 @@ class GameOverTest {
     @Test
     fun testAction60FromEmptySlotIsIgnored() {
         // slot 5 是空槽
-        Room.slots[5].isAI = false
-        val battle = Room.startGame()
+        room.slots[5].isAI = false
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         battle.onLastTeamStanding(5)
@@ -383,12 +365,11 @@ class GameOverTest {
         Thread.sleep(120)
         assertTrue(drain().isEmpty(), "空槽的错位上报不得触发结算")
         assertFalse(battle.gameOverSent)
-        Room.slots[5].isAI = true
     }
 
     @Test
     fun testBomberDieBroadcastsDeathListToo() {        // 阵亡 = op159（状态 17/清队伍桶，实测无音效）+ op146 state5 死亡名单（摘除 + 音效 0x2A）
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         battle.onBomberDie(1)
@@ -452,37 +433,37 @@ class GameOverTest {
 
     @Test
     fun testWinRewards() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
         battle.onLastTeamStanding(0)
 
         val sent = collectSent()
         val body = bodyOf(sent.first { opcodeOf(it) == 150 })
-        assertEquals(Room.battleConfig.winExpAfter, dec2(body, 11 + 33), "玩家胜 → +128 EXP = winExpAfter")
-        assertEquals(Room.battleConfig.winLucci, dec4(body, 11 + 49), "玩家胜 → +152 LUCCI = winLucci")
-        assertTrue(Room.battleConfig.loseExpAfter < Room.battleConfig.winExpAfter, "失败 EXP 必须低于胜利")
-        assertTrue(Room.battleConfig.loseLucci < Room.battleConfig.winLucci, "失败 LUCCI 必须低于胜利")
+        assertEquals(room.battleConfig.winExpAfter, dec2(body, 11 + 33), "玩家胜 → +128 EXP = winExpAfter")
+        assertEquals(room.battleConfig.winLucci, dec4(body, 11 + 49), "玩家胜 → +152 LUCCI = winLucci")
+        assertTrue(room.battleConfig.loseExpAfter < room.battleConfig.winExpAfter, "失败 EXP 必须低于胜利")
+        assertTrue(room.battleConfig.loseLucci < room.battleConfig.winLucci, "失败 LUCCI 必须低于胜利")
     }
 
     @Test
     fun testLoseRewardsAreLower() {
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
         battle.onBomberDie(0) // 玩家阵亡 → AI 胜
 
         val sent = collectSent()
         val body = bodyOf(sent.first { opcodeOf(it) == 150 })
         assertEquals(1, dec1(body[1]), "AI 胜")
-        assertEquals(Room.battleConfig.loseExpAfter, dec2(body, 11 + 33), "AI 胜 → 玩家 +128 EXP = loseExpAfter")
-        assertEquals(Room.battleConfig.loseLucci, dec4(body, 11 + 49), "AI 胜 → 玩家 +152 LUCCI = loseLucci")
+        assertEquals(room.battleConfig.loseExpAfter, dec2(body, 11 + 33), "AI 胜 → 玩家 +128 EXP = loseExpAfter")
+        assertEquals(room.battleConfig.loseLucci, dec4(body, 11 + 49), "AI 胜 → 玩家 +152 LUCCI = loseLucci")
     }
 
     @Test
     fun testGameResultPreservesCustomPlayerLevelAndClampsZero() {
         val human = 11
         val leveled = PlayerService.registerProfile(PlayerProfile(userId = 1, username = "tester", charName = "tester", level = 12))
-        Room.slots[0].assignHuman(leveled.userId, cs)
-        val body12 = bodyOf(GameResult(winnerTeam = 1, slots = Room.resultSlotSnapshots()))
+        room.slots[0].assignHuman(leveled.userId, cs)
+        val body12 = bodyOf(GameResult(winnerTeam = 1, slots = room.resultSlotSnapshots()))
         assertEquals(12, dec2(body12, human + 35), "+132 必须写入 PlayerProfile.level")
         assertEquals(12, dec2(body12, human + 37), "+136 必须写入 PlayerProfile.level")
 
@@ -508,9 +489,9 @@ class GameOverTest {
     @Test
     fun testSimultaneousWipeoutHumanThenAiYieldsDraw() {
         // 1v1 练习房：缓冲期内人类先死、紧接着最后一名 AI 也死 → 升级为平局
-        for (i in 2..7) Room.slots[i].isAI = false
-        Room.battleConfig.gameOverDelayMs = 80L
-        val battle = Room.startGame()
+        for (i in 2..7) room.slots[i].isAI = false
+        room.battleConfig.gameOverDelayMs = 80L
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         battle.onBomberDie(0)
@@ -524,16 +505,16 @@ class GameOverTest {
         assertEquals(WINNER_TEAM_DRAW, dec1(body[1]), "同时全灭必须判平局 (0xFF)")
         assertEquals(3, dec1(body[11 + 5]), "平局真人 +68 = DRAW(3)")
         assertEquals(3, dec1(body[11 + 64 + 1]), "平局 AI +68 = DRAW(3)")
-        assertEquals(Room.battleConfig.drawExpAfter, dec2(body, 11 + 33), "平局 EXP = drawExpAfter")
-        assertEquals(Room.battleConfig.drawLucci, dec4(body, 11 + 49), "平局 LUCCI = drawLucci")
+        assertEquals(room.battleConfig.drawExpAfter, dec2(body, 11 + 33), "平局 EXP = drawExpAfter")
+        assertEquals(room.battleConfig.drawLucci, dec4(body, 11 + 49), "平局 LUCCI = drawLucci")
     }
 
     @Test
     fun testSimultaneousWipeoutAiThenHumanYieldsDraw() {
         // 1v1 练习房：缓冲期内最后一名 AI 先死、紧接着人类也死 → 升级为平局
-        for (i in 2..7) Room.slots[i].isAI = false
-        Room.battleConfig.gameOverDelayMs = 80L
-        val battle = Room.startGame()
+        for (i in 2..7) room.slots[i].isAI = false
+        room.battleConfig.gameOverDelayMs = 80L
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         battle.onBomberDie(1)
@@ -549,10 +530,10 @@ class GameOverTest {
 
     @Test
     fun testMatchTimeoutEndsWithDraw() {
-        assertEquals(180_000L, savedMatchTimeout, "默认对局时限必须是 3 分钟 (180,000ms)")
-        Room.battleConfig.matchTimeoutMs = 60L
-        Room.battleConfig.tickIntervalMs = 20L
-        val battle = Room.startGame()
+        assertEquals(180_000L, room.battleConfig.matchTimeoutMs, "默认对局时限必须是 3 分钟 (180,000ms)")
+        room.battleConfig.matchTimeoutMs = 60L
+        room.battleConfig.tickIntervalMs = 20L
+        val battle = room.startGame()
         ch.outboundMessages().clear()
 
         val sent = collectSent(timeoutMs = 2000)
@@ -565,8 +546,8 @@ class GameOverTest {
         assertEquals(WINNER_TEAM_DRAW, dec1(body[1]), "超时必须判平局 (0xFF)")
         assertEquals(3, dec1(body[11 + 5]), "超时真人 +68 = DRAW(3)")
         assertEquals(3, dec1(body[11 + 64 + 1]), "超时 AI +68 = DRAW(3)")
-        assertEquals(Room.battleConfig.drawExpAfter, dec2(body, 11 + 33), "超时 EXP = drawExpAfter")
-        assertEquals(Room.battleConfig.drawLucci, dec4(body, 11 + 49), "超时 LUCCI = drawLucci")
+        assertEquals(room.battleConfig.drawExpAfter, dec2(body, 11 + 33), "超时 EXP = drawExpAfter")
+        assertEquals(room.battleConfig.drawLucci, dec4(body, 11 + 49), "超时 LUCCI = drawLucci")
 
         // 超时结算后迟到的死亡与只剩一队上报均不得再发包
         ch.outboundMessages().clear()
@@ -581,10 +562,10 @@ class GameOverTest {
     @Test
     fun testMatchSettlementUpdatesPlayerProfileOnWinLoseAndDraw() {
         val profile = PlayerService.registerProfile(PlayerProfile(userId = 1001, username = "settler", charName = "settler", level = 5, exp = 0, lucci = 1000))
-        Room.slots[0].assignHuman(profile.userId, cs)
+        room.slots[0].assignHuman(profile.userId, cs)
 
         // 1. 胜利
-        val battle1 = Room.startGame()
+        val battle1 = room.startGame()
         ch.outboundMessages().clear()
         battle1.onLastTeamStanding(0)
         val sent1 = collectSent()
@@ -592,40 +573,33 @@ class GameOverTest {
         assertEquals(1, profile.win)
         assertEquals(0, profile.lose)
         assertEquals(0, profile.draw)
-        assertEquals(1000 + Room.battleConfig.winLucci, profile.lucci)
-        assertEquals(Room.battleConfig.winExpAfter, profile.exp)
+        assertEquals(1000 + room.battleConfig.winLucci, profile.lucci)
+        assertEquals(room.battleConfig.winExpAfter, profile.exp)
         assertEquals(0, dec2(body1, 11 + 31), "战前 EXP=0")
-        assertEquals(Room.battleConfig.winExpAfter, dec2(body1, 11 + 33), "战后 EXP=winExpAfter")
+        assertEquals(room.battleConfig.winExpAfter, dec2(body1, 11 + 33), "战后 EXP=winExpAfter")
         assertEquals(1, dec1(body1[11 + 40]), "op150 +240 win 必须反映战后胜场")
 
         // 2. 失败
-        val battle2 = Room.startGame()
+        val battle2 = room.startGame()
         ch.outboundMessages().clear()
         battle2.onBomberDie(0)
         collectSent()
         assertEquals(1, profile.win)
         assertEquals(1, profile.lose)
-        assertEquals(1000 + Room.battleConfig.winLucci + Room.battleConfig.loseLucci, profile.lucci)
-        assertEquals(Room.battleConfig.winExpAfter + Room.battleConfig.loseExpAfter, profile.exp)
+        assertEquals(1000 + room.battleConfig.winLucci + room.battleConfig.loseLucci, profile.lucci)
+        assertEquals(room.battleConfig.winExpAfter + room.battleConfig.loseExpAfter, profile.exp)
 
         // 3. 平局
-        val prevTimeout = Room.battleConfig.matchTimeoutMs
-        val prevTick = Room.battleConfig.tickIntervalMs
-        try {
-            Room.battleConfig.matchTimeoutMs = 40L
-            Room.battleConfig.tickIntervalMs = 15L
-            Room.startGame()
-            ch.outboundMessages().clear()
-            collectSent()
-        } finally {
-            Room.battleConfig.matchTimeoutMs = prevTimeout
-            Room.battleConfig.tickIntervalMs = prevTick
-        }
+        room.battleConfig.matchTimeoutMs = 40L
+        room.battleConfig.tickIntervalMs = 15L
+        room.startGame()
+        ch.outboundMessages().clear()
+        collectSent()
         assertEquals(1, profile.win)
         assertEquals(1, profile.lose)
         assertEquals(1, profile.draw)
         assertEquals(
-            1000 + Room.battleConfig.winLucci + Room.battleConfig.loseLucci + Room.battleConfig.drawLucci,
+            1000 + room.battleConfig.winLucci + room.battleConfig.loseLucci + room.battleConfig.drawLucci,
             profile.lucci,
         )
     }
@@ -633,15 +607,15 @@ class GameOverTest {
     @Test
     fun testMatchSettlementHandlesLevelUpExpWraparound() {
         val profile = PlayerService.registerProfile(PlayerProfile(userId = 1002, username = "leveler", charName = "leveler", level = 5, exp = 970, lucci = 500))
-        Room.slots[0].assignHuman(profile.userId, cs)
+        room.slots[0].assignHuman(profile.userId, cs)
 
-        val battle = Room.startGame()
+        val battle = room.startGame()
         ch.outboundMessages().clear()
         battle.onLastTeamStanding(0)
         val sent = collectSent()
         val body = bodyOf(sent.first { opcodeOf(it) == 150 })
 
-        val expectedExpAfter = (970 + Room.battleConfig.winExpAfter) % 1000
+        val expectedExpAfter = (970 + room.battleConfig.winExpAfter) % 1000
         assertEquals(6, profile.level, "跨 1000 经验必须升级")
         assertEquals(expectedExpAfter, profile.exp)
         assertEquals(970, dec2(body, 11 + 31), "+124 战前 EXP 进度 = 970")
