@@ -56,7 +56,7 @@
   22 StageNotice（舞台中部系统提示气泡）、
   7 ResConnectToSvr（op 6 ReqConnectToSvr 的回应，见下方关键观察）、
   122 UserDynamicInfoValue（**CUserDynamicInfo 单Lucci同步**）、423（op 7 回应后的推送，原样重放）、87 RoomList（**房间列表**，已结构化可动态生成，见关键观察）、
-  310 UserMarketItemList（**个人交易市场物品列表**）/ 302 UserMarketMyItemList（**个人在市场寄售物品列表**）、254 UserMapInfo（**频道在线用户地图/占位同步**，CUserMap）、227 MyPageInfo（**个人资料摘要与商城版本**，CMyPageDialog）、72 SessionList（**频道在线用户列表**，已结构化可动态
+  310 UserMarketItemList（**个人交易市场物品列表**）/ 302 UserMarketMyItemList（**个人在市场寄售物品列表**）、254 SelfUserInfo（**本机玩家资料/大厅等级面板**）、227 MyPageInfo（**个人资料摘要与商城版本**，CMyPageDialog）、72 SessionList（**频道在线用户列表**，已结构化可动态
   生成，见关键观察）、
   293(E1(0))/78 QuestConfigTable（任务配置表，E4(count)+条目列表，空为 E4(0)）、60 ItemDef（全量物品定义表，已结构化类似 ShopCatalog，支持动态配置与进阶角色卡）、
   81 JoinSessionResult（**大厅名册**，已结构化 `packet/JoinSessionResult.kt` 的 `RosterEntry`，

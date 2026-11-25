@@ -26,7 +26,7 @@ import org.tinylog.kotlin.Logger
  * 2. 发包前调用 CFxContext::Clear() (0x0068919D) 重置上下文，发包内容为空载荷。
  * 3. 进频道批次中由各请求分别触发回包:
  *    - op 302 (UserStageSyncReq) -> op 310 (UserMarketItemList), op 302 (UserMarketMyItemList)
- *    - op 310 (UserMapListReq) -> op 254 (UserMapInfo), op 72 (SessionList)
+ *    - op 310 (SelfUserInfoReq) -> op 254 (SelfUserInfo), op 72 (SessionList)
  *    - op 78 (StageInitReq) -> [Unk293, QuestConfigTable, UserSimpleInfoResult, SessionInfoResult,
  *                               MyPageInfo, ItemDef, UserMarketItemList, UserMarketMyItemList]
  */

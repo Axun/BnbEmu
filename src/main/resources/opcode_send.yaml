@@ -106,7 +106,7 @@ ShopStringTable: 204
 FxConfig: 212
 MyPageInfo: 227
 CoupleStateSync: 247
-UserMapInfo: 254
+SelfUserInfo: 254
 ShopVersion: 261
 UserItemUpdate: 274
 Unk293: 293
