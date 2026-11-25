@@ -10,6 +10,8 @@ import bnbemu.domain.UserItemEntry
 import bnbemu.netty.ClientSocket
 import bnbemu.netty.Decode1
 import bnbemu.netty.PKTHandler
+import bnbemu.packet.EN_CHANNELS
+import bnbemu.packet.user.PRESENCE_IN_CHANNEL
 import bnbemu.packet.user.UserDynamicInfoValue
 import bnbemu.packet.user.UserEquipEntry
 import bnbemu.packet.user.UserInfoResult
@@ -92,12 +94,26 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
         level = player?.level ?: 5,
         favorite = player?.favorite ?: "Bazzi",
         sweetieName = "",
-        equips = equips
+        equips = equips,
+        // 单机版：自己固定显示「在当前频道」。
+        // 客户端没有「整行不显示」的状态值 —— sub_5E7888 对任何 state 都会写一句文案
+        // （0=NotLogged、1=LoggedInLoginServer、10=ConnectedTo、11=商店、其他=ConnectedTo2），
+        // 见 UserInfoResult 里 PRESENCE_* 的注释，所以只能走状态 10。
+        // 房间号默认 0xFFFF = 停在频道等待室，第二行即 "In the channel waiting room."，
+        // 不做「在 xx 房间 / 对局中」的细分。
+        // 频道名固定取第一个频道：op 11 客户端只回 4B 不透明 hash（抓包 2C 90 7D 4C，与频道名的
+        // CRC32/FNV/djb2 都对不上），EnterChannelReq 无从还原玩家实际选了哪个频道，而单机版所有
+        // 频道都指向本机，显示哪个名字只影响这一行文案。
+        presenceState = PRESENCE_IN_CHANNEL,
+        channelName = EN_CHANNELS.first().name,
     )
 }
 
 /**
  * 下发其他玩家的详细资料 (展示他人名片 COtherUserPageDialog)
+ *
+ * 单机版没有别人在线：presence 相关字段一律走默认值（state=0），
+ * 资料页状态行固定显示 "Currently not logged in."，与真实服务器上「对方不在线」的表现一致。
  */
 fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
     // 优先从房间槽位玩家或档案仓储中查找

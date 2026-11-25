@@ -26,6 +26,27 @@ data class UserEquipEntry(
     val param2: Int = 0
 )
 
+// ── 资料页「在线状态」行 (+0x125 起) 的取值 ────────────────────────────────
+// 客户端渲染器 CA.exe 0x005E7888（sub_5E7888，CMyPageDialog / COtherUserPageDialog 共用）：
+//   状态 0  → 文案 key "NotLogged"         = "Currently not logged in."
+//   状态 1  → "LoggedInLoginServer"
+//   状态 10 → "ConnectedTo"「Online - <频道名>」；**频道名为空会退回 NotLogged**
+//   状态 11 → "LoggedToBnBShopServer"
+//   其他    → "ConnectedTo2"
+// 状态 10 的第二行由房间号决定（+0x144）：
+//   0xFFFF → "UsingChannelWaitRoom"（In the channel waiting room.）
+//   其他   → "Practice"/"Exchange" + "UsingGameRoom"（In room (名字).）
+// 客户端没有「不显示这一行」的状态值 —— 任何取值都会写一句文案，所以自己只能走「在当前频道」。
+
+/** 状态 0：未登录（客户端文案 "Currently not logged in."） */
+const val PRESENCE_NOT_LOGGED_IN = 0
+
+/** 状态 10：在频道内（客户端文案 "Online - <频道名>"） */
+const val PRESENCE_IN_CHANNEL = 10
+
+/** 房间号 +0x144 的哨兵值：不在任何房间（等待室） */
+const val PRESENCE_NO_ROOM = 0xFFFF
+
 /**
  * S->C op 73: 玩家详细资料回应 (PUserInfoResult)
  *
@@ -57,6 +78,10 @@ data class UserEquipEntry(
  *       +0x5c: Favorite (最喜爱角色/模式)
  *       +0x98: Level (等级数值)
  *       (Lucci 金币由 CUserDynamicInfo::Instance().Get(0) 获取, 由 UserDynamicInfo op 122 同步)
+ *     - 「在线状态」段 (+0x125..+0x160) 由 initData 的 sub_5E8321 (:425667-425672) 搬进对话框,
+ *       再由 sub_5E7888 渲染成资料页状态行; 我们自己发 0 就会显示 "Currently not logged in."
+ *       (文案来自客户端 ClientString.bin 的 NotLogged, 与 op 2 下发的 csysstr 无关)。
+ *       详见下方 PRESENCE_* 常量注释。
  *   - isSelf == 0: 构造 COtherUserPageDialog (0x005E58E4) 存入单例 0x0099B810,
  *     调用 COtherUserPageDialog::InitData (0x005E2F9B) 展示他人名片
  */
@@ -90,7 +115,25 @@ fun UserInfoResult(
     level: Int = 5,
     favorite: String = "Bazzi",
     sweetieName: String = "",
-    equips: List<UserEquipEntry> = emptyList()
+    equips: List<UserEquipEntry> = emptyList(),
+    /**
+     * 在线状态 (+0x125)：见 [PRESENCE_NOT_LOGGED_IN] / [PRESENCE_IN_CHANNEL]。
+     * 本模拟器约定：自己 = 在频道内，他人 = 一律未登录（显示 "Currently not logged in."）。
+     */
+    presenceState: Int = PRESENCE_NOT_LOGGED_IN,
+    /**
+     * 频道索引 (+0x128)：客户端 `sub_5E7888` 开头拿它和**本机当前频道索引**
+     * (dword_993BB4+24) 比对，决定资料页里的「同频道/跨频道」标志；只填 0 即可。
+     */
+    channelIndex: Int = 0,
+    /** 频道名 (+0x12c)：状态 10 时显示在 "Online - %s" 里；为空会退回未登录文案 */
+    channelName: String = "",
+    /** 房间号 (+0x144)：[PRESENCE_NO_ROOM] = 等待室，其余值会去取 [roomName] 显示 "In room (%s)." */
+    roomIndex: Int = PRESENCE_NO_ROOM,
+    /** 房间名 (+0x148)：仅 roomIndex != [PRESENCE_NO_ROOM] 时有意义 */
+    roomName: String = "",
+    /** 是否在广场 (+0x160)：非 0 时第二行显示 UsingChannelSquare */
+    inSquare: Boolean = false,
 ) = PKT {
     Encode4(errCode)
     if (errCode == 0) {
@@ -110,12 +153,12 @@ fun UserInfoResult(
         Encode4(curExp) // [esi + 0x8c] curExp
         Encode4(maxExp) // [esi + 0x90] maxExp
         Encode4(expPercent) // [esi + 0x94] 经验千分比 0..999（个人主页经验条只看这个字段）
-        Encode1(0) // [esi + 0x125]
-        Encode4(0) // [esi + 0x128]
-        EncodeTokenStr("") // [esi + 0x12c]
-        Encode2(0) // [esi + 0x144]
-        EncodeTokenStr("") // [esi + 0x148]
-        Encode4(0) // [esi + 0x160]
+        Encode1(presenceState) // [esi + 0x125] 在线状态 (0=未登录 / 10=频道内 / 11=商城)
+        Encode4(channelIndex) // [esi + 0x128] 频道索引 (客户端与本机频道索引比对)
+        EncodeTokenStr(channelName) // [esi + 0x12c] 频道名 (状态 10 时显示 "Online - %s")
+        Encode2(roomIndex) // [esi + 0x144] 房间号 (0xFFFF = 不在房间)
+        EncodeTokenStr(roomName) // [esi + 0x148] 房间名
+        Encode4(if (inSquare) 1 else 0) // [esi + 0x160] 广场标记
         // [esi + 0xa0..0xa2] 最近战绩 (win/lose/draw)：feature 47 开启时客户端用它算
         // "RecentWinRate" (0x005E8766: `(win/(win+lose) + draw*0.001) * 100`)，个人主页胜率行显示的就是它
         Encode1(recentWin.coerceIn(0, 255))
