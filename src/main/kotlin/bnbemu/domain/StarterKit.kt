@@ -7,7 +7,11 @@ package bnbemu.domain
  * 之后所有发包仅读取玩家真实库存，不再在发包时临时拼接。
  */
 object StarterKit {
-    const val CHAR_DECO_COMPOSITE_SLOT = 6 * EQUIP_SLOTS_PER_GROUP + EquipSlot.CHAR_DECO // 0x94 (148)
+    /** 进阶卡装备大类（客户端 `sub_67884E(16) == 6`），复合槽位 = 24×大类 + 子槽 */
+    private const val ADVANCE_CARD_GROUP = 6
+
+    /** 2082 蓝妹妹的复合槽位 0x94 (148) = 24×6 + 4 */
+    const val CHAR_DECO_COMPOSITE_SLOT = ADVANCE_CARD_GROUP * EQUIP_SLOTS_PER_GROUP + EquipSlot.CHAR_DECO
 
     fun defaultInventory(): List<UserItemEntry> = listOf(
         UserItemEntry(

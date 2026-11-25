@@ -3,6 +3,7 @@ package bnbemu.data
 import bnbemu.ACP
 import bnbemu.codec.*
 import bnbemu.domain.CharacterRules
+import bnbemu.domain.ItemCategory
 import bnbemu.codec.buildSsdBlock
 import bnbemu.codec.ssdEncode
 import java.io.ByteArrayOutputStream
@@ -102,15 +103,17 @@ object ItemDefCatalog {
         val list = ArrayList<ItemDefEntry>(BASE_ITEMS.size)
         BASE_ITEMS.forEach { e ->
             when {
-                e.category == 3 -> list += e.copy(name = model, skinId = bomber)
+                e.category == ItemCategory.CHARACTER_MODEL -> list += e.copy(name = model, skinId = bomber)
                 else -> list += e
             }
         }
 
-        val idx2082 = list.indexOfFirst { it.itemId == 2082 }
+        // 进阶角色卡 2082：把分类改写成 16（大类 6 → 复合槽 6×24+4 = 148），
+        // 与客户端 sub_67884E(16) == 6 的落槽规则一致（见 docs/agents-notes-equip.md）。
+        val idx2082 = list.indexOfFirst { it.itemId == CharacterRules.MARID_EVO_CARD_ITEM_ID }
         if (idx2082 != -1) {
             list[idx2082] = list[idx2082].copy(
-                category = 0x10,
+                category = ItemCategory.ADVANCE_CARD,
                 skinId = 10,
                 targetCharId = 4,
             )

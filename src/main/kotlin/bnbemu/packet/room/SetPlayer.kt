@@ -5,6 +5,7 @@ import bnbemu.domain.CharacterType
 import bnbemu.data.ItemDefCatalog
 import bnbemu.data.ItemDefEntry
 import bnbemu.domain.EquipSlot
+import bnbemu.domain.ItemCategory
 import bnbemu.domain.PlayerProfile
 import bnbemu.netty.PKT
 import bnbemu.server.EncodeSlotMeta
@@ -156,11 +157,11 @@ fun slotAccessoriesOf(
         val def = findItem(itemId) ?: continue
         when (def.category) {
             // 背景/旗帜/边框: idx 就是 targetCharId (0..8), value = skinId (背景序号)
-            10 -> if (def.targetCharId in 0..8 && def.skinId in 0..0xFFFF) {
+            ItemCategory.SLOT_DECO -> if (def.targetCharId in 0..8 && def.skinId in 0..0xFFFF) {
                 decorations += def.targetCharId to def.skinId
             }
             // 角色特效: 与 sub_687B3D 的落库校验保持一致
-            12 -> if ((def.skinId + 2).toUInt() <= 9u &&
+            ItemCategory.CHAR_DECO -> if ((def.skinId + 2).toUInt() <= 9u &&
                 def.targetCharId.toUInt() <= 8u && def.param >= 0
             ) {
                 effects += Triple(def.skinId, def.targetCharId, def.param)
@@ -168,11 +169,11 @@ fun slotAccessoriesOf(
             // 水泡皮肤: f32 = param (水泡序号, 如 Bomb 655 → 655)。
             // 客户端 sub_687B3D 只在 >0 时写入 CFxContext+472, <=0 一律按默认水泡。
             // 同一玩家理论上只装备一件, 按复合槽位排序取第一件, 保证结果确定。
-            14 -> if (bombSkin == 0 && def.param > 0) {
+            ItemCategory.BOMB -> if (bombSkin == 0 && def.param > 0) {
                 bombSkin = def.param
             }
             // 纸娃娃: param>0 才会被 CGOAvatar 接受, targetCharId 是 12 个部位之一
-            19 -> if (def.targetCharId in 0..11 && def.param > 0) {
+            ItemCategory.AVATAR -> if (def.targetCharId in 0..11 && def.param > 0) {
                 avatars += Triple(def.skinId, def.targetCharId, def.param)
             }
         }

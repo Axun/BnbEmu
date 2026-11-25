@@ -8,7 +8,16 @@ const val EQUIP_SLOTS_PER_GROUP = 24
 /** 消耗品单格最大堆叠上限（CA.exe `sub_66817F`: `cur + buy >= 10000` 弹 AmountLimitOver） */
 const val MAX_STACK_COUNT = 9999
 
-private val STACKABLE_CATEGORIES = setOf(1, 13, 15, 34, 37, 40, 45, 46, 47, 49)
+/**
+ * 可堆叠分类（`sub_677435`）：喇叭 [ItemCategory.SPEAKER]、道具袋 [ItemCategory.ITEM_BAG]，
+ * 以及 34/37/40/45/46/47/49 等道具卡分类（基础表未收录，仅客户端映射里出现）。
+ */
+private val STACKABLE_CATEGORIES = setOf(
+    1,
+    ItemCategory.ITEM_BAG,
+    ItemCategory.SPEAKER,
+    34, 37, 40, 45, 46, 47, 49,
+)
 
 /**
  * 背包与装备槽位领域规则。
@@ -25,17 +34,23 @@ object InventoryRules {
         val cat = ItemDefCatalog.find(itemId)?.category ?: fallbackCategory ?: return false
         return isStackableCategory(cat)
     }
+
     /**
      * category → 装备大类, CA.exe `sub_67884E` (`0x0067884E`) 的逐 case 镜像。
      * 0 表示该分类不可穿戴 (客户端 `sub_65C81A` 第一步就 `if (type == 0) return 0`)。
+     *
+     * 大类 → 复合槽位区间 = `24 × 大类 … +23`：
+     * 4=96~119、5=120~143（纸娃娃）、6=144~167（进阶卡）、7=168~191（道具）、
+     * 8=192~215（角色卡）、**9=216~239（装扮/背景/名牌）**、**10=240~263（特效/水泡）**。
      */
     fun equipGroupOfCategory(category: Int): Int = when (category) {
-        1, 3 -> 8
+        ItemCategory.CHARACTER_MODEL -> 8
+        1 -> 8
         2, 9, 20, 33, 36, 41 -> 7
-        4, 5, 6, 10, 18, 28, 29 -> 9
-        12, 14 -> 10
-        16 -> 6
-        19 -> 5
+        ItemCategory.FANFARE, 5, 6, ItemCategory.SLOT_DECO, ItemCategory.ID_DECO, 28, ItemCategory.LADDER_DECO -> 9
+        ItemCategory.CHAR_DECO, ItemCategory.BOMB -> 10
+        ItemCategory.ADVANCE_CARD -> 6
+        ItemCategory.AVATAR -> 5
         42 -> 4
         else -> 0
     }

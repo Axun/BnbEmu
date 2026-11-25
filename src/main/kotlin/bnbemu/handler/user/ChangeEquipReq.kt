@@ -5,6 +5,7 @@ import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
 import bnbemu.domain.EquipChangeEntry
 import bnbemu.domain.EquipSlot
 import bnbemu.domain.InventoryRules
+import bnbemu.domain.ItemCategory
 import bnbemu.netty.Decode1
 import bnbemu.netty.Decode2
 import bnbemu.netty.Decode4
@@ -135,7 +136,7 @@ val ChangeEquipReq = PKTHandler { c ->
             Logger.debug("[ChangeEquipReq]   slot=0x${it.equipSlot.toString(16)} item=0 → 忽略 (客户端跳过空记录)")
             continue
         }
-        if (it.equipSlot == NON_EQUIP_SLOT && ItemDefCatalog.find(it.itemId)?.category == 14) {
+        if (it.equipSlot == NON_EQUIP_SLOT && ItemDefCatalog.find(it.itemId)?.category == ItemCategory.BOMB) {
             // 水泡皮肤只有在真实装备槽 (大类 10 → 0xF0~0xF8) 里才会被 op 100 的
             // f32 字段下发; 0xFF 只代表"买到了 / 在背包里", 对局内仍是默认水泡。
             Logger.debug(
