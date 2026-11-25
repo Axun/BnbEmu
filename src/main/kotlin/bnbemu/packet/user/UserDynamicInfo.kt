@@ -55,7 +55,7 @@ import bnbemu.netty.PKT
 //   22  43   E1   CUDI + 3s + 48                   0x6E4CA6  场次统计第三项
 //
 // ---- 第 12 项 = 角色 id，但客户端读它时只留 3 位 ----
-//   · 写入端 0x6E4BAB：先过 `sub_6B4B13`（CBomberMan），落在皮肤区间 [+0x54, +0x54+0x24)
+//   · 写入端 0x6E4BAB：先过 `sub_6B4B13/CBomberAttr_NormalizeBomberId`（CBomberMan），落在皮肤区间 [+0x54, +0x54+0x24)
 //     = id 10..19 的会先被 GetBaseCharacterBySkin 折回基础角色（10 蓝妹妹 → 4 蓝蓝），再写字节。
 //   · 读取端 0x6E50F0：`sub_44862D(CUDI + 12*slot + 444) & 7` —— **只有 3 bit**。
 //     ⇒ id ≥ 8 在这一路上必然被截断（25 SuperSu → 1 Diz），而这条读取点同时喂给

@@ -31,7 +31,7 @@ import org.tinylog.kotlin.Logger
  *   **两套平行商城舞台实现**，不是「一个商城 + 一个别的功能」。
  *   把前置窗口放宽到 320B 复核 `mov reg,0x50 → push reg` 形式，仍只有这两处。
  * - `sub_4F748F`（stageId ∈ {12,16,17,18} 判定）在二进制里共 4 个调用者：上述 2 个发 op 80，
- *   另 2 个（`sub_5D1106` / `sub_6300BD`）是这两套商城舞台的构造/初始化，不发 op 80。
+ *   另 2 个（`sub_5D1106/CShopStage_OnEnter` / `sub_6300BD`）是这两套商城舞台的构造/初始化，不发 op 80。
  * - 因此 op 80 的**唯一**发送条件是：OnPacket 收到 S→C op 97，且 `E2(stageId)` 被判定为房间舞台。
  *   发完立即 `sub_68DC53(CMainSystem, stageId)` 切舞台，**没有等待锁**。
  *   ⇒ 任何「用 ChangeStage 切回房间」都会发；商城退出只是我们服务端目前会触发的那一条路径。
@@ -41,7 +41,7 @@ import org.tinylog.kotlin.Logger
  *
  * ## 角色回灌（修复「进商城返回后角色变宝宝」）
  * C→S op 73 上报的是客户端 `CUserDynamicInfo` 单例里的角色字段
- * (CA.exe `sub_4F881E` → `sub_6E50F0` 读 CUDI + 12*slot + 444)，而 [sendRoomEntryChain]
+ * (CA.exe `sub_4F881E` → `sub_6E50F0/CUserDynamicInfo_GetBomber` 读 CUDI + 12*slot + 444)，而 [sendRoomEntryChain]
  * 只重设房间槽位 (CFxContext / 槽位 UI)，**从不写 CUserDynamicInfo**。两份角色存储互不相干，
  * 抓包里 op 105 的角色值 5 只是 AI 槽默认值，不能据此推断客户端角色被改。
  *

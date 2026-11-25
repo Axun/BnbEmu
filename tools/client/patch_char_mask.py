@@ -3,7 +3,7 @@
 
 背景
 ----
-CA.exe 0x006E50F0 = `sub_6E50F0`，客户端「本机玩家当前角色」的唯一读取点：
+CA.exe 0x006E50F0 = `CUserDynamicInfo_GetBomber`，客户端「本机玩家当前角色」的唯一读取点：
 
     add  ecx, 0x25          ; slot + 37
     imul ecx, ecx, 0xc      ; 12 * (slot + 37) = 12*slot + 444
