@@ -49,6 +49,10 @@ data class UserEquipEntry(
  *       +0x94: 经验千分比 0..999 — CMyPageDialog::InitData 把它存进对话框 +108212，
  *              绘制点 0x005DD121 用 `60 * v / 999` 分四段画 "Etc/ExpImg" 经验条。
  *              ⚠️ 只发 0x8c/0x90 不够，经验条读的是这个字段（0 就是一直空/显示 0）。
+ *       +0xa0/+0xa1/+0xa2: 最近战绩 胜/负/平 (E1)。feature 47 开启时 0x005E8766 用它算
+ *              "RecentWinRate" = (win/(win+lose) + draw*0.001) * 100，个人主页的
+ *              "Win Rate" 行取的就是这个（只发 +0x78/+0x80 的总体战绩时，Record 正确但胜率恒 0.0%）。
+ *       +0xac/+0xb0/+0xb4: 排位战绩 胜/平/负 (E4)，0x005E8756 的另一路胜率用 win/(win+lose)。
  *       +0x2c: Sweetie (伴侣名, 空则无伴侣)
  *       +0x5c: Favorite (最喜爱角色/模式)
  *       +0x98: Level (等级数值)
@@ -71,6 +75,18 @@ fun UserInfoResult(
     curExp: Int = 0,
     maxExp: Int = 1000,
     expPercent: Int = 0,
+    /** [esi+0xa0] 最近战绩-胜 (E1) */
+    recentWin: Int = 0,
+    /** [esi+0xa1] 最近战绩-负 (E1) */
+    recentLose: Int = 0,
+    /** [esi+0xa2] 最近战绩-平 (E1) */
+    recentDraw: Int = 0,
+    /** [esi+0xac] 排位战绩-胜 (E4) */
+    rankedWin: Int = 0,
+    /** [esi+0xb0] 排位战绩-平 (E4) */
+    rankedDraw: Int = 0,
+    /** [esi+0xb4] 排位战绩-负 (E4) */
+    rankedLose: Int = 0,
     level: Int = 5,
     favorite: String = "Bazzi",
     sweetieName: String = "",
@@ -100,14 +116,17 @@ fun UserInfoResult(
         Encode2(0) // [esi + 0x144]
         EncodeTokenStr("") // [esi + 0x148]
         Encode4(0) // [esi + 0x160]
-        Encode1(0) // [esi + 0xa0] Monster win
-        Encode1(0) // [esi + 0xa1] Monster lose
-        Encode1(0) // [esi + 0xa2] Monster rank
+        // [esi + 0xa0..0xa2] 最近战绩 (win/lose/draw)：feature 47 开启时客户端用它算
+        // "RecentWinRate" (0x005E8766: `(win/(win+lose) + draw*0.001) * 100`)，个人主页胜率行显示的就是它
+        Encode1(recentWin.coerceIn(0, 255))
+        Encode1(recentLose.coerceIn(0, 255))
+        Encode1(recentDraw.coerceIn(0, 255))
         Encode4(0) // [esi + 0xa8]
         Encode1(0) // [esi + 0xa4]
-        Encode4(0) // [esi + 0xac]
-        Encode4(0) // [esi + 0xb0]
-        Encode4(0) // [esi + 0xb4]
+        // [esi + 0xac..0xb4] 排位战绩 (win/draw/lose)：0x005E8756 的排位胜率用 win/(win+lose)
+        Encode4(rankedWin)
+        Encode4(rankedDraw)
+        Encode4(rankedLose)
         Encode4(0) // [esi + 0xbc]
         Encode4(0) // [esi + 0xc4]
         Encode1(0) // [esi + 0xc0]

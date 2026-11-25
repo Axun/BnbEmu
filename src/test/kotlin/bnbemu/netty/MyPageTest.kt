@@ -241,6 +241,53 @@ class MyPageTest {
         assertEquals(420, readE4(buf), "+0x94 经验千分比必须随 op 73 下发，否则个人主页经验条恒为 0")
     }
 
+    @Test
+    fun testUserInfoResultCarriesRecentAndRankedRecord() {
+        // 个人主页 "Win Rate" 行不是用 +0x78/+0x80 算的：feature 47 下客户端用 +0xa0..0xa2
+        // （最近战绩 胜/负/平）算 RecentWinRate；排位一路用 +0xac..0xb4。两处都要下发。
+        val pkt = UserInfoResult(
+            characterName = "ffdf",
+            win = 3,
+            draw = 0,
+            lose = 12,
+            recentWin = 3,
+            recentLose = 12,
+            recentDraw = 0,
+            rankedWin = 3,
+            rankedDraw = 0,
+            rankedLose = 12,
+        )
+        val buf = Unpooled.buffer()
+        pkt.encode(SendPacketBase(buf))
+
+        // 跳到 +0xa0 之前的固定字段
+        readE4(buf) // errCode
+        readE4(buf) // isSelf
+        buf.readUnsignedByte() // slotIndex
+        readToken(buf) // nickname
+        buf.readUnsignedByte() // gender
+        readToken(buf) // profile
+        readToken(buf) // guild
+        buf.readUnsignedByte() // guildRank
+        readE4(buf); readE4(buf); readE4(buf) // win/draw/lose
+        readE4(buf); readE4(buf); readE4(buf) // curExp/maxExp/expPercent
+        buf.readUnsignedByte() // +0x125
+        readE4(buf) // +0x128
+        readToken(buf) // +0x12c
+        buf.readUnsignedShort() // +0x144
+        readToken(buf) // +0x148
+        readE4(buf) // +0x160
+
+        assertEquals(3, buf.readUnsignedByte().toInt() xor 0x5A, "+0xa0 最近战绩-胜")
+        assertEquals(12, buf.readUnsignedByte().toInt() xor 0x5A, "+0xa1 最近战绩-负")
+        assertEquals(0, buf.readUnsignedByte().toInt() xor 0x5A, "+0xa2 最近战绩-平")
+        readE4(buf) // +0xa8
+        buf.readUnsignedByte() // +0xa4
+        assertEquals(3, readE4(buf), "+0xac 排位战绩-胜")
+        assertEquals(0, readE4(buf), "+0xb0 排位战绩-平")
+        assertEquals(12, readE4(buf), "+0xb4 排位战绩-负")
+    }
+
     private fun readE4(buf: io.netty.buffer.ByteBuf): Int = buf.readInt() xor 0x96CA5395.toInt()
 
     private fun readToken(buf: io.netty.buffer.ByteBuf): String {
