@@ -209,6 +209,48 @@ class MyPageTest {
     }
 
     @Test
+    fun testUserInfoResultCarriesExpPercentAt0x94() {
+        // 个人主页经验条（CA.exe 0x005DD121: `60 * *(dword*)&dialog[108212] / 999`）读的是
+        // PUserInfoResult +0x94，不是 +0x8c/+0x90 的文本数值。这里锁死字段位置，防止再退回 0。
+        val pkt = UserInfoResult(
+            characterName = "ffdf",
+            win = 3,
+            draw = 0,
+            lose = 12,
+            curExp = 420,
+            maxExp = 1000,
+            expPercent = 420,
+            level = 5,
+        )
+        val buf = Unpooled.buffer()
+        pkt.encode(SendPacketBase(buf))
+
+        assertEquals(0, readE4(buf)) // errCode
+        assertEquals(1, readE4(buf)) // isSelf
+        assertEquals(0, buf.readUnsignedByte().toInt() xor 0x5A) // slotIndex
+        assertEquals("ffdf", readToken(buf)) // Nickname +0x44
+        assertEquals(0, buf.readUnsignedByte().toInt() xor 0x5A) // Gender +0x74
+        assertEquals("PopTag Forever!", readToken(buf)) // Profile +0x180
+        assertEquals("", readToken(buf)) // Guild +0x168
+        assertEquals(0, buf.readUnsignedByte().toInt() xor 0x5A) // GuildRank +0x164
+        assertEquals(3, readE4(buf)) // Wins +0x78
+        assertEquals(0, readE4(buf)) // Draws +0x7c
+        assertEquals(12, readE4(buf)) // Losses +0x80
+        assertEquals(420, readE4(buf)) // curExp +0x8c
+        assertEquals(1000, readE4(buf)) // maxExp +0x90
+        assertEquals(420, readE4(buf), "+0x94 经验千分比必须随 op 73 下发，否则个人主页经验条恒为 0")
+    }
+
+    private fun readE4(buf: io.netty.buffer.ByteBuf): Int = buf.readInt() xor 0x96CA5395.toInt()
+
+    private fun readToken(buf: io.netty.buffer.ByteBuf): String {
+        val len = buf.readUnsignedShort() xor 0xA569
+        if (len == 0) return ""
+        val token = ByteArray(len).also { buf.readBytes(it) }
+        return decodeName(token)
+    }
+
+    @Test
     fun testUserInfoReqPayloadAfterBomberChange() {
         // 玩家换为角色 4 (蓝蓝) 后发出的包体: 5B 5E (count=1, bomberId=4)
         val hex = "5B 5E".replace(" ", "")

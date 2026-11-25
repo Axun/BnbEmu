@@ -46,6 +46,9 @@ data class UserEquipEntry(
  *       +0x80: Losses (负场)
  *       +0x8c: curExp (当前经验)
  *       +0x90: maxExp (升级经验)
+ *       +0x94: 经验千分比 0..999 — CMyPageDialog::InitData 把它存进对话框 +108212，
+ *              绘制点 0x005DD121 用 `60 * v / 999` 分四段画 "Etc/ExpImg" 经验条。
+ *              ⚠️ 只发 0x8c/0x90 不够，经验条读的是这个字段（0 就是一直空/显示 0）。
  *       +0x2c: Sweetie (伴侣名, 空则无伴侣)
  *       +0x5c: Favorite (最喜爱角色/模式)
  *       +0x98: Level (等级数值)
@@ -67,6 +70,7 @@ fun UserInfoResult(
     lose: Int = 0,
     curExp: Int = 0,
     maxExp: Int = 1000,
+    expPercent: Int = 0,
     level: Int = 5,
     favorite: String = "Bazzi",
     sweetieName: String = "",
@@ -89,7 +93,7 @@ fun UserInfoResult(
         Encode4(lose) // [esi + 0x80] Losses
         Encode4(curExp) // [esi + 0x8c] curExp
         Encode4(maxExp) // [esi + 0x90] maxExp
-        Encode4(0) // [esi + 0x94]
+        Encode4(expPercent) // [esi + 0x94] 经验千分比 0..999（个人主页经验条只看这个字段）
         Encode1(0) // [esi + 0x125]
         Encode4(0) // [esi + 0x128]
         EncodeTokenStr("") // [esi + 0x12c]

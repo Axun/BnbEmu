@@ -1,6 +1,7 @@
 package bnbemu.handler.user
 
 import io.netty.util.AttributeKey
+import bnbemu.domain.AppearanceRules
 import bnbemu.domain.CharacterRules
 import bnbemu.domain.DEFAULT_LUCCI
 import bnbemu.domain.EQUIP_SLOTS_PER_GROUP
@@ -62,6 +63,11 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
     if (equips.isNotEmpty()) {
         Logger.debug("[UserInfoReq] op 73 装备槽: ${equips.joinToString { "${it.itemId}@${it.slot}" }}")
     }
+    Logger.debug(
+        "[UserInfoReq] op 73 进度: level=${player?.level ?: 5}" +
+            " exp=${player?.exp ?: 0}(千分比 ${player?.let { AppearanceRules.expPercent(it) } ?: 0})" +
+            " 战绩=${player?.win ?: 0}/${player?.draw ?: 0}/${player?.lose ?: 0}"
+    )
 
     c send UserInfoResult(
         isSelf = true,
@@ -76,6 +82,7 @@ fun sendUserInfo(c: ClientSocket, slotIndex: Int = 0) {
         lose = player?.lose ?: 0,
         curExp = player?.exp ?: 0,
         maxExp = 1000,
+        expPercent = player?.let { AppearanceRules.expPercent(it) } ?: 0,
         level = player?.level ?: 5,
         favorite = player?.favorite ?: "Bazzi",
         sweetieName = "",
@@ -97,6 +104,7 @@ fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
     val draw = targetPlayer?.draw ?: 0
     val lose = targetPlayer?.lose ?: 5
     val exp = targetPlayer?.exp ?: 500
+    val expPercent = targetPlayer?.let { AppearanceRules.expPercent(it) } ?: exp.coerceIn(0, 999)
     val level = targetPlayer?.level ?: 5
     val motto = targetPlayer?.motto?.ifEmpty { "PopTag Forever!" } ?: "PopTag Forever!"
     val gender = 0
@@ -115,6 +123,7 @@ fun sendOtherUserInfo(c: ClientSocket, targetCharName: String) {
         lose = lose,
         curExp = exp,
         maxExp = 1000,
+        expPercent = expPercent,
         level = level,
         favorite = favorite,
         sweetieName = "",
